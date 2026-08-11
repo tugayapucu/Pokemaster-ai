@@ -850,7 +850,7 @@ These questions are more important than committing early to any specific neural 
 | Competitive orientation | VGC-style |
 | Core language | Python |
 | Development style | Simulator-first |
-| Simulator strategy | Wrap Pokémon Showdown's simulator (e.g. via `poke-env` or a direct WebSocket bridge) rather than build a battle engine from scratch. Showdown already models Champions' ranked formats directly (see Regulation M-B below), which de-risks this significantly — reconsider only if Showdown's implementation is found to diverge from live Champions mechanics. |
+| Simulator strategy | Drive Pokémon Showdown's `sim` battle engine directly and headlessly (via `BattleStream` — no server, accounts, or matchmaking layer), bridged to Python over a subprocess/stdio protocol we own. Not `poke-env`: that talks to a *running* Showdown server over WebSocket, which is unnecessary overhead for local/self-play use and imposes its own object model where we want our own `BattleState`/`Observation`/`Action` types. Showdown already models Champions' ranked formats directly (see Regulation M-B below), which de-risks this significantly — reconsider only if Showdown's implementation is found to diverge from live Champions mechanics. |
 | Initial regulation | Gen 9 **VGC 2026 Regulation M-B** (Double Battles) — Champions' current ranked format as of 2026-08-10 (running through late Aug/early Sep 2026). Singles equivalent on Showdown is "BSS Regulation M-B"; not in initial scope. Regulations rotate over time — revisit this value periodically rather than treating it as permanent. |
 | Initial intelligence | Heuristics + search |
 | First ML stage | Imitation learning |
@@ -1041,7 +1041,7 @@ The final repository should tell a coherent story from **simple baseline to soph
 
 # 15. Open Questions
 
-- [x] Which simulator strategy should be used? — **Resolved 2026-08-10:** wrap Pokémon Showdown's simulator (see section 10). Write the ADR in `docs/decisions/` during Milestone 0 to record alternatives considered.
+- [x] Which simulator strategy should be used? — **Resolved 2026-08-10:** drive Showdown's `sim` engine directly via `BattleStream`, no server/`poke-env` (see section 10). Write the ADR in `docs/decisions/` during Milestone 0 to record alternatives considered.
 - [ ] How closely does Showdown's Regulation M-B implementation match live Champions mechanics in practice? (Assumed close given Showdown models the format directly, but not yet verified against the real client.)
 - [ ] What is the best canonical action representation for Double Battles?
 - [ ] How should simultaneous joint actions be encoded for neural models?
