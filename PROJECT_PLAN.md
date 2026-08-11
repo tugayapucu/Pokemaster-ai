@@ -323,7 +323,7 @@ Create a clean repository and freeze the first experimental scope.
 - [x] Define initial target regulation. (Gen 9 VGC 2026 Regulation M-B — section 10)
 - [ ] Document supported mechanics. (Partial: `spike/showdown-bridge/notes.md` + section 6 cover what the spike surfaced; not a full mechanics doc yet)
 - [x] Decide simulator strategy. (Drive Showdown's `sim` engine directly via `BattleStream` — proven working in `spike/showdown-bridge/`)
-- [ ] Create initial architecture decision records. (Decisions are recorded in section 10 but not yet written up as formal ADRs in `docs/decisions/`)
+- [x] Create initial architecture decision records. (`docs/decisions/0001-simulator-strategy.md`, `docs/decisions/0002-initial-regulation.md`)
 
 ### Definition of done
 
