@@ -3,7 +3,6 @@ its protocol output. Not the real bridge design -- just confirms the
 subprocess + line protocol approach is viable before building on it.
 """
 import subprocess
-import sys
 from pathlib import Path
 
 SPIKE_DIR = Path(__file__).parent
