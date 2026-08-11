@@ -226,6 +226,10 @@ Large datasets and model checkpoints should normally not be committed directly t
 
 Before ML begins, define a battle representation that is stable, explicit, and testable.
 
+### Implementation status (2026-08-11)
+
+Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`. All are immutable (frozen) Pydantic models — in-battle state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: `BattleState` (both sides + field conditions), `Observation`, `Action`/`JointAction`, and the legal-action generator.
+
 ### Confirmed Reg M-B mechanics differences from mainline VGC (2026-08-11 spike)
 
 Verified against Showdown's `champions` mod (see `spike/showdown-bridge/notes.md`) — do not assume mainline Gen 9 conventions when building the fields below:
@@ -331,7 +335,7 @@ A new developer/agent can clone the repository, install it, run tests, and under
 
 ### Current repository state (2026-08-11)
 
-`src/champions_ai/` exists as a src-layout package with a `domain/` subpackage stub, `pyproject.toml` (pytest + ruff), and a passing smoke test — installable via `pip install -e ".[dev]"`. The other subpackages from section 5's proposed structure (`mechanics/`, `env/`, `agents/`, etc.) are intentionally not pre-created; add them when Milestone 1+ has real code to put in them.
+`src/champions_ai/` is a src-layout package with `pyproject.toml` (pytest + ruff) — installable via `pip install -e ".[dev]"`. Its `domain/` subpackage now has real Milestone 1 content (see section 6's implementation status); 32 tests passing, lint clean. The other subpackages from section 5's proposed structure (`mechanics/`, `env/`, `agents/`, etc.) are intentionally not pre-created; add them when there's real code to put in them.
 
 `spike/showdown-bridge/` is a throwaway (but committed, for reference) proof that the simulator strategy works: a Node script drives Showdown's `sim` engine directly for a full Reg M-B battle, and a Python script drives it as a subprocess and parses the result. See `spike/showdown-bridge/notes.md` for mechanics findings that feed into section 6.
 
@@ -347,18 +351,18 @@ Represent Pokémon Champions battle states and enumerate valid player actions.
 
 ### Deliverables
 
-- [ ] Pokémon domain objects.
-- [ ] Team representation.
+- [x] Pokémon domain objects. (`PokemonSet` — pre-battle team-sheet entry; `BattlePokemon` — live in-battle snapshot with HP/status/boosts)
+- [x] Team representation. (`Team`)
 - [ ] Battle state representation.
 - [ ] Observation representation.
-- [ ] Regulation representation.
+- [x] Regulation representation. (`Regulation`, `REGULATION_M_B`)
 - [ ] Move target representation.
 - [ ] Individual action representation.
 - [ ] Joint Double Battle action representation.
 - [ ] Legal-action generator.
 - [ ] Hidden-information masking.
-- [ ] Serialization to/from JSON.
-- [ ] Unit tests.
+- [ ] Serialization to/from JSON. (Pydantic gives this for free per-object via `model_dump_json`/`model_validate_json`, verified with a round-trip test on `PokemonSet`; no dedicated top-level serialization module yet — not needed until `BattleState` exists)
+- [x] Unit tests. (32 passing so far, covering everything built to date)
 
 ### First useful demo
 

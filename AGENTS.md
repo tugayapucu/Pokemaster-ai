@@ -153,6 +153,8 @@ Do not silently change:
 - dataset definitions;
 - repository-wide architectural decisions.
 
+Domain model objects (`src/champions_ai/domain/`) are immutable snapshots, not mutable state: state transitions (e.g. `BattlePokemon.with_damage`, `Boosts.clamped_add`) return a new instance rather than mutating in place. This keeps a battle's history a plain sequence of states, which matters for replay, debugging, and later training-data generation. Follow this pattern for new domain types rather than introducing mutable ones.
+
 Major architectural decisions should be documented in `docs/decisions/` as ADRs.
 
 Suggested ADR structure:
