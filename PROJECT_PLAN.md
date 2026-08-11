@@ -226,6 +226,15 @@ Large datasets and model checkpoints should normally not be committed directly t
 
 Before ML begins, define a battle representation that is stable, explicit, and testable.
 
+### Confirmed Reg M-B mechanics differences from mainline VGC (2026-08-11 spike)
+
+Verified against Showdown's `champions` mod (see `spike/showdown-bridge/notes.md`) — do not assume mainline Gen 9 conventions when building the fields below:
+
+- **Stat allocation is not EVs/IVs.** Champions uses a "Stat Points" system: 0–32 points per stat, 66 points total across all stats, IVs fixed at 31. The `effective stats` field's inputs should model this, not a 0–252/510 EV spread.
+- **Held items are a curated subset**, not the full mainline item list (e.g. Choice Band, Choice Specs, Assault Vest, and Rocky Helmet are all unavailable). Item legality must be queried from the `champions` mod's data, not assumed from general Gen 9 knowledge.
+- Mega Evolution is a standard, available mechanic in this mod; Terastallization is not currently enabled under Reg M-B's ruleset despite Pokémon sets carrying a Tera Type field.
+- Team building is bring-6/pick-4 for doubles (Team Preview shows 6, only 4 are brought into the battle).
+
 ## Pokémon state
 
 Possible fields:
