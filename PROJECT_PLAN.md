@@ -313,25 +313,29 @@ Create a clean repository and freeze the first experimental scope.
 
 ### Tasks
 
-- [ ] Initialize repository.
-- [ ] Add `AGENTS.md` and `PROJECT_PLAN.md`.
-- [ ] Create `README.md`.
-- [ ] Add Python project configuration.
-- [ ] Add formatter/linter/test tooling.
+- [x] Initialize repository.
+- [x] Add `AGENTS.md` and `PROJECT_PLAN.md`.
+- [x] Create `README.md`.
+- [x] Add Python project configuration.
+- [x] Add formatter/linter/test tooling. (`pyproject.toml`: pytest + ruff, verified passing)
 - [ ] Define configuration strategy.
 - [ ] Define experiment-output format.
-- [ ] Define initial target regulation.
-- [ ] Document supported mechanics.
-- [ ] Decide simulator strategy.
-- [ ] Create initial architecture decision records.
+- [x] Define initial target regulation. (Gen 9 VGC 2026 Regulation M-B — section 10)
+- [ ] Document supported mechanics. (Partial: `spike/showdown-bridge/notes.md` + section 6 cover what the spike surfaced; not a full mechanics doc yet)
+- [x] Decide simulator strategy. (Drive Showdown's `sim` engine directly via `BattleStream` — proven working in `spike/showdown-bridge/`)
+- [ ] Create initial architecture decision records. (Decisions are recorded in section 10 but not yet written up as formal ADRs in `docs/decisions/`)
 
 ### Definition of done
 
 A new developer/agent can clone the repository, install it, run tests, and understand the first supported battle format.
 
-### Current repository state (2026-08-10)
+### Current repository state (2026-08-11)
 
-The `data/` folder that previously held gen1–gen9 Showdown JSON snapshots was leftover from an earlier, unrelated project and has been removed (2026-08-10). No `src/`, packaging, or tests exist yet — Milestone 0 has not otherwise been started. Fresh reference data, scoped to the current Champions regulation (see below), should be pulled during Milestone 0/1 instead of reusing the removed gen1–8 data.
+`src/champions_ai/` exists as a src-layout package with a `domain/` subpackage stub, `pyproject.toml` (pytest + ruff), and a passing smoke test — installable via `pip install -e ".[dev]"`. The other subpackages from section 5's proposed structure (`mechanics/`, `env/`, `agents/`, etc.) are intentionally not pre-created; add them when Milestone 1+ has real code to put in them.
+
+`spike/showdown-bridge/` is a throwaway (but committed, for reference) proof that the simulator strategy works: a Node script drives Showdown's `sim` engine directly for a full Reg M-B battle, and a Python script drives it as a subprocess and parses the result. See `spike/showdown-bridge/notes.md` for mechanics findings that feed into section 6.
+
+The `data/` folder that previously held gen1–gen9 Showdown JSON snapshots was leftover from an earlier, unrelated project and has been removed (2026-08-10). Fresh reference data, scoped to the current Champions regulation, should be pulled during Milestone 1 instead of reusing the removed gen1–8 data.
 
 ---
 
