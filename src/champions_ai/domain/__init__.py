@@ -4,6 +4,7 @@ from champions_ai.domain.pokemon_set import PokemonSet
 from champions_ai.domain.regulation import REGULATION_M_B, GameType, Regulation
 from champions_ai.domain.stats import StatSpread
 from champions_ai.domain.team import Team
+from champions_ai.domain.team_preview import TeamPreview
 
 __all__ = [
     "BattlePokemon",
@@ -14,4 +15,5 @@ __all__ = [
     "Regulation",
     "StatSpread",
     "Team",
+    "TeamPreview",
 ]
