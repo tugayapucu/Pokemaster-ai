@@ -4,14 +4,14 @@ Operates on `Observation`, never `BattleState` -- a player picks actions from
 what they can see, so generating from omniscient truth would be a hidden-
 information leak by construction.
 
-Known gaps, all closing together at the environment adapter per ADR 0003: no
-special mechanic (Mega, and whatever future regulations enable) is ever
-offered, move-lock effects (Choice, Encore, Taunt, Disable, Torment) are not
-applied, and Struggle is unmodelled. Showdown's per-turn request already
-reports `canMegaEvo`, per-move `disabled`, and `trapped`, so these are consumed
-from the engine rather than recomputed here. `move_pp` gates zero-PP moves in
-the meantime, and trapping is read from a `"trapped"` volatile the adapter is
-responsible for setting.
+Per ADR 0003 this reads availability the engine reports rather than
+recomputing it: `BattlePokemon.disabled_moves` covers Choice lock, Encore,
+Taunt, Disable and Torment; `available_specials` covers Mega and anything a
+future regulation enables; trapping is a `"trapped"` volatile. All of these are
+populated by the simulator adapter, so nothing here reimplements a game rule.
+
+Remaining gap: Struggle is unmodelled -- a Pokemon with no usable move and no
+switch yields a pass instead.
 """
 
 from collections.abc import Mapping, Sequence
@@ -112,7 +112,13 @@ def legal_slot_actions(
     pokemon = own.team[team_index]
     actions: list[SlotAction] = []
 
+    # Activating a special mechanic is a genuine extra choice, not a variant of
+    # the move, so each usable move appears both with and without it.
+    specials: tuple[str | None, ...] = (None, *sorted(pokemon.available_specials))
+
     for move_index, move_id in enumerate(pokemon.pokemon_set.moves):
+        if move_id in pokemon.disabled_moves:
+            continue
         if pokemon.move_pp is not None and pokemon.move_pp[move_index] <= 0:
             continue
         move = move_data.get(move_id)
@@ -121,7 +127,10 @@ def legal_slot_actions(
         for target in _candidate_targets(observation, acting_slot, move):
             if move.requires_target_choice and target is None:
                 continue
-            actions.append(MoveAction(move_index=move_index, target=target))
+            for special in specials:
+                actions.append(
+                    MoveAction(move_index=move_index, target=target, special=special)
+                )
 
     if TRAPPED not in pokemon.volatile_conditions:
         actions.extend(_switch_actions(observation, exclude=team_index))

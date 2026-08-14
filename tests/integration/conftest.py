@@ -107,6 +107,12 @@ def teams(bridge, battle_format, team_generator) -> tuple[str, str]:
 
 
 @pytest.fixture(scope="session")
+def mega_team_text() -> str:
+    """The export-format source of MEGA_TEAM, for tests that need the declared sets."""
+    return MEGA_TEAM
+
+
+@pytest.fixture(scope="session")
 def mega_teams(bridge, battle_format) -> tuple[str, str]:
     """Both sides hold a Mega stone, so Mega availability is guaranteed rather than luck."""
     packed = bridge.validate_team(battle_format, MEGA_TEAM)

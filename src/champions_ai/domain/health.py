@@ -32,6 +32,38 @@ class SharedHealth(NamedTuple):
     status: str | None
 
 
+class ExactHealth(NamedTuple):
+    """Own-side HP, which the engine reports in real points rather than percent."""
+
+    current: int
+    maximum: int
+    fainted: bool
+    status: str | None
+
+
+def parse_exact_health(condition: str) -> ExactHealth:
+    """Parse an own-side `condition` such as `114/153`, `153/153 brn`, or `0 fnt`.
+
+    Kept separate from `parse_shared_health` on purpose: both read the same
+    syntax but mean different things, and conflating them would silently treat
+    a Pokemon's real HP as a percentage.
+    """
+    parts = condition.split()
+    health = parts[0]
+    status = parts[1] if len(parts) > 1 else None
+
+    if health == "0" or status == "fnt":
+        return ExactHealth(current=0, maximum=1, fainted=True, status=None)
+
+    current, _, maximum = health.partition("/")
+    return ExactHealth(
+        current=int(current),
+        maximum=int(maximum) if maximum else int(current),
+        fainted=False,
+        status=status,
+    )
+
+
 def color_for_percent(percent: int) -> HpBarColor:
     """The bar colour implied by a percentage away from the ambiguous thresholds."""
     if percent > GREEN_ABOVE:

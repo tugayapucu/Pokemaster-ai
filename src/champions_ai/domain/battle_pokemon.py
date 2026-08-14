@@ -2,6 +2,7 @@ from pydantic import BaseModel, model_validator
 
 from champions_ai.domain.boosts import Boosts
 from champions_ai.domain.pokemon_set import PokemonSet
+from champions_ai.domain.regulation import SpecialMechanic
 
 
 class BattlePokemon(BaseModel, frozen=True):
@@ -18,6 +19,12 @@ class BattlePokemon(BaseModel, frozen=True):
     # Parallel to pokemon_set.moves. None means "not tracked" -- honest for
     # opponent Pokemon, whose PP a player cannot see.
     move_pp: tuple[int, ...] | None = None
+
+    # Availability as the engine reports it, per ADR 0003, rather than derived
+    # from game data. Covers Choice lock, Encore, Taunt, Disable and Torment
+    # without this project reimplementing any of them.
+    disabled_moves: frozenset[str] = frozenset()
+    available_specials: frozenset[SpecialMechanic] = frozenset()
 
     # What the *opponent* has learned about this Pokemon. Part of battle truth,
     # not a view concern: revelation is symmetric (if a move was used, it was
