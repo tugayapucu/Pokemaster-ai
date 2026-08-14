@@ -439,7 +439,17 @@ Two findings worth carrying forward:
 - **No move data file is needed for legal-action generation.** Requests carry each active move's `target`, so `MoveData` is learned live. A shipped move table is only needed once we want data about moves that are *not* currently active — evaluation and search, not legality.
 - **Stat Points are the one thing the engine never sends back.** Everything else about our own side comes from the request; the declared team is needed only to recover the point allocation.
 
-Remaining for Milestone 2: structured trajectory logging, and a proper environment wrapper around the tracker/bridge pair so agents don't each re-implement the request-handling loop.
+`src/champions_ai/env/` adds `BattleEnv`, which owns the bridge and both trackers and exposes `reset` / `observation` / `decision` / `legal_actions` / `step`. Agents see `Observation` and `JointAction` and nothing else — a working random agent is four lines. Verified over 16 seeded battles with random agents on both sides: every generated action accepted, both sides winning, replay exact.
+
+Running real battles caught three bugs that reasoning had missed, all the same mistake — **inventing data the engine never sent**:
+
+- Forced switches were enumerated per slot independently, losing the case where one slot takes the last living replacement and the other must pass; with one bench Pokémon left this produced *no* legal action at all.
+- A Pokémon locked mid-Solar Beam gets a request listing only that move, **with no `pp` field**. Defaulting the absence to 0 read as "no PP left" and filtered out its only legal move.
+- The same entry also **omits `target`**, because a locked move's target is already fixed. Falling back to the move's usual target type produced a choice the engine rejected.
+
+The general lesson, worth applying to the rest of the adapter: a missing field in a request means *unknown or not applicable*, never zero or a default. `BattlePokemon` now carries the engine's per-turn `choosable_moves` and `choosable_move_targets`, which take precedence over static move data — and move indices in a submitted choice refer to that trimmed list, not the declared moveset.
+
+Remaining for Milestone 2: structured trajectory logging.
 
 ### Definition of done
 

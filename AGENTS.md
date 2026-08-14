@@ -46,6 +46,8 @@ True Battle State
 
 Models intended to behave like real players must consume observations, not omniscient simulator state.
 
+When reading the simulator's request payloads, treat an **absent field as unknown or not applicable, never as a default**. A Pokémon locked into a charging move receives an entry with no `pp` and no `target`; defaulting those to `0` and to the move's usual target type each produced a different illegal choice. If the engine did not say it, do not infer it.
+
 This applies to the simulator bridge too. Showdown exposes an *omniscient* protocol stream and a *per-player* one; the omniscient stream reports exact opponent HP where the player stream reports a percentage. Observations must be built from `sideline` (per-player) events, never from `line` (omniscient) events.
 
 In this repository that boundary is concrete: `Observation.from_battle_state(state, player)` is the only sanctioned path from `BattleState` to anything an agent sees. Agents, models, and feature encoders take an `Observation`; anything reaching for `BattleState` directly is a bug. When adding a field to an observed type, add a test proving the hidden case stays hidden — and verify that test is non-vacuous by temporarily breaking the masking and watching it fail.
