@@ -419,9 +419,9 @@ Create or integrate an environment in which agents can play complete battles.
 ### Required capabilities
 
 - [x] reset battle; (`ShowdownBridge.start_battle`)
-- [ ] retrieve observation; (raw protocol + request payloads arrive; **not yet translated into `Observation`** — this is the main remaining gap)
-- [ ] enumerate legal actions; (`legal_joint_actions` exists but is not yet wired to live battle state)
-- [x] submit joint actions; (`ShowdownBridge.choose`, currently as Showdown choice strings rather than `JointAction`)
+- [x] retrieve observation; (`BattleTracker.observation()`, built from the player-visible stream)
+- [x] enumerate legal actions; (`legal_joint_actions` running against live battle state, with move target types learned from the engine's requests)
+- [x] submit joint actions; (`format_joint_action` renders a `JointAction` into a Showdown choice)
 - [x] resolve turn;
 - [x] detect terminal state; (`|win|` in the protocol stream)
 - [x] return winner;
@@ -430,9 +430,16 @@ Create or integrate an environment in which agents can play complete battles.
 
 ### Progress (2026-08-11)
 
-`src/champions_ai/simulator/` holds a long-lived Node process (`bridge.js`) running Showdown's engine, driven from Python (`bridge.py`) over line-delimited JSON, plus team validation. ADR 0003 is confirmed working end to end: `canMegaEvo` and per-move `disabled` were both observed in live battle requests.
+`src/champions_ai/simulator/` holds a long-lived Node process (`bridge.js`) running Showdown's engine, driven from Python (`bridge.py`), plus `tracker.py` (protocol → `Observation`) and `choices.py` (domain actions → Showdown choice strings). The round trip is closed and tested: a full battle plays with both players driven entirely through domain types, so any disagreement between model and engine surfaces immediately as a rejected action.
 
-What remains is the **translation layer** — turning Showdown's protocol stream and request payloads into `BattleState`/`Observation`/`JointAction`. Until that exists the bridge is usable but the domain model and the simulator are not actually connected, and legal-action generation still can't run against a real battle.
+ADR 0003 is now implemented, not just decided. `BattlePokemon.disabled_moves` and `available_specials` are populated from the engine's request, so Choice lock, Encore, Taunt, Disable, Torment and Mega availability all work without reimplementing a rule.
+
+Two findings worth carrying forward:
+
+- **No move data file is needed for legal-action generation.** Requests carry each active move's `target`, so `MoveData` is learned live. A shipped move table is only needed once we want data about moves that are *not* currently active — evaluation and search, not legality.
+- **Stat Points are the one thing the engine never sends back.** Everything else about our own side comes from the request; the declared team is needed only to recover the point allocation.
+
+Remaining for Milestone 2: structured trajectory logging, and a proper environment wrapper around the tracker/bridge pair so agents don't each re-implement the request-handling loop.
 
 ### Definition of done
 
