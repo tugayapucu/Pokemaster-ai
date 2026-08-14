@@ -228,7 +228,12 @@ Before ML begins, define a battle representation that is stable, explicit, and t
 
 ### Implementation status (2026-08-11)
 
-Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`, `TeamPreview`, `RevealedPokemon`. All are immutable (frozen) Pydantic models — in-battle state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: `BattleState` (both sides + field conditions), full `Observation`, `Action`/`JointAction`, and the legal-action generator.
+Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`, `TeamPreview`, `RevealedPokemon`, `Side`, `BattleState`. All are immutable (frozen) Pydantic models — state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`, `Side.with_slot`, `BattleState.with_side`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: full `Observation`, `Action`/`JointAction`, and the legal-action generator.
+
+Two known soft spots to revisit rather than forget:
+
+- `side_conditions` / `field_conditions` are plain `dict[str, int]` (name → turns remaining). `frozen=True` stops the *field* being reassigned but does not stop the dict itself being mutated in place, so these are immutable by convention only. Chosen over a fully immutable mapping because the expected construction path rebuilds state from the simulator's protocol stream each turn rather than mutating incrementally — revisit if anything starts editing conditions in place.
+- Weather, terrain, status, and condition names are plain strings, not enums. Deliberate while the full set of values Champions actually uses is still being discovered; worth tightening once the simulator adapter has enumerated them in practice.
 
 ### Confirmed Reg M-B mechanics differences from mainline VGC (2026-08-11 spike)
 
@@ -355,7 +360,7 @@ Represent Pokémon Champions battle states and enumerate valid player actions.
 - [x] Pokémon domain objects. (`PokemonSet` — pre-battle team-sheet entry; `BattlePokemon` — live in-battle snapshot with HP/status/boosts)
 - [x] Team representation. (`Team`)
 - [x] Team Preview representation. (`TeamPreview`, `RevealedPokemon` — the pick-4-of-6 decision point, added after realizing it's chronologically the first decision in a match and needed its own hidden-information handling; not in the original deliverable list below, added here)
-- [ ] Battle state representation.
+- [x] Battle state representation. (`BattleState` + `Side` — full simulator truth: turn, both sides' brought Pokémon, slot occupancy, weather/terrain, side/field conditions, terminal + winner detection)
 - [ ] Observation representation. (`RevealedPokemon` is a first taste of real masking — species/level always known, ability/item/moves/nature hidden by default, stats never shown — but the full in-battle `Observation` over `BattleState` is still unbuilt)
 - [x] Regulation representation. (`Regulation`, `REGULATION_M_B`)
 - [ ] Move target representation.
