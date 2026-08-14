@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from types import TracebackType
 
+from champions_ai.data import DecisionRecord, Trajectory, git_commit, utc_now
 from champions_ai.domain import (
     JointAction,
     Observation,
@@ -74,6 +75,10 @@ class BattleEnv:
         self._winner: int | None = None
         self._started = False
         self._pending: set[int] = set()
+        self._decisions: list[DecisionRecord] = []
+        self._seed: str | None = None
+        self._packed: tuple[str, str] = ("", "")
+        self._last_legal_counts: dict[int, int] = {}
 
     # ------------------------------------------------------------- lifecycle
 
@@ -104,6 +109,9 @@ class BattleEnv:
         self._winner = None
         self._started = True
         self._pending = set()
+        self._decisions = []
+        self._seed = seed
+        self._packed = packed_teams
 
         events = self._bridge.start_battle(
             self.regulation.format_id, packed_teams[0], packed_teams[1], seed=seed
@@ -178,9 +186,15 @@ class BattleEnv:
         observation = tracker.observation()
         move_data = tracker.move_data
         if decision is Decision.TURN:
-            return legal_joint_actions(observation, move_data)
-
-        return self._forced_switch_actions(observation, tracker.force_switch_slots, move_data)
+            actions = legal_joint_actions(observation, move_data)
+        else:
+            actions = self._forced_switch_actions(
+                observation, tracker.force_switch_slots, move_data
+            )
+        # Remembered so a recorded decision can say how many options the agent
+        # was choosing between, without recomputing them.
+        self._last_legal_counts[player] = len(actions)
+        return actions
 
     def _forced_switch_actions(
         self, observation: Observation, forced: tuple[bool, ...], move_data: dict
@@ -245,9 +259,25 @@ class BattleEnv:
                 f"expected actions for players {sorted(expected)}, got {sorted(actions)}"
             )
 
-        events: list[dict] = []
+        turn = self.turn
+        rendered = []
         for player, action in sorted(actions.items()):
-            events.extend(self._bridge.choose(PLAYER_TAGS[player], self._render(player, action)))
+            # Render before submitting: _render reads the current decision,
+            # which the engine's response would otherwise have moved on from.
+            rendered.append((player, action, self._render(player, action)))
+            self._decisions.append(
+                DecisionRecord(
+                    turn=turn,
+                    player=player,
+                    action=action,
+                    legal_action_count=self._last_legal_counts.get(player),
+                )
+            )
+
+        events: list[dict] = []
+        for player, _, choice in rendered:
+            events.extend(self._bridge.choose(PLAYER_TAGS[player], choice))
+        self._last_legal_counts = {}
         return self._absorb(events)
 
     def _render(self, player: int, action: JointAction | TeamPreviewAction) -> str:
@@ -261,6 +291,61 @@ class BattleEnv:
         if not isinstance(action, JointAction):
             raise TypeError(f"player {player} owes a JointAction, got {type(action).__name__}")
         return format_joint_action(action)
+
+    def trajectory(
+        self,
+        *,
+        include_protocol: bool = False,
+        metadata: dict[str, str] | None = None,
+    ) -> Trajectory:
+        """Record this battle as what it takes to reproduce it.
+
+        Observations are deliberately absent: replaying the seed regenerates
+        them, and doing so with current code beats preserving whatever the
+        recording version happened to produce.
+        """
+        self._require_started()
+        return Trajectory(
+            format_id=self.regulation.format_id,
+            seed=self._seed,
+            packed_teams=self._packed,
+            decisions=tuple(self._decisions),
+            winner=self._winner,
+            turns=self.turn,
+            recorded_at=utc_now(),
+            git_commit=git_commit(),
+            metadata=metadata or {},
+            protocol=self.protocol if include_protocol else (),
+        )
+
+    def replay(self, trajectory: Trajectory) -> StepResult:
+        """Re-run a recorded battle by resubmitting its decisions.
+
+        Raises if the recording cannot drive the battle -- a decision arriving
+        for a player the engine is not asking, or the choices running out
+        early, means the record and the current code disagree, which is worth
+        failing on rather than papering over.
+        """
+        if not trajectory.replayable:
+            raise ValueError("trajectory has no seed and cannot be reproduced")
+
+        result = self.reset(trajectory.packed_teams, seed=trajectory.seed)
+        queued = list(trajectory.decisions)
+
+        while not result.terminal:
+            waiting = self.awaiting()
+            if not waiting:
+                break
+            actions: dict[int, JointAction | TeamPreviewAction] = {}
+            for player in waiting:
+                match = next((d for d in queued if d.player == player), None)
+                if match is None:
+                    raise ValueError(f"trajectory ran out of decisions for player {player}")
+                queued.remove(match)
+                actions[player] = match.action
+            result = self.step(actions)
+
+        return result
 
     def _absorb(self, events: list[dict]) -> StepResult:
         self._pending = set()

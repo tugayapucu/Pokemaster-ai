@@ -73,11 +73,13 @@ class PassAction(BaseModel, frozen=True):
 
 
 SlotAction = Annotated[MoveAction | SwitchAction | PassAction, Field(discriminator="kind")]
+"""One slot's choice. Tagged so it survives a JSON round trip intact."""
 
 
 class JointAction(BaseModel, frozen=True):
     """Every slot's choice for one turn, submitted together as doubles requires."""
 
+    kind: Literal["joint"] = "joint"
     slot_actions: tuple[SlotAction, ...]
 
     @model_validator(mode="after")
@@ -109,7 +111,11 @@ class TeamPreviewAction(BaseModel, frozen=True):
     battle on the field.
     """
 
+    kind: Literal["team_preview"] = "team_preview"
     picks: tuple[int, ...]
+
+    def __len__(self) -> int:
+        return len(self.picks)
 
     @model_validator(mode="after")
     def _check_picks(self) -> "TeamPreviewAction":
