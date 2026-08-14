@@ -228,7 +228,7 @@ Before ML begins, define a battle representation that is stable, explicit, and t
 
 ### Implementation status (2026-08-11)
 
-Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`, `TeamPreview`, `RevealedPokemon`, `Side`, `BattleState`, and the action types (`TargetSlot`, `MoveAction`, `SwitchAction`, `PassAction`, `JointAction`, `TeamPreviewAction`). All are immutable (frozen) Pydantic models — state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`, `Side.with_slot`, `BattleState.with_side`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: full `Observation`, and the legal-action generator.
+Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`, `TeamPreview`, `RevealedPokemon`, `Side`, `BattleState`, `Observation`/`ObservedSide`/`ObservedPokemon`, the action types (`TargetSlot`, `MoveAction`, `SwitchAction`, `PassAction`, `JointAction`, `TeamPreviewAction`), `MoveData`, and the legal-action generator. All are immutable (frozen) Pydantic models — state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`, `Side.with_slot`, `BattleState.with_side`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Milestone 1's domain layer is complete; what it still lacks is real data (move/species/item tables from the `champions` mod) and a simulator adapter to drive it.
 
 `Observation.from_battle_state(state, player)` is the **only** sanctioned path from simulator truth to agent input. Anything consuming `BattleState` directly is a hidden-information bug; the leak tests in `tests/unit/domain/test_observation.py` were verified non-vacuous by deliberately breaking the masking and confirming they fail.
 
@@ -371,9 +371,9 @@ Represent Pokémon Champions battle states and enumerate valid player actions.
 - [x] Move target representation. (`TargetSlot` — explicit `side`/`slot`, translated to Showdown's signed convention at the adapter boundary)
 - [x] Individual action representation. (`MoveAction`, `SwitchAction`, `PassAction` as a discriminated union; plus `TeamPreviewAction` for the pick-N-of-6)
 - [x] Joint Double Battle action representation. (`JointAction`)
-- [ ] Legal-action generator.
+- [x] Legal-action generator. (`legal_slot_actions` / `legal_joint_actions`, generated from `Observation` so the hidden-information boundary holds by construction; takes injected `MoveData` rather than loading data itself)
 - [x] Serialization to/from JSON. (Pydantic gives this per-object via `model_dump_json`/`model_validate_json`, with round-trip tests on `PokemonSet`, `BattleState`, and `JointAction`; no dedicated serialization module — none is needed while the models carry it themselves)
-- [x] Unit tests. (85 passing, covering everything built to date, including non-vacuous hidden-information leak tests)
+- [x] Unit tests. (99 passing, covering everything built to date, including non-vacuous hidden-information leak tests)
 
 ### First useful demo
 
@@ -386,6 +386,16 @@ python -m champions_ai.actions state.json
 return all legal actions.
 
 This demo should exist before any neural network.
+
+**Status:** the library half is done — `legal_joint_actions(Observation.from_battle_state(state, player), move_data)` already returns the answer, verified on a realistic VGC position (12 and 8 slot options, 94 joint actions). The CLI wrapper is not written, and can't be honestly finished until move data is loadable from the `champions` mod rather than hand-supplied, since a real `state.json` would reference arbitrary moves. That data adapter is the natural next slice.
+
+### Carried into the next slice
+
+Known gaps left by Milestone 1, recorded so they're closed deliberately rather than forgotten:
+
+- **Mega Evolution is never offered** by the legal-action generator. Determining whether a Pokémon can Mega needs species/item data; omitting a legal option is recoverable, offering an illegal one corrupts a battle, so it errs toward omission until the data adapter lands. This is a real hole in the action space for a format where Mega is central.
+- **Move-lock effects** (Choice items, Encore, Taunt, Disable, Torment) and **Struggle** are unmodelled. The simulator adapter can report locks directly, so these are better closed there than reimplemented.
+- **Trapping** is read from a `"trapped"` volatile condition by convention; the adapter must set it.
 
 ---
 
