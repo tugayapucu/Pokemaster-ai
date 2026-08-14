@@ -488,6 +488,18 @@ Running a real pool also exposed a crash worth recording: a generated team conta
 
 - [x] Select uniformly among legal joint actions. (`RandomAgent`, owning its own RNG so runs reproduce independently of unrelated code)
 
+### Reference data (2026-08-15)
+
+`src/champions_ai/dex/` loads species typing and base stats, move power/type/category/accuracy, and a resolved type-effectiveness matrix from `Dex.mod('champions')` via a `dexdump` bridge command. Refreshing the dump picks up a new regulation's roster; no table is maintained by hand.
+
+Two things this confirmed and one it fixed:
+
+- **Champions' roster is genuinely restricted**: 357 species and 500 moves, against mainline's ~1000+.
+- **`accuracy: null` is not the same as 100.** A move that bypasses accuracy checks cannot be made to miss; a 100%-accurate one can.
+- Levels were being read by splitting the details field on the letter `L`, so **Lopunny parsed as level "opunny"** — a silent, species-dependent crash that only a team pool would surface. Now matched on the `, L<number>` field.
+
+`Dex` is deliberately separate from `MoveData`: `MoveData` is per-turn, engine-reported, and describes what may be chosen *now*; `Dex` is the unchanging half, loaded once. The tracker also now keeps the computed stats the engine sends for our own side, which damage calculation needs and which were previously discarded.
+
 ### Agent 1: Heuristic Agent
 
 Potential signals:
