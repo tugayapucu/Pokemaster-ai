@@ -246,6 +246,7 @@ Verified against Showdown's `champions` mod (see `spike/showdown-bridge/notes.md
 - **Stat allocation is not EVs/IVs.** Champions uses a "Stat Points" system: 0–32 points per stat, 66 points total across all stats, IVs fixed at 31. The `effective stats` field's inputs should model this, not a 0–252/510 EV spread.
 - **Held items are a curated subset**, not the full mainline item list (e.g. Choice Band, Choice Specs, Assault Vest, and Rocky Helmet are all unavailable). Item legality must be queried from the `champions` mod's data, not assumed from general Gen 9 knowledge.
 - Mega Evolution is a standard, available mechanic in this mod; Terastallization is not currently enabled under Reg M-B's ruleset despite Pokémon sets carrying a Tera Type field.
+- **The Pokédex and learnsets are restricted**, not just the item pool. Confirmed while hand-building a legal team (2026-08-11): Amoonguss does not exist in Champions at all, Charizard cannot learn Tailwind, and Grimmsnarl cannot learn Thunder Wave. Never assume a mainline Pokémon, or a mainline moveset, is available — validate against the format.
 - **Open Team Sheets is opt-in, not automatic.** Reg M-B's `Open Team Sheets` rule (as opposed to `Force Open Team Sheets`, used by the Bo3 variant) shows both players an Accept/Deny prompt at Team Preview; nothing extra is revealed unless *both* accept. On a normal ranked match this essentially never happens, so by default a player only sees species/level/gender for the opponent's team. Even when accepted, **Stat Points allocation is never revealed** — confirmed directly from `showOpenTeamSheets()` in Showdown's `sim/battle.ts`, which hardcodes `evs: null`. `TeamPreview.opponent_team` models this with `RevealedPokemon`, a type that has no stats field at all rather than one that's merely set to `None` by convention.
 - Team building is bring-6/pick-4 for doubles (Team Preview shows 6, only 4 are brought into the battle).
 
@@ -405,15 +406,21 @@ Create or integrate an environment in which agents can play complete battles.
 
 ### Required capabilities
 
-- [ ] reset battle;
-- [ ] retrieve observation;
-- [ ] enumerate legal actions;
-- [ ] submit joint actions;
-- [ ] resolve turn;
-- [ ] detect terminal state;
-- [ ] return winner;
-- [ ] log battle trajectory;
-- [ ] replay battle deterministically when randomness is seeded.
+- [x] reset battle; (`ShowdownBridge.start_battle`)
+- [ ] retrieve observation; (raw protocol + request payloads arrive; **not yet translated into `Observation`** — this is the main remaining gap)
+- [ ] enumerate legal actions; (`legal_joint_actions` exists but is not yet wired to live battle state)
+- [x] submit joint actions; (`ShowdownBridge.choose`, currently as Showdown choice strings rather than `JointAction`)
+- [x] resolve turn;
+- [x] detect terminal state; (`|win|` in the protocol stream)
+- [x] return winner;
+- [ ] log battle trajectory; (protocol lines are captured but not stored as structured trajectories)
+- [x] replay battle deterministically when randomness is seeded. (Verified: same seed reproduces a battle exactly. `|t:|` lines carry wall-clock time and must be excluded from comparison — a test fails loudly if anything *else* becomes nondeterministic.)
+
+### Progress (2026-08-11)
+
+`src/champions_ai/simulator/` holds a long-lived Node process (`bridge.js`) running Showdown's engine, driven from Python (`bridge.py`) over line-delimited JSON, plus team validation. ADR 0003 is confirmed working end to end: `canMegaEvo` and per-move `disabled` were both observed in live battle requests.
+
+What remains is the **translation layer** — turning Showdown's protocol stream and request payloads into `BattleState`/`Observation`/`JointAction`. Until that exists the bridge is usable but the domain model and the simulator are not actually connected, and legal-action generation still can't run against a real battle.
 
 ### Definition of done
 

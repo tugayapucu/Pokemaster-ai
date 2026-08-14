@@ -16,11 +16,22 @@ for repository-wide rules for coding agents working here.
 
 ```bash
 python -m pip install -e ".[dev]"
+npm install
 ```
+
+`npm install` fetches Pokémon Showdown, whose battle engine is driven directly
+(no server) by the bridge in [`src/champions_ai/simulator/`](src/champions_ai/simulator/).
 
 ## Tests and linting
 
 ```bash
 python -m pytest
 python -m ruff check .
+```
+
+Tests marked `integration` spawn a real Showdown process and are skipped
+automatically when Node isn't installed:
+
+```bash
+python -m pytest -m "not integration"
 ```
