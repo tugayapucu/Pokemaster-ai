@@ -15,7 +15,6 @@ class BattlePokemon(BaseModel, frozen=True):
     boosts: Boosts = Boosts()
     current_ability: str | None = None
     current_item: str | None = None
-    is_active: bool = False
 
     @model_validator(mode="after")
     def _check_hp(self) -> "BattlePokemon":

@@ -17,6 +17,10 @@ class Regulation(BaseModel, frozen=True):
     max_stat_points_per_stat: int
     max_total_stat_points: int
 
+    @property
+    def active_slots_per_side(self) -> int:
+        return 2 if self.game_type == "doubles" else 1
+
 
 REGULATION_M_B = Regulation(
     format_id="gen9championsvgc2026regmb",
