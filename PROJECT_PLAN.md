@@ -228,7 +228,7 @@ Before ML begins, define a battle representation that is stable, explicit, and t
 
 ### Implementation status (2026-08-11)
 
-Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`. All are immutable (frozen) Pydantic models — in-battle state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: `BattleState` (both sides + field conditions), `Observation`, `Action`/`JointAction`, and the legal-action generator.
+Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`, `TeamPreview`, `RevealedPokemon`. All are immutable (frozen) Pydantic models — in-battle state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: `BattleState` (both sides + field conditions), full `Observation`, `Action`/`JointAction`, and the legal-action generator.
 
 ### Confirmed Reg M-B mechanics differences from mainline VGC (2026-08-11 spike)
 
@@ -237,6 +237,7 @@ Verified against Showdown's `champions` mod (see `spike/showdown-bridge/notes.md
 - **Stat allocation is not EVs/IVs.** Champions uses a "Stat Points" system: 0–32 points per stat, 66 points total across all stats, IVs fixed at 31. The `effective stats` field's inputs should model this, not a 0–252/510 EV spread.
 - **Held items are a curated subset**, not the full mainline item list (e.g. Choice Band, Choice Specs, Assault Vest, and Rocky Helmet are all unavailable). Item legality must be queried from the `champions` mod's data, not assumed from general Gen 9 knowledge.
 - Mega Evolution is a standard, available mechanic in this mod; Terastallization is not currently enabled under Reg M-B's ruleset despite Pokémon sets carrying a Tera Type field.
+- **Open Team Sheets is opt-in, not automatic.** Reg M-B's `Open Team Sheets` rule (as opposed to `Force Open Team Sheets`, used by the Bo3 variant) shows both players an Accept/Deny prompt at Team Preview; nothing extra is revealed unless *both* accept. On a normal ranked match this essentially never happens, so by default a player only sees species/level/gender for the opponent's team. Even when accepted, **Stat Points allocation is never revealed** — confirmed directly from `showOpenTeamSheets()` in Showdown's `sim/battle.ts`, which hardcodes `evs: null`. `TeamPreview.opponent_team` models this with `RevealedPokemon`, a type that has no stats field at all rather than one that's merely set to `None` by convention.
 - Team building is bring-6/pick-4 for doubles (Team Preview shows 6, only 4 are brought into the battle).
 
 ## Pokémon state
@@ -353,8 +354,9 @@ Represent Pokémon Champions battle states and enumerate valid player actions.
 
 - [x] Pokémon domain objects. (`PokemonSet` — pre-battle team-sheet entry; `BattlePokemon` — live in-battle snapshot with HP/status/boosts)
 - [x] Team representation. (`Team`)
+- [x] Team Preview representation. (`TeamPreview`, `RevealedPokemon` — the pick-4-of-6 decision point, added after realizing it's chronologically the first decision in a match and needed its own hidden-information handling; not in the original deliverable list below, added here)
 - [ ] Battle state representation.
-- [ ] Observation representation.
+- [ ] Observation representation. (`RevealedPokemon` is a first taste of real masking — species/level always known, ability/item/moves/nature hidden by default, stats never shown — but the full in-battle `Observation` over `BattleState` is still unbuilt)
 - [x] Regulation representation. (`Regulation`, `REGULATION_M_B`)
 - [ ] Move target representation.
 - [ ] Individual action representation.
