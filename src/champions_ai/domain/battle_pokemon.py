@@ -16,6 +16,14 @@ class BattlePokemon(BaseModel, frozen=True):
     current_ability: str | None = None
     current_item: str | None = None
 
+    # What the *opponent* has learned about this Pokemon. Part of battle truth,
+    # not a view concern: revelation is symmetric (if a move was used, it was
+    # seen), and Observation masking reads these to decide what it may expose.
+    revealed_moves: frozenset[str] = frozenset()
+    ability_revealed: bool = False
+    item_revealed: bool = False
+    has_been_active: bool = False
+
     @model_validator(mode="after")
     def _check_hp(self) -> "BattlePokemon":
         if self.max_hp <= 0:
@@ -44,6 +52,17 @@ class BattlePokemon(BaseModel, frozen=True):
     def hp_fraction(self) -> float:
         return self.current_hp / self.max_hp
 
+    @property
+    def hp_percent(self) -> int:
+        """HP rounded to a percentage, as opponents see it -- never the exact value.
+
+        A living Pokemon never reports 0, so "barely alive" cannot be mistaken
+        for fainted, matching how the simulator presents opposing HP.
+        """
+        if self.fainted:
+            return 0
+        return max(1, round(self.hp_fraction * 100))
+
     def with_damage(self, amount: int) -> "BattlePokemon":
         return self.model_copy(update={"current_hp": max(0, self.current_hp - amount)})
 
@@ -52,3 +71,6 @@ class BattlePokemon(BaseModel, frozen=True):
 
     def with_status(self, status: str | None) -> "BattlePokemon":
         return self.model_copy(update={"status": status})
+
+    def with_revealed_move(self, move: str) -> "BattlePokemon":
+        return self.model_copy(update={"revealed_moves": self.revealed_moves | {move}})
