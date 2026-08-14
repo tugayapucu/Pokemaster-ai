@@ -425,7 +425,7 @@ Create or integrate an environment in which agents can play complete battles.
 - [x] resolve turn;
 - [x] detect terminal state; (`|win|` in the protocol stream)
 - [x] return winner;
-- [ ] log battle trajectory; (protocol lines are captured but not stored as structured trajectories)
+- [x] log battle trajectory; (`Trajectory` — seed + ordered decisions, ~6KB per battle, replayable)
 - [x] replay battle deterministically when randomness is seeded. (Verified: same seed reproduces a battle exactly. `|t:|` lines carry wall-clock time and must be excluded from comparison — a test fails loudly if anything *else* becomes nondeterministic.)
 
 ### Progress (2026-08-11)
@@ -449,7 +449,16 @@ Running real battles caught three bugs that reasoning had missed, all the same m
 
 The general lesson, worth applying to the rest of the adapter: a missing field in a request means *unknown or not applicable*, never zero or a default. `BattlePokemon` now carries the engine's per-turn `choosable_moves` and `choosable_move_targets`, which take precedence over static move data — and move indices in a submitted choice refer to that trimmed list, not the declared moveset.
 
-Remaining for Milestone 2: structured trajectory logging.
+`src/champions_ai/data/` completes the milestone with `Trajectory`. Because a seeded battle replays exactly, a record stores the *inputs* — format, seed, packed teams, ordered decisions — rather than every state. A full battle is ~6KB, and the record cannot drift out of internal consistency the way a parallel copy of derived state can. Verified end to end: record, save, reload from disk, replay to the same winner, turn count and protocol.
+
+Two decisions worth carrying into Milestone 5's data pipeline:
+
+- **Observations are not stored.** Replaying regenerates them, so training data is produced by the *current* observation code rather than whatever version recorded it. `git_commit` is captured so a replay that no longer reproduces its recorded result is detectable rather than silently wrong.
+- **`legal_action_count` is recorded per decision.** Choosing one action out of ninety is not the same evidence as choosing it out of two, and imitation learning needs that context to weight a choice.
+
+### Definition of done — met
+
+Two random agents repeatedly complete valid battles without environment corruption, verified over 16 seeded battles with every generated action accepted by the engine.
 
 ### Definition of done
 
