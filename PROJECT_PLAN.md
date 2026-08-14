@@ -228,7 +228,9 @@ Before ML begins, define a battle representation that is stable, explicit, and t
 
 ### Implementation status (2026-08-11)
 
-Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`, `TeamPreview`, `RevealedPokemon`, `Side`, `BattleState`. All are immutable (frozen) Pydantic models — state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`, `Side.with_slot`, `BattleState.with_side`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: full `Observation`, `Action`/`JointAction`, and the legal-action generator.
+Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`, `TeamPreview`, `RevealedPokemon`, `Side`, `BattleState`, and the action types (`TargetSlot`, `MoveAction`, `SwitchAction`, `PassAction`, `JointAction`, `TeamPreviewAction`). All are immutable (frozen) Pydantic models — state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`, `Side.with_slot`, `BattleState.with_side`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: full `Observation`, and the legal-action generator.
+
+A boundary worth keeping: the action types validate only what is true regardless of move data (index ranges, no double-switch to the same Pokémon, one Mega per turn). Anything needing move metadata — whether a move requires a target, whether a target is adjacent, whether a Pokémon is trapped — belongs to the legal-action generator, which will have access to the move data these types deliberately don't carry.
 
 Two known soft spots to revisit rather than forget:
 
@@ -363,9 +365,9 @@ Represent Pokémon Champions battle states and enumerate valid player actions.
 - [x] Battle state representation. (`BattleState` + `Side` — full simulator truth: turn, both sides' brought Pokémon, slot occupancy, weather/terrain, side/field conditions, terminal + winner detection)
 - [ ] Observation representation. (`RevealedPokemon` is a first taste of real masking — species/level always known, ability/item/moves/nature hidden by default, stats never shown — but the full in-battle `Observation` over `BattleState` is still unbuilt)
 - [x] Regulation representation. (`Regulation`, `REGULATION_M_B`)
-- [ ] Move target representation.
-- [ ] Individual action representation.
-- [ ] Joint Double Battle action representation.
+- [x] Move target representation. (`TargetSlot` — explicit `side`/`slot`, translated to Showdown's signed convention at the adapter boundary)
+- [x] Individual action representation. (`MoveAction`, `SwitchAction`, `PassAction` as a discriminated union; plus `TeamPreviewAction` for the pick-N-of-6)
+- [x] Joint Double Battle action representation. (`JointAction`)
 - [ ] Legal-action generator.
 - [ ] Hidden-information masking.
 - [ ] Serialization to/from JSON. (Pydantic gives this for free per-object via `model_dump_json`/`model_validate_json`, verified with a round-trip test on `PokemonSet`; no dedicated top-level serialization module yet — not needed until `BattleState` exists)
