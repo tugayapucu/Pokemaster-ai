@@ -22,6 +22,7 @@ from champions_ai.domain import (
     SlotAction,
     SwitchAction,
     Team,
+    TeamPreview,
     TeamPreviewAction,
     legal_joint_actions,
     legal_slot_actions,
@@ -130,6 +131,10 @@ class BattleEnv:
 
     def observation(self, player: int) -> Observation:
         return self.tracker(player).observation()
+
+    def team_preview(self, player: int) -> TeamPreview:
+        """Both rosters as this player sees them. Only valid before the battle starts."""
+        return self.tracker(player).team_preview()
 
     def decision(self, player: int) -> Decision:
         """What this player must choose right now, if anything.

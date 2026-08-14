@@ -23,9 +23,11 @@ from champions_ai.domain import (
     ObservedSide,
     PokemonSet,
     Regulation,
+    RevealedPokemon,
     Side,
     StatSpread,
     Team,
+    TeamPreview,
 )
 from champions_ai.domain.health import parse_exact_health, parse_shared_health
 from champions_ai.domain.legal_actions import TRAPPED
@@ -128,6 +130,8 @@ class BattleTracker:
         self._opponent_side_conditions: dict[str, int] = {}
         self._nickname_to_species: dict[str, str] = {}
         self._opponent_mega_used = False
+        self._opponent_roster: list[RevealedPokemon] = []
+        self._own_team = own_team
 
         self.weather: str | None = None
         self.terrain: str | None = None
@@ -192,6 +196,25 @@ class BattleTracker:
     def _on_teamsize(self, args: list[str]) -> None:
         if args[0] == self.opponent_tag:
             self._opponent_team_size = int(args[1])
+
+    def _on_poke(self, args: list[str]) -> None:
+        """Team Preview roster line: `|poke|p2|Charizard, L50, M|`.
+
+        Only species and level are listed unless Open Team Sheets was accepted
+        (see ADR 0002), which is what `RevealedPokemon` is shaped for.
+        """
+        if args[0] != self.opponent_tag:
+            return
+        details = args[1]
+        self._opponent_roster.append(
+            RevealedPokemon(
+                species=_species_from_details(details),
+                level=int(details.split("L")[1].split(",")[0]) if ", L" in details else 50,
+            )
+        )
+
+    def _on_clearpoke(self, args: list[str]) -> None:
+        self._opponent_roster.clear()
 
     def _opponent_at(self, ident: str) -> _OpponentPokemon | None:
         side, _, name = _split_ident(ident)
@@ -466,6 +489,19 @@ class BattleTracker:
             unrevealed_count=max(0, self._opponent_team_size - len(self._opponent_order)),
             side_conditions=dict(self._opponent_side_conditions),
             mega_used=self._opponent_mega_used,
+        )
+
+    def team_preview(self) -> TeamPreview:
+        """The pick-N-of-6 decision point. Not an Observation -- no battle exists yet."""
+        if len(self._opponent_roster) != self.regulation.min_team_size:
+            raise RuntimeError(
+                f"opponent roster has {len(self._opponent_roster)} Pokemon, "
+                f"expected {self.regulation.min_team_size}; team preview not reached yet"
+            )
+        return TeamPreview(
+            regulation=self.regulation,
+            own_team=self._own_team,
+            opponent_team=tuple(self._opponent_roster),
         )
 
     def observation(self) -> Observation:
