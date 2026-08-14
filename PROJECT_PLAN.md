@@ -391,11 +391,9 @@ This demo should exist before any neural network.
 
 ### Carried into the next slice
 
-Known gaps left by Milestone 1, recorded so they're closed deliberately rather than forgotten:
+Known gaps left by Milestone 1 — **Mega Evolution never being offered**, **move-lock effects** (Choice, Encore, Taunt, Disable, Torment) and **Struggle** being unmodelled, and **trapping** being read from a `"trapped"` volatile set by convention.
 
-- **Mega Evolution is never offered** by the legal-action generator. Determining whether a Pokémon can Mega needs species/item data; omitting a legal option is recoverable, offering an illegal one corrupts a battle, so it errs toward omission until the data adapter lands. This is a real hole in the action space for a format where Mega is central.
-- **Move-lock effects** (Choice items, Encore, Taunt, Disable, Torment) and **Struggle** are unmodelled. The simulator adapter can report locks directly, so these are better closed there than reimplemented.
-- **Trapping** is read from a `"trapped"` volatile condition by convention; the adapter must set it.
+These are one problem, not four. Showdown's per-turn request payload (`getMoveRequestData()` in `sim/pokemon.ts`) already reports `canMegaEvo`, per-move `disabled`, `trapped`/`maybeTrapped`, and `lockedMove` for each active Pokémon, so all four close together at the environment adapter by consuming the engine's answer rather than reimplementing legality from species/item data. See **ADR 0003**, which also records the one genuinely open tension: engine-reported availability can't enumerate actions for hypothetical states, which search (Milestone 11) will eventually need.
 
 ---
 
