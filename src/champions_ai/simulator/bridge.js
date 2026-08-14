@@ -50,6 +50,11 @@ function startBattle(msg) {
 				if (payload) send({ type: 'request', player, request: JSON.parse(payload) });
 			} else if (line.startsWith('|error|')) {
 				send({ type: 'error', player, message: line.slice('|error|'.length) });
+			} else {
+				// The player-visible view of the battle: opponent HP appears as a
+				// percentage here, unlike the omniscient stream. Observations must
+				// be built from this, never from `line` events.
+				send({ type: 'sideline', player, line });
 			}
 		});
 	}

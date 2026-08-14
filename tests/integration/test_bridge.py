@@ -64,6 +64,7 @@ def _play(battle_format: str, teams: tuple[str, str], seed: str | None) -> dict:
         events = bridge.start_battle(battle_format, teams[0], teams[1], seed=seed)
         rng = random.Random(20260811)
         log: list[str] = []
+        p1_view: list[str] = []
         saw_mega_flag = False
         saw_disabled_flag = False
         winner = None
@@ -76,6 +77,9 @@ def _play(battle_format: str, teams: tuple[str, str], seed: str | None) -> dict:
                     log.append(event["line"])
                     if event["line"].startswith("|win|"):
                         winner = event["line"].split("|")[2]
+                elif event["type"] == "sideline":
+                    if event["player"] == "p1":
+                        p1_view.append(event["line"])
                 elif event["type"] == "request":
                     requests[event["player"]] = event["request"]
 
@@ -98,10 +102,29 @@ def _play(battle_format: str, teams: tuple[str, str], seed: str | None) -> dict:
 
         return {
             "log": log,
+            "p1_view": p1_view,
             "winner": winner,
             "saw_mega_flag": saw_mega_flag,
             "saw_disabled_flag": saw_disabled_flag,
         }
+
+
+def _hp_denominators(lines: list[str], ident_prefix: str) -> set[str]:
+    """Denominators of HP readings for one side, e.g. {'153'} exact or {'100'} masked."""
+    found = set()
+    for line in lines:
+        parts = line.split("|")
+        if len(parts) < 4 or parts[1] not in ("switch", "drag", "-damage", "-heal"):
+            continue
+        if not parts[2].startswith(ident_prefix):
+            continue
+        condition = parts[4] if parts[1] in ("switch", "drag") else parts[3]
+        health = condition.split()[0]
+        if "/" in health:
+            denominator = health.split("/")[1]
+            # Champions appends an HP-bar colour letter at exactly 20% and 50%.
+            found.add(denominator.rstrip("gyr"))
+    return found
 
 
 def _without_timestamps(log: list[str]) -> list[str]:
@@ -143,6 +166,38 @@ def test_requests_expose_mega_availability_per_adr_0003(battle_format, mega_team
     result = _play(battle_format, mega_teams, seed=SEED)
     assert result["saw_mega_flag"], (
         "no canMegaEvo seen; ADR 0003 depends on the engine reporting Mega availability"
+    )
+
+
+def test_player_stream_masks_opponent_hp_but_not_their_own(battle_format, mega_teams):
+    """The engine masks for us -- but only on the per-player stream, not the omniscient one.
+
+    Observations must be built from `sideline` events for this reason; building
+    them from `line` events would leak exact opponent HP while looking correct.
+    """
+    result = _play(battle_format, mega_teams, seed=SEED)
+
+    opponent_seen_by_p1 = _hp_denominators(result["p1_view"], "p2")
+    assert opponent_seen_by_p1, "expected some opponent HP readings"
+    assert opponent_seen_by_p1 == {"100"}, (
+        f"opponent HP should be a percentage, saw denominators {opponent_seen_by_p1}"
+    )
+
+    own_seen_by_p1 = _hp_denominators(result["p1_view"], "p1")
+    assert own_seen_by_p1 and own_seen_by_p1 != {"100"}, (
+        f"own HP should be exact, saw denominators {own_seen_by_p1}"
+    )
+
+
+def test_omniscient_stream_really_does_expose_what_the_player_stream_hides(
+    battle_format, mega_teams
+):
+    """Guards against 'the masking test passes because nothing was masked'."""
+    result = _play(battle_format, mega_teams, seed=SEED)
+    omniscient_opponent = _hp_denominators(result["log"], "p2")
+    assert omniscient_opponent - {"100"}, (
+        "omniscient stream should show exact opponent HP; if it doesn't, the "
+        "masking test above proves nothing"
     )
 
 

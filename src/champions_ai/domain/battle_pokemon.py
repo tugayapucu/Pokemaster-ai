@@ -62,14 +62,16 @@ class BattlePokemon(BaseModel, frozen=True):
 
     @property
     def hp_percent(self) -> int:
-        """HP rounded to a percentage, as opponents see it -- never the exact value.
+        """HP as a percentage, exactly as Champions shows it to the opponent.
 
-        A living Pokemon never reports 0, so "barely alive" cannot be mistaken
-        for fainted, matching how the simulator presents opposing HP.
+        Floor, not round, with a floor of 1 while alive -- matching
+        `Math.floor(100 * hp / maxhp) || 1` in the champions branch of
+        Pokemon.getHealth(). Rounding would disagree with the protocol by a
+        point and make parsed and computed values silently differ.
         """
         if self.fainted:
             return 0
-        return max(1, round(self.hp_fraction * 100))
+        return max(1, self.current_hp * 100 // self.max_hp)
 
     def with_damage(self, amount: int) -> "BattlePokemon":
         return self.model_copy(update={"current_hp": max(0, self.current_hp - amount)})
