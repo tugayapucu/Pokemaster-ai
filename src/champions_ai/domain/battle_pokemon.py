@@ -16,6 +16,11 @@ class BattlePokemon(BaseModel, frozen=True):
     boosts: Boosts = Boosts()
     current_ability: str | None = None
     current_item: str | None = None
+
+    # Final stats as the engine computes them, for our own side only -- an
+    # opponent's are hidden. Excludes HP, which the engine reports separately
+    # and which `max_hp` already carries.
+    computed_stats: dict[str, int] | None = None
     # The moves this Pokemon may actually pick from right now, as the engine
     # lists them. Usually the full moveset, but a Pokemon locked mid-Solar Beam
     # or by Encore/Choice gets a trimmed list -- and move indices in a

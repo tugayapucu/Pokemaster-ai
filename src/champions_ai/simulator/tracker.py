@@ -74,6 +74,23 @@ def _species_from_details(details: str) -> str:
     return details.split(",")[0].strip()
 
 
+_LEVEL = re.compile(r",\s*L(\d+)")
+
+
+def _level_from_details(details: str, default: int) -> int:
+    """`Charizard, L50, F` -> 50.
+
+    Matched on the `, L<number>` field rather than by splitting on the letter
+    L, which silently mangles any species containing one -- Lopunny parsed as
+    level "opunny" before this was a regex.
+
+    Showdown omits the field entirely at level 100, so an absent level falls
+    back to the regulation's configured level rather than being guessed.
+    """
+    found = _LEVEL.search(details)
+    return int(found.group(1)) if found else default
+
+
 class _OpponentPokemon:
     """Mutable accumulator; converted to the immutable ObservedPokemon on demand."""
 
@@ -209,7 +226,7 @@ class BattleTracker:
         self._opponent_roster.append(
             RevealedPokemon(
                 species=_species_from_details(details),
-                level=int(details.split("L")[1].split(",")[0]) if ", L" in details else 50,
+                level=_level_from_details(details, self.regulation.level),
             )
         )
 
@@ -239,7 +256,7 @@ class BattleTracker:
             self._nickname_to_species[name] = species
             known = species
         if known not in self._opponents:
-            level = int(details.split("L")[1].split(",")[0]) if ", L" in details else 50
+            level = _level_from_details(details, self.regulation.level)
             self._opponents[known] = _OpponentPokemon(known, level)
             self._opponent_order.append(known)
 
@@ -444,7 +461,7 @@ class BattleTracker:
             declared = self._sets_by_species.get(to_id(species))
             pokemon_set = PokemonSet(
                 species=species,
-                level=int(entry["details"].split("L")[1].split(",")[0]),
+                level=_level_from_details(entry["details"], self.regulation.level),
                 ability=to_id(entry.get("baseAbility") or ""),
                 moves=tuple(entry["moves"]),
                 item=to_id(entry["item"]) if entry.get("item") else None,
@@ -497,6 +514,7 @@ class BattleTracker:
                     status=health.status,
                     current_ability=to_id(entry.get("ability") or entry.get("baseAbility", "")),
                     current_item=to_id(entry["item"]) if entry.get("item") else None,
+                    computed_stats=dict(entry["stats"]) if entry.get("stats") else None,
                     choosable_moves=choosable,
                     choosable_move_targets=choosable_targets,
                     move_pp=pp,

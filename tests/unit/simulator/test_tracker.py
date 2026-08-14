@@ -124,6 +124,27 @@ def test_our_own_lines_are_not_mistaken_for_the_opponent():
     assert tracker.opponent_side().revealed == ()
 
 
+def test_level_parsing_survives_species_containing_the_letter_l():
+    """Splitting details on "L" mangled Lopunny into level "opunny"."""
+    tracker = _tracker()
+    _sideline(tracker, "|switch|p2a: Lopunny|Lopunny, L50, F|100/100")
+    assert tracker.opponent_side().revealed[0].level == 50
+
+
+def test_level_falls_back_to_the_regulation_when_omitted():
+    """Showdown omits the level field entirely at level 100."""
+    tracker = _tracker()
+    _sideline(tracker, "|switch|p2a: Lugia|Lugia|100/100")
+    assert tracker.opponent_side().revealed[0].level == REGULATION_M_B.level
+
+
+def test_team_preview_roster_parses_levels_too():
+    tracker = _tracker()
+    _sideline(tracker, "|poke|p2|Lopunny, L50, F|", "|poke|p2|Ludicolo, L50|")
+    assert [mon.level for mon in tracker._opponent_roster] == [50, 50]
+    assert [mon.species for mon in tracker._opponent_roster] == ["Lopunny", "Ludicolo"]
+
+
 def test_broken_illusion_corrects_the_species_without_losing_hp():
     """Zoroark switches in disguised, so the species recorded first was wrong.
 

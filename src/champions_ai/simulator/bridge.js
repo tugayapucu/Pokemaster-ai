@@ -14,7 +14,7 @@
  * than recomputed.
  */
 const readline = require('readline');
-const { BattleStream, getPlayerStreams, Teams, TeamValidator } = require('pokemon-showdown');
+const { BattleStream, Dex, getPlayerStreams, Teams, TeamValidator } = require('pokemon-showdown');
 
 let streams = null;
 let battleStream = null;
@@ -106,8 +106,59 @@ function validateTeam(msg) {
 	send({ type: 'team', packed: Teams.pack(team), exported: Teams.export(team), attempts: 0 });
 }
 
+function dexDump(msg) {
+	const dex = Dex.mod(msg.mod || 'champions');
+
+	const species = {};
+	for (const entry of dex.species.all()) {
+		if (entry.isNonstandard) continue;
+		species[entry.id] = {
+			name: entry.name,
+			types: entry.types,
+			baseStats: entry.baseStats,
+			abilities: Object.values(entry.abilities),
+			weightkg: entry.weightkg,
+			baseSpecies: entry.baseSpecies,
+		};
+	}
+
+	const moves = {};
+	for (const entry of dex.moves.all()) {
+		if (entry.isNonstandard) continue;
+		moves[entry.id] = {
+			name: entry.name,
+			type: entry.type,
+			category: entry.category,
+			basePower: entry.basePower,
+			// `true` means the move bypasses accuracy checks entirely, which is
+			// not the same as 100% -- null carries that across as "always hits".
+			accuracy: entry.accuracy === true ? null : entry.accuracy,
+			priority: entry.priority,
+			target: entry.target,
+			flags: Object.keys(entry.flags || {}),
+		};
+	}
+
+	// Emit resolved multipliers rather than Showdown's damageTaken codes, so
+	// the semantics are computed once here by the engine that owns them
+	// instead of being reimplemented on the Python side.
+	const types = dex.types.all().filter((t) => !t.isNonstandard).map((t) => t.name);
+	const chart = {};
+	for (const attacking of types) {
+		chart[attacking] = {};
+		for (const defending of types) {
+			chart[attacking][defending] = dex.getImmunity(attacking, defending)
+				? Math.pow(2, dex.getEffectiveness(attacking, defending))
+				: 0;
+		}
+	}
+
+	send({ type: 'dex', species, moves, types, chart });
+}
+
 const HANDLERS = {
 	start: startBattle,
+	dexdump: dexDump,
 	randomteam: randomTeam,
 	validateteam: validateTeam,
 	choose: (msg) => {
