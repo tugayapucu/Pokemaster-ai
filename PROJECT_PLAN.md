@@ -478,7 +478,11 @@ Establish benchmark opponents before ML.
 
 `evaluate()` (`src/champions_ai/evaluation/runner.py`) is the ruler, built before the things it measures. It swaps sides every other battle, derives all battle seeds from one run seed, and reports a Wilson interval — chosen over the normal approximation because early runs are small and lopsided, exactly where the naive interval suggests impossible win rates and collapses to zero width at 0% and 100%. `is_significant` is conservative on purpose: an interval overlapping 0.5 means the run supports no claim either way, not that the agents are equal.
 
-**Baseline established:** two `RandomAgent`s over 200 battles finished 97–103 (48.5%, 95% CI 41.7–55.4%, correctly reported not significant), sides split exactly 100/100, reproducible from seed, ~33 battles/sec. A mirror match coming out skewed would have meant the harness itself was biased and every later comparison would inherit it, so this is now an integration test.
+**Baseline established:** two `RandomAgent`s over 200 battles across **43 distinct matchups** from a generated `TeamPool` finished 103–97 (51.5%, 95% CI 44.6–58.3%, correctly reported not significant), reproducible from seed, ~28 battles/sec. A mirror match coming out skewed would have meant the harness itself was biased and every later comparison would inherit it, so this is an integration test.
+
+Team-pool sampling landed *before* the first heuristic on purpose — while there is still nothing to overfit. Each matchup is played twice with the teams exchanged, so seat advantage and team strength both cancel by construction rather than being assumed to average out.
+
+Running a real pool also exposed a crash worth recording: a generated team containing **Zoroark-Hisui** sends `|replace|` when Illusion breaks, a line that carries no HP field and reveals that the species recorded on switch-in was a *lie*. The tracker now corrects the identity in place, keeping the HP and status that belonged to the real Pokémon. Moves credited to the disguise while it held remain misattributed — a known limitation, since untangling them needs Illusion-aware bookkeeping.
 
 ### Agent 0: Random Agent
 
@@ -514,11 +518,11 @@ Support:
 - [x] repeated matches; (`evaluate(..., battles=N)`)
 - [x] side swapping; (every other battle, so a seat advantage cancels rather than being credited to an agent)
 - [x] deterministic seeds; (whole run reproduces from one integer)
-- [ ] team-pool sampling; (currently one fixed team pair — needed before any result generalises beyond it)
+- [x] team-pool sampling; (`TeamPool`, with each matchup played twice from *exchanged* team assignments so team strength cancels rather than being credited to whichever agent drew it)
 - [x] win rate;
 - [x] confidence intervals; (Wilson, with a conservative `is_significant`)
 - [ ] Elo or another rating method; (only meaningful once there are more than two agents)
-- [ ] per-matchup results; (waits on team-pool sampling)
+- [x] per-matchup results; (`MatchResult.matchup_scores` — so a win rate resting on a few favourable pairings is visible rather than hidden in the aggregate)
 - [x] battle logs; (`keep_trajectories=True` attaches replayable `Trajectory` records)
 - [ ] runtime / decisions per second. (measured ad hoc at ~33 battles/sec; not yet reported by the harness)
 
