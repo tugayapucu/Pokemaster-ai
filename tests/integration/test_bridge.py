@@ -161,21 +161,21 @@ def test_only_timestamps_differ_between_seeded_runs(battle_format, teams):
     assert differing <= {"t:"}
 
 
-def test_requests_expose_mega_availability_per_adr_0003(battle_format, mega_teams):
+def test_requests_expose_mega_availability_per_adr_0003(battle_format, mega_team):
     """Both sides hold a Mega stone, so this asserts the mechanism, not luck."""
-    result = _play(battle_format, mega_teams, seed=SEED)
+    result = _play(battle_format, (mega_team.packed, mega_team.packed), seed=SEED)
     assert result["saw_mega_flag"], (
         "no canMegaEvo seen; ADR 0003 depends on the engine reporting Mega availability"
     )
 
 
-def test_player_stream_masks_opponent_hp_but_not_their_own(battle_format, mega_teams):
+def test_player_stream_masks_opponent_hp_but_not_their_own(battle_format, mega_team):
     """The engine masks for us -- but only on the per-player stream, not the omniscient one.
 
     Observations must be built from `sideline` events for this reason; building
     them from `line` events would leak exact opponent HP while looking correct.
     """
-    result = _play(battle_format, mega_teams, seed=SEED)
+    result = _play(battle_format, (mega_team.packed, mega_team.packed), seed=SEED)
 
     opponent_seen_by_p1 = _hp_denominators(result["p1_view"], "p2")
     assert opponent_seen_by_p1, "expected some opponent HP readings"
@@ -190,10 +190,10 @@ def test_player_stream_masks_opponent_hp_but_not_their_own(battle_format, mega_t
 
 
 def test_omniscient_stream_really_does_expose_what_the_player_stream_hides(
-    battle_format, mega_teams
+    battle_format, mega_team
 ):
     """Guards against 'the masking test passes because nothing was masked'."""
-    result = _play(battle_format, mega_teams, seed=SEED)
+    result = _play(battle_format, (mega_team.packed, mega_team.packed), seed=SEED)
     omniscient_opponent = _hp_denominators(result["log"], "p2")
     assert omniscient_opponent - {"100"}, (
         "omniscient stream should show exact opponent HP; if it doesn't, the "

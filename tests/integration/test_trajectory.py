@@ -11,30 +11,10 @@ import random
 import pytest
 
 from champions_ai.data import Trajectory
-from champions_ai.domain import REGULATION_M_B, PokemonSet, StatSpread, Team, TeamPreviewAction
+from champions_ai.domain import REGULATION_M_B, TeamPreviewAction
 from champions_ai.env import BattleEnv, Decision
 
 pytestmark = pytest.mark.integration
-
-
-def _parse_team(text: str) -> Team:
-    mons = []
-    for block in text.split("\n\n"):
-        lines = [line.strip() for line in block.strip().splitlines() if line.strip()]
-        head = lines[0]
-        mons.append(
-            PokemonSet(
-                species=head.split("@")[0].strip(),
-                level=50,
-                ability=next(
-                    x.split(":", 1)[1].strip() for x in lines if x.startswith("Ability:")
-                ),
-                moves=tuple(x[2:].strip() for x in lines if x.startswith("- ")),
-                item=head.split("@")[1].strip() if "@" in head else None,
-                stats=StatSpread(),
-            )
-        )
-    return Team(pokemon=tuple(mons))
 
 
 def _agent(env: BattleEnv, player: int, rng: random.Random):
@@ -45,8 +25,8 @@ def _agent(env: BattleEnv, player: int, rng: random.Random):
     return rng.choice(env.legal_actions(player))
 
 
-def _play(env: BattleEnv, packed: str, seed: str, rng: random.Random):
-    result = env.reset((packed, packed), seed=seed)
+def _play(env: BattleEnv, teams, seed: str, rng: random.Random):
+    result = env.reset(teams, seed=seed)
     while not result.terminal:
         waiting = env.awaiting()
         if not waiting:
@@ -56,20 +36,9 @@ def _play(env: BattleEnv, packed: str, seed: str, rng: random.Random):
 
 
 @pytest.fixture(scope="module")
-def env(bridge, mega_team_text):
-    team = _parse_team(mega_team_text)
-    return BattleEnv(REGULATION_M_B, (team, team), bridge=bridge)
-
-
-@pytest.fixture(scope="module")
-def packed(bridge, battle_format, mega_team_text):
-    return bridge.validate_team(battle_format, mega_team_text)
-
-
-@pytest.fixture(scope="module")
-def recorded(env, packed):
+def recorded(env, mega_teams):
     """A finished battle plus its trajectory."""
-    result = _play(env, packed, "sodium," + "a1" * 32, random.Random(31))
+    result = _play(env, mega_teams, "sodium," + "a1" * 32, random.Random(31))
     return result, env.trajectory(include_protocol=True), list(env.protocol)
 
 
@@ -96,9 +65,9 @@ def _without_timestamps(lines) -> list[str]:
     return [line for line in lines if not line.startswith("|t:|")]
 
 
-def test_replay_reproduces_the_battle_exactly(env, recorded):
+def test_replay_reproduces_the_battle_exactly(env, mega_teams, recorded):
     result, trajectory, protocol = recorded
-    replayed = env.replay(trajectory)
+    replayed = env.replay(trajectory, mega_teams)
 
     assert replayed.winner == result.winner
     assert replayed.turn == result.turn
@@ -112,13 +81,13 @@ def test_trajectory_survives_a_json_round_trip(tmp_path, recorded):
     assert Trajectory.load(path) == trajectory
 
 
-def test_a_reloaded_trajectory_still_replays(env, tmp_path, recorded):
+def test_a_reloaded_trajectory_still_replays(env, mega_teams, tmp_path, recorded):
     """The stored form, not just the in-memory object, must be enough to reproduce a battle."""
     result, trajectory, _ = recorded
     path = tmp_path / "battle.json"
     trajectory.save(path)
 
-    replayed = env.replay(Trajectory.load(path))
+    replayed = env.replay(Trajectory.load(path), mega_teams)
     assert replayed.winner == result.winner
     assert replayed.turn == result.turn
 
@@ -131,16 +100,16 @@ def test_protocol_can_be_dropped_to_shrink_a_record(recorded):
     assert len(lean.model_dump_json()) < len(trajectory.model_dump_json())
 
 
-def test_replay_refuses_an_unseeded_record(env, recorded):
+def test_replay_refuses_an_unseeded_record(env, mega_teams, recorded):
     _, trajectory, _ = recorded
     unseeded = trajectory.model_copy(update={"seed": None})
     assert not unseeded.replayable
     with pytest.raises(ValueError):
-        env.replay(unseeded)
+        env.replay(unseeded, mega_teams)
 
 
-def test_truncated_trajectory_fails_instead_of_replaying_half_a_battle(env, recorded):
+def test_truncated_trajectory_fails_instead_of_replaying_half_a_battle(env, mega_teams, recorded):
     _, trajectory, _ = recorded
     truncated = trajectory.model_copy(update={"decisions": trajectory.decisions[:2]})
     with pytest.raises(ValueError):
-        env.replay(truncated)
+        env.replay(truncated, mega_teams)

@@ -224,7 +224,9 @@ class BattleTracker:
         return self._opponents.get(species) if species else None
 
     def _on_switch(self, args: list[str]) -> None:
-        ident, details, condition = args[0], args[1], args[2]
+        ident, details = args[0], args[1]
+        # `|replace|` (a broken Illusion) carries no HP field.
+        condition = args[2] if len(args) > 2 else None
         side, slot, name = _split_ident(ident)
         if side != self.opponent_tag:
             return
@@ -245,13 +247,51 @@ class BattleTracker:
         # A Pokemon switching in loses its boosts and volatiles.
         mon.boosts = Boosts()
         mon.volatiles.clear()
-        self._apply_condition(mon, condition)
+        if condition is not None:
+            self._apply_condition(mon, condition)
         if slot is not None:
             self._clear_slot(known)
             self._opponent_slots[slot] = known
 
     _on_drag = _on_switch
-    _on_replace = _on_switch
+
+    def _on_replace(self, args: list[str]) -> None:
+        """A broken Illusion: what we recorded on switch-in was the wrong species.
+
+        Zoroark disguises itself as a teammate, so everything learned about the
+        Pokemon in this slot -- species, and any moves credited to it -- was
+        attributed to a Pokemon that was never there. The revealed identity is
+        corrected here; the misattributed moves are a known limitation, since
+        untangling them needs Illusion-aware bookkeeping this does not do.
+        """
+        ident, details = args[0], args[1]
+        side, slot, name = _split_ident(ident)
+        if side != self.opponent_tag or slot is None:
+            return
+
+        true_species = _species_from_details(details)
+        impersonated = self._opponent_slots[slot]
+        if impersonated == true_species:
+            return
+
+        existing = self._opponents.pop(impersonated, None) if impersonated else None
+        revealed = self._opponents.get(true_species) or _OpponentPokemon(
+            true_species, existing.level if existing else 50
+        )
+        if existing is not None:
+            # HP and status belonged to the real Pokemon all along.
+            revealed.hp_percent = existing.hp_percent
+            revealed.fainted = existing.fainted
+            revealed.status = existing.status
+            revealed.boosts = existing.boosts
+            if impersonated in self._opponent_order:
+                self._opponent_order[self._opponent_order.index(impersonated)] = true_species
+
+        self._opponents[true_species] = revealed
+        if true_species not in self._opponent_order:
+            self._opponent_order.append(true_species)
+        self._opponent_slots[slot] = true_species
+        self._nickname_to_species[name] = true_species
 
     def _clear_slot(self, species: str) -> None:
         for index, occupant in enumerate(self._opponent_slots):

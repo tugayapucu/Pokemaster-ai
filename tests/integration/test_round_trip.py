@@ -10,14 +10,12 @@ import random
 
 import pytest
 
+from champions_ai.data import parse_showdown_team
 from champions_ai.domain import (
     REGULATION_M_B,
     JointAction,
     PassAction,
-    PokemonSet,
-    StatSpread,
     SwitchAction,
-    Team,
     TeamPreviewAction,
     legal_joint_actions,
     legal_slot_actions,
@@ -27,26 +25,6 @@ from champions_ai.simulator import BattleTracker, format_joint_action, format_te
 pytestmark = pytest.mark.integration
 
 
-def _parse_team(text: str) -> Team:
-    mons = []
-    for block in text.split("\n\n"):
-        lines = [line.strip() for line in block.strip().splitlines() if line.strip()]
-        head = lines[0]
-        species = head.split("@")[0].strip()
-        item = head.split("@")[1].strip() if "@" in head else None
-        ability = next(x.split(":", 1)[1].strip() for x in lines if x.startswith("Ability:"))
-        moves = tuple(x[2:].strip() for x in lines if x.startswith("- "))
-        mons.append(
-            PokemonSet(
-                species=species,
-                level=50,
-                ability=ability,
-                moves=moves,
-                item=item,
-                stats=StatSpread(),
-            )
-        )
-    return Team(pokemon=tuple(mons))
 
 
 def _decide(tracker: BattleTracker, rng: random.Random) -> str | None:
@@ -86,7 +64,7 @@ def _decide(tracker: BattleTracker, rng: random.Random) -> str | None:
 def _play_through_domain(
     bridge, battle_format: str, packed: str, seed: str, rng_seed: int, team_text: str
 ):
-    own_team = _parse_team(team_text)
+    own_team = parse_showdown_team(team_text)
     trackers = {
         "p1": BattleTracker(REGULATION_M_B, player=0, own_team=own_team),
         "p2": BattleTracker(REGULATION_M_B, player=1, own_team=own_team),
@@ -148,7 +126,7 @@ def test_opponent_moves_are_only_known_once_used(played, mega_team_text):
     # and strictly fewer moves than the team actually knows.
     all_moves = {
         move.lower().replace(" ", "")
-        for mon in _parse_team(mega_team_text).pokemon
+        for mon in parse_showdown_team(mega_team_text).pokemon
         for move in mon.moves
     }
     assert revealed <= all_moves

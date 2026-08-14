@@ -2,7 +2,9 @@ import shutil
 
 import pytest
 
+from champions_ai.data import BattleTeam, TeamPool, parse_showdown_team
 from champions_ai.domain import REGULATION_M_B
+from champions_ai.env import BattleEnv
 from champions_ai.simulator import ShowdownBridge
 
 # Showdown's Champions random-team generator. Not Reg M-B aware -- it's only a
@@ -113,7 +115,31 @@ def mega_team_text() -> str:
 
 
 @pytest.fixture(scope="session")
-def mega_teams(bridge, battle_format) -> tuple[str, str]:
-    """Both sides hold a Mega stone, so Mega availability is guaranteed rather than luck."""
-    packed = bridge.validate_team(battle_format, MEGA_TEAM)
-    return packed, packed
+def mega_team(bridge, battle_format) -> BattleTeam:
+    """A known-legal team holding a Mega stone, in both the forms a battle needs."""
+    return BattleTeam(
+        team=parse_showdown_team(MEGA_TEAM),
+        packed=bridge.validate_team(battle_format, MEGA_TEAM),
+        name="mega",
+    )
+
+
+@pytest.fixture(scope="session")
+def mega_teams(mega_team) -> tuple[BattleTeam, BattleTeam]:
+    """Both sides on the same team: isolates agent behaviour from team strength."""
+    return mega_team, mega_team
+
+
+@pytest.fixture(scope="session")
+def team_pool(bridge, battle_format, team_generator) -> TeamPool:
+    """A small pool of generated teams.
+
+    Kept small and session-scoped because generation is slow -- Showdown's
+    generator is not regulation-aware, so most attempts fail validation.
+    """
+    return TeamPool.generated(bridge, battle_format, size=4, generator=team_generator)
+
+
+@pytest.fixture(scope="module")
+def env(bridge) -> BattleEnv:
+    return BattleEnv(REGULATION_M_B, bridge=bridge)

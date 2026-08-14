@@ -98,10 +98,21 @@ class ShowdownBridge:
             events.append(event)
 
     def random_team(self, battle_format: str, generator: str | None = None) -> str:
+        return self.random_team_pair(battle_format, generator)[0]
+
+    def random_team_pair(
+        self, battle_format: str, generator: str | None = None
+    ) -> tuple[str, str]:
+        """A legal team as (packed, export text).
+
+        Both forms are returned because only Showdown can convert between them:
+        the engine is started from the packed form, and the export form is what
+        parses into domain objects.
+        """
         events = self.request(cmd="randomteam", format=battle_format, generator=generator)
         for event in events:
             if event["type"] == "team":
-                return event["packed"]
+                return event["packed"], event.get("exported", "")
         raise BridgeError(f"no team returned: {events}")
 
     def validate_team(self, battle_format: str, team: str) -> str:

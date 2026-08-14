@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from types import TracebackType
 
-from champions_ai.data import DecisionRecord, Trajectory, git_commit, utc_now
+from champions_ai.data import BattleTeam, DecisionRecord, Trajectory, git_commit, utc_now
 from champions_ai.domain import (
     JointAction,
     Observation,
@@ -21,7 +21,6 @@ from champions_ai.domain import (
     Regulation,
     SlotAction,
     SwitchAction,
-    Team,
     TeamPreview,
     TeamPreviewAction,
     legal_joint_actions,
@@ -63,12 +62,11 @@ class BattleEnv:
     def __init__(
         self,
         regulation: Regulation,
-        teams: tuple[Team, Team],
         *,
         bridge: ShowdownBridge | None = None,
     ) -> None:
         self.regulation = regulation
-        self.teams = teams
+        self.teams: tuple[BattleTeam, BattleTeam] | None = None
         self._bridge = bridge or ShowdownBridge()
         self._owns_bridge = bridge is None
         self._trackers: tuple[BattleTracker, ...] = ()
@@ -100,10 +98,18 @@ class BattleEnv:
         if self._owns_bridge:
             self._bridge.close()
 
-    def reset(self, packed_teams: tuple[str, str], *, seed: str | None = None) -> StepResult:
-        """Start a battle. Packed teams come from `ShowdownBridge.validate_team`."""
+    def reset(
+        self, teams: tuple[BattleTeam, BattleTeam], *, seed: str | None = None
+    ) -> StepResult:
+        """Start a battle between two prepared teams.
+
+        Teams are given per battle rather than at construction so one
+        environment can run a whole pool of matchups.
+        """
+        self.teams = teams
+        packed_teams = (teams[0].packed, teams[1].packed)
         self._trackers = tuple(
-            BattleTracker(self.regulation, player=index, own_team=self.teams[index])
+            BattleTracker(self.regulation, player=index, own_team=teams[index].team)
             for index in (0, 1)
         )
         self._protocol = []
@@ -244,7 +250,9 @@ class BattleEnv:
         """
         from itertools import permutations
 
-        size = len(self.teams[player])
+        self._require_started()
+        assert self.teams is not None
+        size = len(self.teams[player].team)
         return [
             TeamPreviewAction(picks=picks)
             for picks in permutations(range(size), self.regulation.picked_team_size)
@@ -323,7 +331,7 @@ class BattleEnv:
             protocol=self.protocol if include_protocol else (),
         )
 
-    def replay(self, trajectory: Trajectory) -> StepResult:
+    def replay(self, trajectory: Trajectory, teams: tuple[BattleTeam, BattleTeam]) -> StepResult:
         """Re-run a recorded battle by resubmitting its decisions.
 
         Raises if the recording cannot drive the battle -- a decision arriving
@@ -333,8 +341,14 @@ class BattleEnv:
         """
         if not trajectory.replayable:
             raise ValueError("trajectory has no seed and cannot be reproduced")
+        recorded = (teams[0].packed, teams[1].packed)
+        if recorded != trajectory.packed_teams:
+            raise ValueError(
+                "teams do not match the recording; replaying different teams under the "
+                "recorded seed would silently produce a different battle"
+            )
 
-        result = self.reset(trajectory.packed_teams, seed=trajectory.seed)
+        result = self.reset(teams, seed=trajectory.seed)
         queued = list(trajectory.decisions)
 
         while not result.terminal:

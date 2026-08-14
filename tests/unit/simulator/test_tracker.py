@@ -124,6 +124,37 @@ def test_our_own_lines_are_not_mistaken_for_the_opponent():
     assert tracker.opponent_side().revealed == ()
 
 
+def test_broken_illusion_corrects_the_species_without_losing_hp():
+    """Zoroark switches in disguised, so the species recorded first was wrong.
+
+    `|replace|` carries no HP field, which previously crashed the parser.
+    """
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Incineroar|Incineroar, L50, F|100/100",
+        "|-damage|p2a: Incineroar|55/100",
+        "|replace|p2a: Zoroark|Zoroark-Hisui, L50, F",
+    )
+    side = tracker.opponent_side()
+    species = [mon.species for mon in side.revealed]
+
+    assert "Zoroark-Hisui" in species
+    assert "Incineroar" not in species, "the disguise should not linger as a real Pokemon"
+    revealed = side.revealed[side.active_slots[0]]
+    assert revealed.hp_percent == 55, "the HP belonged to the real Pokemon all along"
+
+
+def test_replace_to_the_same_species_is_a_no_op():
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Garchomp|Garchomp, L50, M|100/100",
+        "|replace|p2a: Garchomp|Garchomp, L50, M",
+    )
+    assert [mon.species for mon in tracker.opponent_side().revealed] == ["Garchomp"]
+
+
 def test_status_and_cure_are_tracked():
     tracker = _tracker()
     _sideline(

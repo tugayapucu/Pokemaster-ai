@@ -77,7 +77,15 @@ function randomTeam(msg) {
 	for (let attempt = 1; attempt <= (msg.maxTries || 500); attempt++) {
 		const team = Teams.generate(generatorFormat);
 		if (!validator.validateTeam(team)) {
-			send({ type: 'team', packed: Teams.pack(team), attempts: attempt });
+			// Export text as well as packed: the packed form is what the engine
+			// needs, the export form is what the Python side parses into domain
+			// objects, and only Showdown can convert between them.
+			send({
+				type: 'team',
+				packed: Teams.pack(team),
+				exported: Teams.export(team),
+				attempts: attempt,
+			});
 			return;
 		}
 	}
@@ -95,7 +103,7 @@ function validateTeam(msg) {
 		send({ type: 'invalid', problems });
 		return;
 	}
-	send({ type: 'team', packed: Teams.pack(team), attempts: 0 });
+	send({ type: 'team', packed: Teams.pack(team), exported: Teams.export(team), attempts: 0 });
 }
 
 const HANDLERS = {

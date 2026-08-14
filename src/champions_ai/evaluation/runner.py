@@ -10,7 +10,7 @@ import math
 from dataclasses import dataclass, field
 
 from champions_ai.agents import Agent
-from champions_ai.data import Trajectory, utc_now
+from champions_ai.data import BattleTeam, TeamPool, Trajectory, utc_now
 from champions_ai.env import BattleEnv, Decision, StepResult
 
 Z_95 = 1.959963984540054
@@ -51,6 +51,7 @@ class BattleOutcome:
     first_agent_played_as: int
     winner: int | None
     turns: int
+    matchup: str = ""
 
     @property
     def first_agent_won(self) -> bool:
@@ -72,6 +73,9 @@ class MatchResult:
     recorded_at: str
     outcomes: tuple[BattleOutcome, ...] = field(default=(), repr=False)
     trajectories: tuple[Trajectory, ...] = field(default=(), repr=False)
+    # Per matchup, +1/-1/0 from agent A's perspective. Kept so a win rate can
+    # be checked for resting on a handful of favourable team pairings.
+    matchup_scores: dict[str, tuple[int, ...]] = field(default_factory=dict, repr=False)
 
     @property
     def win_rate_a(self) -> float:
@@ -96,6 +100,15 @@ class MatchResult:
         low, high = self.confidence_interval_a
         return low > 0.5 or high < 0.5
 
+    @property
+    def matchups_played(self) -> int:
+        return len(self.matchup_scores)
+
+    @property
+    def matchups_won(self) -> int:
+        """Matchups where agent A came out ahead across both team assignments."""
+        return sum(1 for scores in self.matchup_scores.values() if sum(scores) > 0)
+
     def summary(self) -> str:
         low, high = self.confidence_interval_a
         verdict = "significant" if self.is_significant else "not significant"
@@ -107,13 +120,18 @@ class MatchResult:
             f"win rate {self.win_rate_a:.1%} "
             f"(95% CI {low:.1%}-{high:.1%}, {verdict}) | "
             f"avg {self.average_turns:.1f} turns"
+            + (
+                f" | ahead in {self.matchups_won}/{self.matchups_played} matchups"
+                if self.matchup_scores
+                else ""
+            )
         )
 
 
 def play_battle(
     env: BattleEnv,
     agents: tuple[Agent, Agent],
-    packed_teams: tuple[str, str],
+    teams: tuple[BattleTeam, BattleTeam],
     *,
     seed: str | None = None,
 ) -> StepResult:
@@ -121,7 +139,7 @@ def play_battle(
     for agent in agents:
         agent.on_battle_start()
 
-    result = env.reset(packed_teams, seed=seed)
+    result = env.reset(teams, seed=seed)
     while not result.terminal:
         waiting = env.awaiting()
         if not waiting:
@@ -145,59 +163,85 @@ def evaluate(
     env: BattleEnv,
     agent_a: Agent,
     agent_b: Agent,
-    packed_teams: tuple[str, str],
+    pool: TeamPool,
     *,
     battles: int = 100,
     seed: int = 0,
     keep_trajectories: bool = False,
 ) -> MatchResult:
-    """Play a head-to-head and summarise it.
+    """Play a head-to-head over a pool of matchups and summarise it.
 
-    Sides are swapped every other battle so a first-player or team-order
-    advantage cancels out instead of being attributed to an agent. Battle seeds
-    are derived from `seed`, so a whole run reproduces from one number.
+    Every matchup is played **twice with the teams exchanged**, so neither the
+    seat nor the team a given agent happened to receive can be credited to it.
+    Both confounds cancel by construction rather than being assumed to average
+    out. `battles` is rounded up to an even number for that reason.
+
+    Battle seeds and matchup selection both derive from `seed`, so a whole run
+    reproduces from one number.
     """
     if battles < 1:
         raise ValueError(f"battles must be positive, got {battles}")
 
+    matchup_count = (battles + 1) // 2
+    matchups = pool.matchups(matchup_count, seed=seed)
+
     outcomes: list[BattleOutcome] = []
     trajectories: list[Trajectory] = []
     wins_a = wins_b = draws = total_turns = 0
+    per_matchup: dict[str, list[int]] = {}
 
-    for index in range(battles):
-        a_is_player_one = index % 2 == 0
-        ordered = (agent_a, agent_b) if a_is_player_one else (agent_b, agent_a)
-        a_player = 0 if a_is_player_one else 1
-        battle_seed = f"sodium,{(seed * 1_000_003 + index) % (2**256):064x}"
-
-        result = play_battle(env, ordered, packed_teams, seed=battle_seed)
-        total_turns += result.turn
-
-        if result.winner is None:
-            draws += 1
-        elif result.winner == a_player:
-            wins_a += 1
-        else:
-            wins_b += 1
-
-        outcomes.append(
-            BattleOutcome(
-                index=index,
-                seed=battle_seed,
-                first_agent_played_as=a_player,
-                winner=result.winner,
-                turns=result.turn,
+    index = 0
+    for matchup in matchups:
+        for swapped in (False, True):
+            # Pass 1: A takes the first team as player 0. Pass 2: the agents
+            # exchange both seat and team, so the pair is fully symmetric.
+            ordered = (agent_b, agent_a) if swapped else (agent_a, agent_b)
+            teams = (
+                (matchup.teams[1], matchup.teams[0]) if swapped else matchup.teams
             )
-        )
-        if keep_trajectories:
-            trajectories.append(
-                env.trajectory(metadata={"agent_p1": ordered[0].name, "agent_p2": ordered[1].name})
+            a_player = 1 if swapped else 0
+            battle_seed = f"sodium,{(seed * 1_000_003 + index) % (2**256):064x}"
+
+            result = play_battle(env, ordered, teams, seed=battle_seed)
+            total_turns += result.turn
+
+            if result.winner is None:
+                draws += 1
+                scored = 0
+            elif result.winner == a_player:
+                wins_a += 1
+                scored = 1
+            else:
+                wins_b += 1
+                scored = -1
+
+            per_matchup.setdefault(matchup.label, []).append(scored)
+            outcomes.append(
+                BattleOutcome(
+                    index=index,
+                    seed=battle_seed,
+                    first_agent_played_as=a_player,
+                    winner=result.winner,
+                    turns=result.turn,
+                    matchup=matchup.label,
+                )
             )
+            if keep_trajectories:
+                trajectories.append(
+                    env.trajectory(
+                        metadata={
+                            "agent_p1": ordered[0].name,
+                            "agent_p2": ordered[1].name,
+                            "matchup": matchup.label,
+                        }
+                    )
+                )
+            index += 1
 
     return MatchResult(
         agent_a=agent_a.name,
         agent_b=agent_b.name,
-        battles=battles,
+        battles=index,
         wins_a=wins_a,
         wins_b=wins_b,
         draws=draws,
@@ -206,4 +250,5 @@ def evaluate(
         recorded_at=utc_now(),
         outcomes=tuple(outcomes),
         trajectories=tuple(trajectories),
+        matchup_scores={label: tuple(scores) for label, scores in per_matchup.items()},
     )
