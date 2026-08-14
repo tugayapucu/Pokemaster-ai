@@ -27,7 +27,7 @@ from champions_ai.domain.actions import (
     SwitchAction,
     TargetSlot,
 )
-from champions_ai.domain.move_data import MoveData
+from champions_ai.domain.move_data import TARGETS_REQUIRING_CHOICE, MoveData
 from champions_ai.domain.observation import Observation
 
 TRAPPED = "trapped"
@@ -56,15 +56,15 @@ def _live_own_slots(
 
 
 def _candidate_targets(
-    observation: Observation, acting_slot: int, move: MoveData
+    observation: Observation, acting_slot: int, target_type: str | None
 ) -> tuple[TargetSlot | None, ...]:
-    """Slots this move may be aimed at, or (None,) when the engine picks."""
-    if not move.requires_target_choice:
+    """Slots a move with this target type may be aimed at, or (None,) when it takes none."""
+    if target_type is None or target_type not in TARGETS_REQUIRING_CHOICE:
         return (None,)
 
     foes = tuple(TargetSlot(side="foe", slot=s) for s in _live_foe_slots(observation))
 
-    if move.target in ("normal", "any"):
+    if target_type in ("normal", "any"):
         # In doubles every slot is adjacent, so a "normal" move may also be
         # aimed at your own partner -- occasionally correct (Beat Up, Helping
         # Hand redirection plays), and legal regardless.
@@ -73,9 +73,9 @@ def _candidate_targets(
             for s in _live_own_slots(observation, acting_slot, include_self=False)
         )
         return foes + allies
-    if move.target == "adjacentFoe":
+    if target_type == "adjacentFoe":
         return foes
-    if move.target == "adjacentAlly":
+    if target_type == "adjacentAlly":
         return tuple(
             TargetSlot(side="ally", slot=s)
             for s in _live_own_slots(observation, acting_slot, include_self=False)
@@ -116,16 +116,28 @@ def legal_slot_actions(
     # the move, so each usable move appears both with and without it.
     specials: tuple[str | None, ...] = (None, *sorted(pokemon.available_specials))
 
-    for move_index, move_id in enumerate(pokemon.pokemon_set.moves):
+    engine_targets = pokemon.choosable_move_targets
+
+    for move_index, move_id in enumerate(pokemon.selectable_moves):
         if move_id in pokemon.disabled_moves:
             continue
         if pokemon.move_pp is not None and pokemon.move_pp[move_index] <= 0:
             continue
-        move = move_data.get(move_id)
-        if move is None:
-            raise KeyError(f"no MoveData for move {move_id!r} on {pokemon.pokemon_set.species!r}")
-        for target in _candidate_targets(observation, acting_slot, move):
-            if move.requires_target_choice and target is None:
+
+        if engine_targets is not None:
+            # What the engine says about *this* Pokemon *this* turn beats the
+            # move's usual behaviour, which is stale for a locked move.
+            target_type = engine_targets[move_index]
+        else:
+            move = move_data.get(move_id)
+            if move is None:
+                raise KeyError(
+                    f"no MoveData for move {move_id!r} on {pokemon.pokemon_set.species!r}"
+                )
+            target_type = move.target
+
+        for target in _candidate_targets(observation, acting_slot, target_type):
+            if target_type in TARGETS_REQUIRING_CHOICE and target is None:
                 continue
             for special in specials:
                 actions.append(

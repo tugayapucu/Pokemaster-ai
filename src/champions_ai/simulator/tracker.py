@@ -28,6 +28,7 @@ from champions_ai.domain import (
     Team,
 )
 from champions_ai.domain.health import parse_exact_health, parse_shared_health
+from champions_ai.domain.legal_actions import TRAPPED
 
 # Showdown stat keys -> our Boosts fields.
 BOOST_FIELDS = {
@@ -323,6 +324,11 @@ class BattleTracker:
     # ---------------------------------------------------------------- output
 
     @property
+    def has_request(self) -> bool:
+        """Whether the engine has asked this player for anything at all yet."""
+        return self._request is not None
+
+    @property
     def awaiting_team_preview(self) -> bool:
         return bool(self._request and self._request.get("teamPreview"))
 
@@ -389,13 +395,26 @@ class BattleTracker:
 
             slot = len(active_slots) if entry.get("active") else None
             pp = None
+            choosable: tuple[str, ...] | None = None
+            choosable_targets: tuple[str | None, ...] | None = None
             disabled: frozenset[str] = frozenset()
             specials: frozenset[str] = frozenset()
+            volatiles: frozenset[str] = frozenset()
             if slot is not None and slot < len(active_entries):
                 active = active_entries[slot]
                 moves = active.get("moves") or []
-                if len(moves) == len(pokemon_set.moves):
-                    pp = tuple(move.get("pp", 0) for move in moves)
+                # The engine's list, not the declared moveset: a Pokemon locked
+                # mid-charge or by Encore gets a trimmed one, and submitted move
+                # indices are relative to it.
+                choosable = tuple(move["id"] for move in moves if "id" in move)
+                # `target` is absent for a locked move; None means "submit no target".
+                choosable_targets = tuple(move.get("target") for move in moves if "id" in move)
+                # Only record PP when the engine actually reports it. A Pokemon
+                # locked into a charging move gets an entry with no `pp` field,
+                # and defaulting that to 0 reads as "no PP left", filtering out
+                # the one move it is allowed to use.
+                if moves and all("pp" in move for move in moves):
+                    pp = tuple(move["pp"] for move in moves)
                 disabled = frozenset(
                     move["id"] for move in moves if move.get("disabled") and "id" in move
                 )
@@ -404,6 +423,8 @@ class BattleTracker:
                     for flag, mechanic in ENGINE_SPECIAL_FLAGS.items()
                     if active.get(flag)
                 )
+                if active.get("trapped") or active.get("maybeTrapped"):
+                    volatiles = volatiles | {TRAPPED}
 
             team.append(
                 BattlePokemon(
@@ -413,7 +434,10 @@ class BattleTracker:
                     status=health.status,
                     current_ability=to_id(entry.get("ability") or entry.get("baseAbility", "")),
                     current_item=to_id(entry["item"]) if entry.get("item") else None,
+                    choosable_moves=choosable,
+                    choosable_move_targets=choosable_targets,
                     move_pp=pp,
+                    volatile_conditions=volatiles,
                     disabled_moves=disabled,
                     available_specials=specials,
                     has_been_active=bool(entry.get("active")),

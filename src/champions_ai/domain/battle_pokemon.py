@@ -16,8 +16,22 @@ class BattlePokemon(BaseModel, frozen=True):
     boosts: Boosts = Boosts()
     current_ability: str | None = None
     current_item: str | None = None
-    # Parallel to pokemon_set.moves. None means "not tracked" -- honest for
-    # opponent Pokemon, whose PP a player cannot see.
+    # The moves this Pokemon may actually pick from right now, as the engine
+    # lists them. Usually the full moveset, but a Pokemon locked mid-Solar Beam
+    # or by Encore/Choice gets a trimmed list -- and move indices in a
+    # submitted choice refer to *this* list, not the declared moveset.
+    # None means not currently choosing (benched, or an opponent).
+    choosable_moves: tuple[str, ...] | None = None
+
+    # Parallel to choosable_moves: the target type the engine reports for each,
+    # or None where it reports none. A Pokemon locked mid-charge has its target
+    # already fixed, and the engine signals that by omitting the field --
+    # submitting one anyway is rejected, so this must not fall back to the
+    # move's usual target type.
+    choosable_move_targets: tuple[str | None, ...] | None = None
+
+    # Parallel to choosable_moves when present, else to pokemon_set.moves.
+    # None means "not tracked" -- honest for opponents, whose PP is unknowable.
     move_pp: tuple[int, ...] | None = None
 
     # Availability as the engine reports it, per ADR 0003, rather than derived
@@ -42,12 +56,17 @@ class BattlePokemon(BaseModel, frozen=True):
             raise ValueError(
                 f"current_hp ({self.current_hp}) must be between 0 and max_hp ({self.max_hp})"
             )
-        if self.move_pp is not None and len(self.move_pp) != len(self.pokemon_set.moves):
+        if self.move_pp is not None and len(self.move_pp) != len(self.selectable_moves):
             raise ValueError(
                 f"move_pp has {len(self.move_pp)} entries "
-                f"but the Pokemon has {len(self.pokemon_set.moves)} moves"
+                f"but {len(self.selectable_moves)} moves are selectable"
             )
         return self
+
+    @property
+    def selectable_moves(self) -> tuple[str, ...]:
+        """What a choice's move index refers to: the engine's list when active."""
+        return self.choosable_moves if self.choosable_moves is not None else self.pokemon_set.moves
 
     @classmethod
     def from_set(cls, pokemon_set: PokemonSet, max_hp: int) -> "BattlePokemon":
