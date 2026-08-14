@@ -10,6 +10,8 @@ from champions_ai.domain.actions import (
 from champions_ai.domain.battle_pokemon import BattlePokemon
 from champions_ai.domain.battle_state import BattleState
 from champions_ai.domain.boosts import Boosts
+from champions_ai.domain.legal_actions import legal_joint_actions, legal_slot_actions
+from champions_ai.domain.move_data import TARGETS_REQUIRING_CHOICE, MoveData, MoveTargetType
 from champions_ai.domain.observation import Observation, ObservedPokemon, ObservedSide
 from champions_ai.domain.pokemon_set import PokemonSet
 from champions_ai.domain.regulation import REGULATION_M_B, GameType, Regulation
@@ -25,6 +27,8 @@ __all__ = [
     "Boosts",
     "JointAction",
     "MoveAction",
+    "MoveData",
+    "MoveTargetType",
     "Observation",
     "ObservedPokemon",
     "ObservedSide",
@@ -39,7 +43,10 @@ __all__ = [
     "StatSpread",
     "SwitchAction",
     "TargetSlot",
+    "TARGETS_REQUIRING_CHOICE",
     "Team",
     "TeamPreview",
     "TeamPreviewAction",
+    "legal_joint_actions",
+    "legal_slot_actions",
 ]

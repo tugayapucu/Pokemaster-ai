@@ -15,6 +15,9 @@ class BattlePokemon(BaseModel, frozen=True):
     boosts: Boosts = Boosts()
     current_ability: str | None = None
     current_item: str | None = None
+    # Parallel to pokemon_set.moves. None means "not tracked" -- honest for
+    # opponent Pokemon, whose PP a player cannot see.
+    move_pp: tuple[int, ...] | None = None
 
     # What the *opponent* has learned about this Pokemon. Part of battle truth,
     # not a view concern: revelation is symmetric (if a move was used, it was
@@ -31,6 +34,11 @@ class BattlePokemon(BaseModel, frozen=True):
         if not 0 <= self.current_hp <= self.max_hp:
             raise ValueError(
                 f"current_hp ({self.current_hp}) must be between 0 and max_hp ({self.max_hp})"
+            )
+        if self.move_pp is not None and len(self.move_pp) != len(self.pokemon_set.moves):
+            raise ValueError(
+                f"move_pp has {len(self.move_pp)} entries "
+                f"but the Pokemon has {len(self.pokemon_set.moves)} moves"
             )
         return self
 
