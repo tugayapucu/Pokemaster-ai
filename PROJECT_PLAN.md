@@ -230,6 +230,8 @@ Before ML begins, define a battle representation that is stable, explicit, and t
 
 Live in `src/champions_ai/domain/`: `Regulation`, `StatSpread`, `PokemonSet` (pre-battle), `Boosts` and `BattlePokemon` (live in-battle), `Team`, `TeamPreview`, `RevealedPokemon`, `Side`, `BattleState`, and the action types (`TargetSlot`, `MoveAction`, `SwitchAction`, `PassAction`, `JointAction`, `TeamPreviewAction`). All are immutable (frozen) Pydantic models — state changes (`with_damage`, `with_heal`, `with_status`, `Boosts.clamped_add`, `Side.with_slot`, `BattleState.with_side`) return new instances rather than mutating in place, so a battle's history is just a sequence of snapshots. Still to build: full `Observation`, and the legal-action generator.
 
+`Observation.from_battle_state(state, player)` is the **only** sanctioned path from simulator truth to agent input. Anything consuming `BattleState` directly is a hidden-information bug; the leak tests in `tests/unit/domain/test_observation.py` were verified non-vacuous by deliberately breaking the masking and confirming they fail.
+
 A boundary worth keeping: the action types validate only what is true regardless of move data (index ranges, no double-switch to the same Pokémon, one Mega per turn). Anything needing move metadata — whether a move requires a target, whether a target is adjacent, whether a Pokémon is trapped — belongs to the legal-action generator, which will have access to the move data these types deliberately don't carry.
 
 Two known soft spots to revisit rather than forget:
@@ -363,15 +365,15 @@ Represent Pokémon Champions battle states and enumerate valid player actions.
 - [x] Team representation. (`Team`)
 - [x] Team Preview representation. (`TeamPreview`, `RevealedPokemon` — the pick-4-of-6 decision point, added after realizing it's chronologically the first decision in a match and needed its own hidden-information handling; not in the original deliverable list below, added here)
 - [x] Battle state representation. (`BattleState` + `Side` — full simulator truth: turn, both sides' brought Pokémon, slot occupancy, weather/terrain, side/field conditions, terminal + winner detection)
-- [ ] Observation representation. (`RevealedPokemon` is a first taste of real masking — species/level always known, ability/item/moves/nature hidden by default, stats never shown — but the full in-battle `Observation` over `BattleState` is still unbuilt)
+- [x] Observation representation. (`Observation`, `ObservedSide`, `ObservedPokemon` — `Observation.from_battle_state(state, player)` is the single masking boundary)
+- [x] Hidden-information masking. (Opponent HP as rounded percentage; item/ability only once revealed; moves only once used; unbrought Pokémon exposed as a count, not a roster. `ObservedPokemon` has no field capable of holding a secret, so leaks are structurally impossible rather than merely avoided)
 - [x] Regulation representation. (`Regulation`, `REGULATION_M_B`)
 - [x] Move target representation. (`TargetSlot` — explicit `side`/`slot`, translated to Showdown's signed convention at the adapter boundary)
 - [x] Individual action representation. (`MoveAction`, `SwitchAction`, `PassAction` as a discriminated union; plus `TeamPreviewAction` for the pick-N-of-6)
 - [x] Joint Double Battle action representation. (`JointAction`)
 - [ ] Legal-action generator.
-- [ ] Hidden-information masking.
-- [ ] Serialization to/from JSON. (Pydantic gives this for free per-object via `model_dump_json`/`model_validate_json`, verified with a round-trip test on `PokemonSet`; no dedicated top-level serialization module yet — not needed until `BattleState` exists)
-- [x] Unit tests. (32 passing so far, covering everything built to date)
+- [x] Serialization to/from JSON. (Pydantic gives this per-object via `model_dump_json`/`model_validate_json`, with round-trip tests on `PokemonSet`, `BattleState`, and `JointAction`; no dedicated serialization module — none is needed while the models carry it themselves)
+- [x] Unit tests. (85 passing, covering everything built to date, including non-vacuous hidden-information leak tests)
 
 ### First useful demo
 

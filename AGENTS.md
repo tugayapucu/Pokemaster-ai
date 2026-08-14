@@ -46,6 +46,8 @@ True Battle State
 
 Models intended to behave like real players must consume observations, not omniscient simulator state.
 
+In this repository that boundary is concrete: `Observation.from_battle_state(state, player)` is the only sanctioned path from `BattleState` to anything an agent sees. Agents, models, and feature encoders take an `Observation`; anything reaching for `BattleState` directly is a bug. When adding a field to an observed type, add a test proving the hidden case stays hidden — and verify that test is non-vacuous by temporarily breaking the masking and watching it fail.
+
 Never leak information such as:
 
 - unrevealed opponent moves;

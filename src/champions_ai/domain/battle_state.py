@@ -7,8 +7,8 @@ from champions_ai.domain.side import Side
 class BattleState(BaseModel, frozen=True):
     """Complete simulator truth for a battle in progress -- NOT what a player is allowed to see.
 
-    Player-facing code must consume an Observation derived from this, never
-    this type directly (see AGENTS.md, "Hidden information must remain hidden").
+    Player-facing code must consume `Observation.from_battle_state(self, player)`,
+    never this type directly (see AGENTS.md, "Hidden information must remain hidden").
     """
 
     regulation: Regulation
