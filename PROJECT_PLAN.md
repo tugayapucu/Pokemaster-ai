@@ -472,9 +472,17 @@ Two random agents can repeatedly complete valid battles without environment corr
 
 Establish benchmark opponents before ML.
 
+### Progress (2026-08-11)
+
+`Agent` (`src/champions_ai/agents/base.py`) has two methods, not one: picking N of 6 happens *before* a battle exists, so there is no `Observation` to reason from — only a `TeamPreview`. Conflating them would force one of the two to misrepresent what information is available. This also put `TeamPreview`/`RevealedPokemon` to work for the first time.
+
+`evaluate()` (`src/champions_ai/evaluation/runner.py`) is the ruler, built before the things it measures. It swaps sides every other battle, derives all battle seeds from one run seed, and reports a Wilson interval — chosen over the normal approximation because early runs are small and lopsided, exactly where the naive interval suggests impossible win rates and collapses to zero width at 0% and 100%. `is_significant` is conservative on purpose: an interval overlapping 0.5 means the run supports no claim either way, not that the agents are equal.
+
+**Baseline established:** two `RandomAgent`s over 200 battles finished 97–103 (48.5%, 95% CI 41.7–55.4%, correctly reported not significant), sides split exactly 100/100, reproducible from seed, ~33 battles/sec. A mirror match coming out skewed would have meant the harness itself was biased and every later comparison would inherit it, so this is now an integration test.
+
 ### Agent 0: Random Agent
 
-Select uniformly among legal joint actions.
+- [x] Select uniformly among legal joint actions. (`RandomAgent`, owning its own RNG so runs reproduce independently of unrelated code)
 
 ### Agent 1: Heuristic Agent
 
@@ -503,16 +511,16 @@ Possible approaches:
 
 Support:
 
-- [ ] repeated matches;
-- [ ] side swapping;
-- [ ] deterministic seeds;
-- [ ] team-pool sampling;
-- [ ] win rate;
-- [ ] confidence intervals;
-- [ ] Elo or another rating method;
-- [ ] per-matchup results;
-- [ ] battle logs;
-- [ ] runtime / decisions per second.
+- [x] repeated matches; (`evaluate(..., battles=N)`)
+- [x] side swapping; (every other battle, so a seat advantage cancels rather than being credited to an agent)
+- [x] deterministic seeds; (whole run reproduces from one integer)
+- [ ] team-pool sampling; (currently one fixed team pair — needed before any result generalises beyond it)
+- [x] win rate;
+- [x] confidence intervals; (Wilson, with a conservative `is_significant`)
+- [ ] Elo or another rating method; (only meaningful once there are more than two agents)
+- [ ] per-matchup results; (waits on team-pool sampling)
+- [x] battle logs; (`keep_trajectories=True` attaches replayable `Trajectory` records)
+- [ ] runtime / decisions per second. (measured ad hoc at ~33 battles/sec; not yet reported by the harness)
 
 ---
 
