@@ -1,3 +1,12 @@
+from champions_ai.domain.actions import (
+    JointAction,
+    MoveAction,
+    PassAction,
+    SlotAction,
+    SwitchAction,
+    TargetSlot,
+    TeamPreviewAction,
+)
 from champions_ai.domain.battle_pokemon import BattlePokemon
 from champions_ai.domain.battle_state import BattleState
 from champions_ai.domain.boosts import Boosts
@@ -13,13 +22,20 @@ __all__ = [
     "BattlePokemon",
     "BattleState",
     "Boosts",
+    "JointAction",
+    "MoveAction",
+    "PassAction",
     "PokemonSet",
     "REGULATION_M_B",
     "GameType",
     "Regulation",
     "RevealedPokemon",
     "Side",
+    "SlotAction",
     "StatSpread",
+    "SwitchAction",
+    "TargetSlot",
     "Team",
     "TeamPreview",
+    "TeamPreviewAction",
 ]
