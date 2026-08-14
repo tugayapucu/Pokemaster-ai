@@ -1,0 +1,9 @@
+{
+  "name": "champions-ai-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node-side Showdown simulator bridge for champions_ai",
+  "dependencies": {
+    "pokemon-showdown": "^0.11.11"
+  }
+}
