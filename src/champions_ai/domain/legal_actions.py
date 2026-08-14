@@ -4,13 +4,14 @@ Operates on `Observation`, never `BattleState` -- a player picks actions from
 what they can see, so generating from omniscient truth would be a hidden-
 information leak by construction.
 
-Known gaps, all closing together at the environment adapter per ADR 0003:
-Mega Evolution is never offered, move-lock effects (Choice, Encore, Taunt,
-Disable, Torment) are not applied, and Struggle is unmodelled. Showdown's
-per-turn request already reports `canMegaEvo`, per-move `disabled`, and
-`trapped`, so these are consumed from the engine rather than recomputed here.
-`move_pp` gates zero-PP moves in the meantime, and trapping is read from a
-`"trapped"` volatile the adapter is responsible for setting.
+Known gaps, all closing together at the environment adapter per ADR 0003: no
+special mechanic (Mega, and whatever future regulations enable) is ever
+offered, move-lock effects (Choice, Encore, Taunt, Disable, Torment) are not
+applied, and Struggle is unmodelled. Showdown's per-turn request already
+reports `canMegaEvo`, per-move `disabled`, and `trapped`, so these are consumed
+from the engine rather than recomputed here. `move_pp` gates zero-PP moves in
+the meantime, and trapping is read from a `"trapped"` volatile the adapter is
+responsible for setting.
 """
 
 from collections.abc import Mapping, Sequence

@@ -2,6 +2,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from champions_ai.domain.regulation import SpecialMechanic
+
 MAX_MOVES = 4
 
 
@@ -30,12 +32,17 @@ class MoveAction(BaseModel, frozen=True):
     moves, field effects). Whether a given move *requires* a target depends on
     move data this type deliberately doesn't carry -- that check belongs to the
     legal-action generator, not here.
+
+    `special` names a once-per-battle form change to activate alongside the
+    move. It is a mechanic name rather than a `mega` flag so that a regulation
+    enabling Terastallization (or anything else) is a data change on
+    `Regulation.special_mechanics`, not a schema change here.
     """
 
     kind: Literal["move"] = "move"
     move_index: int
     target: TargetSlot | None = None
-    mega: bool = False
+    special: SpecialMechanic | None = None
 
     @model_validator(mode="after")
     def _check_move_index(self) -> "MoveAction":
@@ -84,9 +91,11 @@ class JointAction(BaseModel, frozen=True):
                 f"two slots cannot switch to the same benched Pokemon: {switch_targets}"
             )
 
-        megas = sum(1 for a in self.slot_actions if isinstance(a, MoveAction) and a.mega)
-        if megas > 1:
-            raise ValueError(f"only one Pokemon may Mega Evolve per turn, got {megas}")
+        # Mega, Tera and Dynamax are all once per battle per side, so at most
+        # one slot may activate any of them on a given turn.
+        specials = [a.special for a in self.slot_actions if isinstance(a, MoveAction) and a.special]
+        if len(specials) > 1:
+            raise ValueError(f"only one special mechanic may be used per turn, got {specials}")
         return self
 
     def __len__(self) -> int:

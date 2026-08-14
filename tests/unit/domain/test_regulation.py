@@ -15,3 +15,8 @@ def test_regulation_m_b_matches_confirmed_showdown_format():
 def test_regulation_is_frozen():
     with pytest.raises(Exception):
         REGULATION_M_B.level = 100
+
+
+def test_reg_m_b_enables_mega_but_not_terastallization():
+    assert REGULATION_M_B.allows("mega")
+    assert not REGULATION_M_B.allows("terastallize")

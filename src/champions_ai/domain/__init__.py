@@ -14,7 +14,12 @@ from champions_ai.domain.legal_actions import legal_joint_actions, legal_slot_ac
 from champions_ai.domain.move_data import TARGETS_REQUIRING_CHOICE, MoveData, MoveTargetType
 from champions_ai.domain.observation import Observation, ObservedPokemon, ObservedSide
 from champions_ai.domain.pokemon_set import PokemonSet
-from champions_ai.domain.regulation import REGULATION_M_B, GameType, Regulation
+from champions_ai.domain.regulation import (
+    REGULATION_M_B,
+    GameType,
+    Regulation,
+    SpecialMechanic,
+)
 from champions_ai.domain.revealed_pokemon import RevealedPokemon
 from champions_ai.domain.side import Side
 from champions_ai.domain.stats import StatSpread
@@ -40,6 +45,7 @@ __all__ = [
     "RevealedPokemon",
     "Side",
     "SlotAction",
+    "SpecialMechanic",
     "StatSpread",
     "SwitchAction",
     "TargetSlot",

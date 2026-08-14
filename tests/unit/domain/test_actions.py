@@ -11,10 +11,10 @@ from champions_ai.domain import (
 )
 
 
-def test_move_action_defaults_to_no_target_and_no_mega():
+def test_move_action_defaults_to_no_target_and_no_special_mechanic():
     action = MoveAction(move_index=0)
     assert action.target is None
-    assert action.mega is False
+    assert action.special is None
 
 
 def test_move_action_can_target_a_foe_slot():
@@ -55,21 +55,36 @@ def test_joint_action_rejects_two_slots_switching_to_the_same_pokemon():
         JointAction(slot_actions=(SwitchAction(team_index=2), SwitchAction(team_index=2)))
 
 
-def test_joint_action_rejects_two_megas_in_one_turn():
+def test_joint_action_rejects_two_special_mechanics_in_one_turn():
     with pytest.raises(ValidationError):
         JointAction(
             slot_actions=(
-                MoveAction(move_index=0, mega=True),
-                MoveAction(move_index=1, mega=True),
+                MoveAction(move_index=0, special="mega"),
+                MoveAction(move_index=1, special="mega"),
             )
         )
 
 
-def test_joint_action_allows_one_mega():
+def test_joint_action_rejects_mixing_two_different_special_mechanics():
+    with pytest.raises(ValidationError):
+        JointAction(
+            slot_actions=(
+                MoveAction(move_index=0, special="mega"),
+                MoveAction(move_index=1, special="terastallize"),
+            )
+        )
+
+
+def test_joint_action_allows_one_special_mechanic():
     joint = JointAction(
-        slot_actions=(MoveAction(move_index=0, mega=True), MoveAction(move_index=1))
+        slot_actions=(MoveAction(move_index=0, special="mega"), MoveAction(move_index=1))
     )
     assert len(joint) == 2
+
+
+def test_move_action_rejects_an_unknown_special_mechanic():
+    with pytest.raises(ValidationError):
+        MoveAction(move_index=0, special="megaevolve")
 
 
 def test_joint_action_rejects_empty():
@@ -85,7 +100,7 @@ def test_joint_action_allows_pass_for_an_empty_slot():
 def test_joint_action_round_trips_through_json():
     joint = JointAction(
         slot_actions=(
-            MoveAction(move_index=1, target=TargetSlot(side="ally", slot=0), mega=True),
+            MoveAction(move_index=1, target=TargetSlot(side="ally", slot=0), special="mega"),
             PassAction(),
         )
     )

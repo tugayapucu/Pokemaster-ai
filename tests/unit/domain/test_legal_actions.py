@@ -170,7 +170,7 @@ def test_joint_actions_exclude_both_slots_switching_to_the_same_pokemon():
         assert len(set(switch_targets)) == len(switch_targets)
 
 
-def test_generator_never_offers_mega_while_species_data_is_unavailable():
+def test_generator_never_offers_a_special_mechanic_while_engine_flags_are_unavailable():
     obs = _observation(_own_side())
     for action in legal_joint_actions(obs, MOVES):
-        assert not any(isinstance(a, MoveAction) and a.mega for a in action.slot_actions)
+        assert not any(isinstance(a, MoveAction) and a.special for a in action.slot_actions)

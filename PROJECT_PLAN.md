@@ -239,6 +239,17 @@ Two known soft spots to revisit rather than forget:
 - `side_conditions` / `field_conditions` are plain `dict[str, int]` (name → turns remaining). `frozen=True` stops the *field* being reassigned but does not stop the dict itself being mutated in place, so these are immutable by convention only. Chosen over a fully immutable mapping because the expected construction path rebuilds state from the simulator's protocol stream each turn rather than mutating incrementally — revisit if anything starts editing conditions in place.
 - Weather, terrain, status, and condition names are plain strings, not enums. Deliberate while the full set of values Champions actually uses is still being discovered; worth tightening once the simulator adapter has enumerated them in practice.
 
+### Handling future regulations
+
+Regulations rotate and expand — more Pokémon, items, and moves are already announced. The domain model is built so that costs nothing:
+
+- **No roster is hardcoded.** `species`, `moves`, and `item` are plain strings, never enums. New Pokémon and moves require zero domain changes.
+- **Legality is Showdown's** (ADR 0001/0003). A new regulation's roster, learnsets, and banlist arrive by updating the `pokemon-showdown` dependency; `package-lock.json` pins the exact version so runs stay reproducible until we deliberately bump it.
+- **Everything a regulation varies is data on `Regulation`** — stat-point caps, team sizes, level, game type, and which special mechanics are enabled. Supporting a new regulation means adding an instance, not editing classes. `tests/unit/domain/test_stats.py` includes a hypothetical regulation with different caps to keep this honest.
+- **Special mechanics are named, not booleans** (see the resolved open question in section 15), so a regulation re-enabling Terastallization is a data change.
+
+Two things would still need real work: a genuinely new *kind* of mechanic (something neither a form change nor a move) may need new action shapes, and any regulation dropping Open Team Sheets would need `TeamPreview` to mask by regulation rather than by flag.
+
 ### Confirmed Reg M-B mechanics differences from mainline VGC (2026-08-11 spike)
 
 Verified against Showdown's `champions` mod (see `spike/showdown-bridge/notes.md`) — do not assume mainline Gen 9 conventions when building the fields below:
@@ -1094,7 +1105,7 @@ The final repository should tell a coherent story from **simple baseline to soph
 - [ ] How should team preview and lead selection be represented?
 - [ ] What rating system should be used for internal agents?
 - [ ] What latency budget should the recommendation system target?
-- [ ] How should special mechanics be represented generically across regulations?
+- [x] How should special mechanics be represented generically across regulations? — **Resolved 2026-08-11:** as a named mechanic (`SpecialMechanic`, using Showdown's own choice-string vocabulary — `mega`/`terastallize`/`dynamax`/`zmove`/`ultraburst`) carried on `MoveAction.special`, with each `Regulation` declaring which it enables via `special_mechanics`. A regulation turning Terastallization back on is then a data change, not a schema change. Replaced an earlier `MoveAction.mega: bool` that had baked one mechanic into the type.
 - [ ] Should search operate directly in the full simulator or through a faster approximate model?
 - [ ] How should common opponent-set priors be constructed?
 - [ ] When does a neural architecture become justified over a structured baseline?
