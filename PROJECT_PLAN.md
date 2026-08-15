@@ -500,6 +500,21 @@ Two things this confirmed and one it fixed:
 
 `Dex` is deliberately separate from `MoveData`: `MoveData` is per-turn, engine-reported, and describes what may be chosen *now*; `Dex` is the unchanging half, loaded once. The tracker also now keeps the computed stats the engine sends for our own side, which damage calculation needs and which were previously discarded.
 
+### Agent 1: Heuristic Agent — built, and measured
+
+**Result: 289–11 over 300 battles across 74 matchups — a 96.3% win rate (95% CI 93.6–97.9%, significant), ahead in 72 of 74 matchups.** Average battle length fell from Random's ~10.7 turns to 5.4.
+
+The 72/74 is the number that matters. Winning overall while losing most pairings would mean exploiting particular teams rather than playing better — precisely what team-pool sampling was added to expose.
+
+Scoring is written to be legible rather than tuned: expected damage as a fraction of the target's remaining HP is the baseline currency, and everything else is priced against it. Each component emits a human-readable reason, which Milestone 4's recommendation system needs, and which let the unit tests assert on the *reasoning* rather than the win rate — a good score can hide bad logic.
+
+Two judgement calls worth carrying forward:
+
+- **A guaranteed knockout requires even the worst damage roll**, and is scored separately from one that needs a high roll. Treating an average as a certainty is how an agent leaves things alive at 3 HP.
+- **Missing dex data scores neutrally, not last**, so a gap in the data cannot masquerade as a judgement about the move.
+
+Implemented signals: expected damage, knockout certainty, type effectiveness, immunity avoidance, accuracy discounting, Protect valuation, switch cost. Not yet implemented from the list below: speed/priority reasoning, support-move value beyond a flat score, and board position.
+
 ### Agent 1: Heuristic Agent
 
 Potential signals:
