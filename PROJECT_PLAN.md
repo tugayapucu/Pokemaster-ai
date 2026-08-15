@@ -529,6 +529,20 @@ Potential signals:
 - support-move value;
 - board position.
 
+### Agent 2: Simple Search Agent — built, and it did **not** help
+
+**Result: 148–152 over 300 battles (49.3%, 95% CI 43.7–55.0%, not significant), ahead in 28/74 matchups.** Marginally *worse* than the heuristic against Random. Written up in `docs/experiments/0001-one-turn-search.md`.
+
+Instrumenting live battles explains it: search picks a different action from the heuristic on **6% of turns**. Two policies that agree 94% of the time split a head-to-head near 50% however well the other 6% is reasoned. The lookahead is inert rather than wrong.
+
+It is inert because **the opponent's moves are largely unknown** — a mean of ~3 revealed moves across their entire team per decision, 10% of decisions with none at all, in battles lasting 5–6 turns. A threat model built only on revealed moves has nothing to work with.
+
+**The finding worth carrying:** at this depth and in this format, search depth is not the bottleneck — *opponent knowledge* is. That is direct evidence for the ordering of section 9's research questions 5 and 6, and a concrete argument for reaching opponent modelling (Milestone 10) before investing in deeper search (Milestone 11).
+
+`SearchAgent` is kept as a baseline and as scaffolding — its threat model gains real inputs the moment a prior over unseen movesets exists. It is not the strongest agent; `HeuristicAgent` is.
+
+Also landed: `evaluate_position`, which scores a board rather than an action — the hand-written baseline Milestone 7's learned value model is meant to replace.
+
 ### Agent 2: Simple Search Agent
 
 Possible approaches:
