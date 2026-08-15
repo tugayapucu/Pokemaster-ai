@@ -69,6 +69,24 @@ This is direct evidence for the ordering of `PROJECT_PLAN.md`'s research
 questions 5 and 6: modelling hidden information is worth more than deeper
 search, and should come first.
 
+## Follow-up: is exact search even possible?
+
+Asked while writing this up, because the answer changes what "deeper search"
+would cost. Measured directly:
+
+- Showdown supports `Battle.toJSON()` / `Battle.fromJSON()` (`sim/state.ts`).
+- A battle serialises to ~27 KB in ~0.7 ms and restores in ~1.4 ms.
+- A restored fork advances **in complete isolation**: the fork took damage and
+  reached turn 2 while the original stayed untouched at turn 1.
+- Roughly **460 forks/sec**.
+
+So exact search is affordable for a recommendation system (one decision, a
+second of budget) and far too slow for RL self-play (millions of decisions).
+Reimplementing battle resolution to go faster remains ruled out by ADR 0001:
+forking is exact by construction, a reimplementation diverges silently.
+
+This resolves the open question in `PROJECT_PLAN.md` section 15.
+
 ## Next action
 
 - Keep `SearchAgent` as a baseline and as scaffolding: its threat model gains

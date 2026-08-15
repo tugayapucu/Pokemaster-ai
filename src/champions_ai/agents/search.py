@@ -5,12 +5,17 @@ it is about to be knocked out, or whether it even moves first. This does, which
 is most of what "search" buys at this depth.
 
 **Not true multi-ply search.** A real one would fork the battle and ask the
-simulator what happens; Showdown's stream cannot be cheaply forked mid-battle,
-and reimplementing resolution is exactly what ADR 0001 rules out. So this
-estimates a single exchange with the same approximate damage model the
-heuristic uses, and is honest about being an estimate. Whether deeper search
-runs inside the simulator or against a faster model is still open
-(`PROJECT_PLAN.md` section 15).
+simulator what actually happens. That turns out to be possible -- Showdown
+supports `Battle.toJSON()`/`fromJSON()`, and a fork advances in complete
+isolation from the original at roughly 460 forks/sec (measured; see
+`PROJECT_PLAN.md` section 15). It is simply not what is limiting play right
+now: `docs/experiments/0001` found search depth is not the bottleneck,
+opponent knowledge is.
+
+So this estimates a single exchange with the same approximate damage model the
+heuristic uses. Reimplementing battle resolution to get a faster forward model
+remains ruled out by ADR 0001 -- forking the real engine is exact by
+construction, where a reimplementation would diverge silently.
 
 Opponent replies are drawn from what has actually been *revealed*, so the
 search cannot cheat by reacting to moves a player could not know about.

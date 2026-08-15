@@ -1186,7 +1186,11 @@ The final repository should tell a coherent story from **simple baseline to soph
 - [ ] What rating system should be used for internal agents?
 - [ ] What latency budget should the recommendation system target?
 - [x] How should special mechanics be represented generically across regulations? — **Resolved 2026-08-11:** as a named mechanic (`SpecialMechanic`, using Showdown's own choice-string vocabulary — `mega`/`terastallize`/`dynamax`/`zmove`/`ultraburst`) carried on `MoveAction.special`, with each `Regulation` declaring which it enables via `special_mechanics`. A regulation turning Terastallization back on is then a data change, not a schema change. Replaced an earlier `MoveAction.mega: bool` that had baked one mechanic into the type.
-- [ ] Should search operate directly in the full simulator or through a faster approximate model?
+- [x] Should search operate directly in the full simulator or through a faster approximate model? — **Measured 2026-08-15:** the full simulator is viable for interactive use, and reimplementing it is not warranted. Showdown supports `Battle.toJSON()`/`fromJSON()`; a battle serialises to ~27 KB in ~0.7 ms and restores in ~1.4 ms, and the fork advances in **complete isolation** from the original (verified: fork took damage and reached turn 2 while the original stayed untouched at turn 1). That is ~460 forks/sec.
+  - **Recommendation/analysis use** (one decision, ~1 s budget): comfortably affordable — hundreds of exact forks per decision.
+  - **RL self-play** (millions of decisions): far too slow at ~2.2 ms per node; end-to-end battle throughput is currently ~35–50 battles/sec and forking would collapse it. This is where an approximate model earns its place.
+  - **Reimplementing battle resolution stays ruled out** (ADR 0001). Forking is exact by construction; a reimplementation of 500 moves plus abilities and items would diverge silently, and silent divergence means searching a game that is not the real game.
+  - Not urgent regardless: `docs/experiments/0001` found search depth is not the current bottleneck.
 - [ ] How should common opponent-set priors be constructed?
 - [ ] When does a neural architecture become justified over a structured baseline?
 
