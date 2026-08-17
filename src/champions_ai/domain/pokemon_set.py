@@ -19,8 +19,16 @@ class PokemonSet(BaseModel, frozen=True):
     @field_validator("moves")
     @classmethod
     def _check_moves(cls, moves: tuple[str, ...]) -> tuple[str, ...]:
-        if not 1 <= len(moves) <= 4:
-            raise ValueError(f"a Pokemon must have between 1 and 4 moves, got {len(moves)}")
+        """Zero moves is allowed here, but not on a declared team.
+
+        A set reconstructed from a replay only knows the moves it saw used, and
+        a Pokemon that was sent out and switched straight back has none. That
+        is an honest partial observation, not an invalid Pokemon. The "must
+        have at least one move" rule belongs to a *team sheet*, so `Team`
+        enforces it there.
+        """
+        if len(moves) > 4:
+            raise ValueError(f"a Pokemon may have at most 4 moves, got {len(moves)}")
         if len(set(moves)) != len(moves):
             raise ValueError(f"moves must be unique, got {moves}")
         return moves

@@ -22,9 +22,13 @@ def test_valid_pokemon_set():
     assert len(mon.moves) == 4
 
 
-def test_rejects_zero_moves():
-    with pytest.raises(ValidationError):
-        _make(moves=())
+def test_allows_zero_moves_for_a_partial_observation():
+    """A set reconstructed from a replay knows only the moves it saw used.
+
+    Requiring one here would make an honest partial observation unrepresentable.
+    A *declared team* still needs them, which `Team` enforces.
+    """
+    assert _make(moves=()).moves == ()
 
 
 def test_rejects_more_than_four_moves():

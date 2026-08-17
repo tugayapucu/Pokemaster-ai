@@ -31,3 +31,10 @@ def test_rejects_more_than_six():
 def test_rejects_duplicate_species():
     with pytest.raises(ValidationError):
         Team(pokemon=(_mon("garchomp"), _mon("garchomp")))
+
+
+def test_rejects_a_pokemon_with_no_moves():
+    """A declared team sheet must be complete, unlike a set rebuilt from a replay."""
+    moveless = PokemonSet(species="ditto", level=50, ability="limber", moves=())
+    with pytest.raises(ValidationError):
+        Team(pokemon=(_mon("garchomp"), moveless))

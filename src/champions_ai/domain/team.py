@@ -18,6 +18,13 @@ class Team(BaseModel, frozen=True):
         species = [p.species for p in pokemon]
         if len(set(species)) != len(species):
             raise ValueError(f"species must be unique on a team (Species Clause), got {species}")
+        # A declared team sheet must be complete, even though a PokemonSet
+        # reconstructed from a replay may legitimately have no known moves.
+        moveless = [p.species for p in pokemon if not p.moves]
+        if moveless:
+            raise ValueError(
+                f"every Pokemon on a team needs at least one move; {moveless} have none"
+            )
         return pokemon
 
     def __len__(self) -> int:
