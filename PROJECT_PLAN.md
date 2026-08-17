@@ -1191,7 +1191,15 @@ The final repository should tell a coherent story from **simple baseline to soph
   Three things still to settle before building on it:
   - **Terms of use.** Bulk downloading needs Smogon's usage terms checked first. This is data collection from public pages, not matchmaking automation or ladder botting, so it does not touch the scope guardrails in `AGENTS.md` section 3 — but "public" is not the same as "licensed for redistribution".
   - **Bot contamination.** Accounts like `pcrlbot12d159c39a` appear repeatedly in the listing. Training an imitation model on bot games and calling it "expert play" would be a silent quality failure, so replays need filtering by player identity before use.
-  - **No rating in the listing.** The search endpoint gives players and format but no Elo, so "high-level play" needs a separate signal — ladder standings, or restricting to players who appear in tournament results.
+  - **Ratings are available after all.** The search listing omits them, but the replay itself carries Elo on its player lines (`|player|p1|audino316|byron|1553`, `|player|p2|sauan2|2|1643`) plus a top-level `rating` field. Filtering for high-level play is therefore possible without any external source.
+
+**The real constraint is what a replay does *not* contain.** A replay is the *spectator* view:
+
+- **HP is a percentage for both sides**, never the exact value either player saw of their own team.
+- **There are no `|request|` lines**, so the legal action set a player was choosing from is absent — we see what they picked, not what they could have picked.
+- **Movesets and PP are absent**; moves become known only as they are used.
+
+So a model trained on replays learns "what would a player do given the *spectator* view", which is strictly less information than the player actually had. That is workable, and it is not the same thing as imitating a player — the difference should be stated in any result, not glossed. Reconstructing a decision point must also use only what was revealed *up to that turn*: the full log makes it trivially easy to leak later moves and the outcome backwards into a feature, which `AGENTS.md` explicitly forbids.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?
