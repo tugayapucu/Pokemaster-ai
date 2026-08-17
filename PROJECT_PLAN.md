@@ -947,6 +947,14 @@ Track:
 - confidence calibration;
 - decision latency.
 
+## The missing benchmark
+
+Everything measured so far is against agents we wrote ourselves. Beating Random 96.3% says nothing about how the system compares to a competent human — there is currently **no external reference point at all**, and that is the largest gap in knowing whether the project is actually good.
+
+Human replays supply one **without playing anyone**, which matters because automating ladder play is explicitly out of scope (section 3). On a held-out set of real games, the agent can be scored on how often it chooses what the human chose, and on how its evaluation of a position compares with how that game actually turned out. That is an external benchmark obtained purely by observation.
+
+This is what section 9's research questions 3 and 4 are asking, and it should be built before, not after, investing in RL — otherwise a self-play agent can only be measured against itself.
+
 ## Generalization tests
 
 Evaluate on:
@@ -1179,7 +1187,11 @@ The final repository should tell a coherent story from **simple baseline to soph
 - [ ] How closely does Showdown's Regulation M-B implementation match live Champions mechanics in practice? (Assumed close given Showdown models the format directly, but not yet verified against the real client.)
 - [ ] What is the best canonical action representation for Double Battles?
 - [ ] How should simultaneous joint actions be encoded for neural models?
-- [ ] Which public/expert battle datasets are legally and practically usable?
+- [~] Which public/expert battle datasets are legally and practically usable? — **Partly answered 2026-08-15.** Real human replays for our exact format exist in volume: `replay.pokemonshowdown.com/search.json?format=gen9championsvgc2026regmb` returns current Reg M-B games, and the timestamps span ~50 replays per 70 minutes — on the order of **1,000 human games per day**. So imitation learning (Milestone 6) is *not* blocked for want of data.
+  Three things still to settle before building on it:
+  - **Terms of use.** Bulk downloading needs Smogon's usage terms checked first. This is data collection from public pages, not matchmaking automation or ladder botting, so it does not touch the scope guardrails in `AGENTS.md` section 3 — but "public" is not the same as "licensed for redistribution".
+  - **Bot contamination.** Accounts like `pcrlbot12d159c39a` appear repeatedly in the listing. Training an imitation model on bot games and calling it "expert play" would be a silent quality failure, so replays need filtering by player identity before use.
+  - **No rating in the listing.** The search endpoint gives players and format but no Elo, so "high-level play" needs a separate signal — ladder standings, or restricting to players who appear in tournament results.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?
