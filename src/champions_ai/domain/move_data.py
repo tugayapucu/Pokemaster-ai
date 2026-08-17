@@ -16,6 +16,11 @@ MoveTargetType = Literal[
     "all",
     "foeSide",
     "allySide",
+    # Every active Pokemon on the user's side, as distinct from `allyTeam`,
+    # which reaches the bench too. Champions has Howl and Life Dew, so this is
+    # reachable in ordinary play -- omitting it made the tracker reject the
+    # engine's own request payload the moment either was active.
+    "allies",
     "allyTeam",
     "randomNormal",
     "scripted",
