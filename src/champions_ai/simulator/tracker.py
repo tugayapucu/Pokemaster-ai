@@ -61,6 +61,20 @@ def to_id(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
+def _handler_name(line_type: str) -> str:
+    """Method name for a protocol line type.
+
+    Major lines (`|switch|`) and minor ones (`|-damage|`) are separate
+    namespaces, and conflating them is not hypothetical: `|start|` announces
+    the battle beginning while `|-start|` announces a volatile condition.
+    Stripping the dash made both dispatch to the same handler, which crashed
+    the moment a real battle started.
+    """
+    if line_type.startswith("-"):
+        return f"_on_minor_{line_type[1:].replace(':', '')}"
+    return f"_on_{line_type.replace(':', '')}"
+
+
 def _split_ident(ident: str) -> tuple[str, int | None, str]:
     """`p2a: Chomper` -> ("p2", 0, "Chomper"). Slot is None for sideless idents."""
     position, _, name = ident.partition(": ")
@@ -198,7 +212,7 @@ class BattleTracker:
         parts = line.split("|")
         if len(parts) < 2:
             return
-        handler = getattr(self, f"_on_{parts[1].lstrip('-').replace(':', '')}", None)
+        handler = getattr(self, _handler_name(parts[1]), None)
         if handler is not None:
             handler(parts[2:])
 
@@ -321,13 +335,13 @@ class BattleTracker:
         mon.fainted = health.fainted
         mon.status = health.status if health.status != "fnt" else None
 
-    def _on_damage(self, args: list[str]) -> None:
+    def _on_minor_damage(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
         if mon:
             self._apply_condition(mon, args[1])
 
-    _on_heal = _on_damage
-    _on_sethp = _on_damage
+    _on_minor_heal = _on_minor_damage
+    _on_minor_sethp = _on_minor_damage
 
     def _on_faint(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
@@ -336,25 +350,89 @@ class BattleTracker:
             mon.hp_percent = 0
             self._clear_slot(mon.species)
 
-    def _on_mega(self, args: list[str]) -> None:
+    def _on_detailschange(self, args: list[str]) -> None:
+        """A permanent forme change -- Mega Evolution above all.
+
+        The species genuinely changes, and with it the base stats every damage
+        estimate depends on. Without this an opponent that Mega Evolves is
+        still modelled as its base forme, silently and for the rest of the
+        battle.
+        """
+        self._change_species(args[0], _species_from_details(args[1]))
+
+    _on_formechange = _on_detailschange
+
+    def _change_species(self, ident: str, new_species: str) -> None:
+        side, slot, name = _split_ident(ident)
+        if side != self.opponent_tag:
+            return
+        old = self._nickname_to_species.get(name)
+        if old is None or old == new_species:
+            return
+
+        mon = self._opponents.pop(old, None)
+        if mon is None:
+            return
+        mon.species = new_species
+        self._opponents[new_species] = mon
+        if old in self._opponent_order:
+            self._opponent_order[self._opponent_order.index(old)] = new_species
+        for index, occupant in enumerate(self._opponent_slots):
+            if occupant == old:
+                self._opponent_slots[index] = new_species
+        self._nickname_to_species[name] = new_species
+
+    def _on_minor_start(self, args: list[str]) -> None:
+        """A volatile condition begins: Substitute, Taunt, Leech Seed, a charge."""
+        mon = self._opponent_at(args[0])
+        if mon and len(args) > 1:
+            mon.volatiles.add(to_id(args[1].split(": ")[-1]))
+
+    def _on_minor_end(self, args: list[str]) -> None:
+        mon = self._opponent_at(args[0])
+        if mon and len(args) > 1:
+            mon.volatiles.discard(to_id(args[1].split(": ")[-1]))
+
+    def _on_minor_singleturn(self, args: list[str]) -> None:
+        """A one-turn effect, most importantly Protect.
+
+        Recorded because knowing an opponent just protected is real
+        information: consecutive Protects are increasingly likely to fail.
+        """
+        mon = self._opponent_at(args[0])
+        if mon and len(args) > 1:
+            mon.volatiles.add(to_id(args[1].split(": ")[-1]))
+
+    def _on_minor_activate(self, args: list[str]) -> None:
+        """An ability or item did something, which reveals what it is."""
+        mon = self._opponent_at(args[0])
+        if not mon or len(args) < 2:
+            return
+        effect = args[1]
+        if effect.startswith("ability: "):
+            mon.revealed_ability = to_id(effect.split(": ", 1)[1])
+        elif effect.startswith("item: "):
+            mon.revealed_item = to_id(effect.split(": ", 1)[1])
+
+    def _on_minor_mega(self, args: list[str]) -> None:
         _, _, name = _split_ident(args[0])
         if self._nickname_to_species.get(name) in self._opponents:
             self._opponent_mega_used = True
 
-    def _on_status(self, args: list[str]) -> None:
+    def _on_minor_status(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
         if mon:
             mon.status = args[1]
 
-    def _on_curestatus(self, args: list[str]) -> None:
+    def _on_minor_curestatus(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
         if mon:
             mon.status = None
 
-    def _on_boost(self, args: list[str]) -> None:
+    def _on_minor_boost(self, args: list[str]) -> None:
         self._change_boost(args, sign=1)
 
-    def _on_unboost(self, args: list[str]) -> None:
+    def _on_minor_unboost(self, args: list[str]) -> None:
         self._change_boost(args, sign=-1)
 
     def _change_boost(self, args: list[str], sign: int) -> None:
@@ -368,36 +446,36 @@ class BattleTracker:
         if mon:
             mon.revealed_moves.add(to_id(args[1]))
 
-    def _on_item(self, args: list[str]) -> None:
+    def _on_minor_item(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
         if mon:
             mon.revealed_item = to_id(args[1])
 
-    def _on_enditem(self, args: list[str]) -> None:
+    def _on_minor_enditem(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
         if mon:
             # Consumed or knocked off: now known to be holding nothing.
             mon.revealed_item = None
 
-    def _on_ability(self, args: list[str]) -> None:
+    def _on_minor_ability(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
         if mon:
             mon.revealed_ability = to_id(args[1])
 
-    def _on_weather(self, args: list[str]) -> None:
+    def _on_minor_weather(self, args: list[str]) -> None:
         self.weather = None if args[0] == "none" else to_id(args[0])
 
-    def _on_fieldstart(self, args: list[str]) -> None:
+    def _on_minor_fieldstart(self, args: list[str]) -> None:
         self.field_conditions[to_id(args[0].split(": ")[-1])] = 0
 
-    def _on_fieldend(self, args: list[str]) -> None:
+    def _on_minor_fieldend(self, args: list[str]) -> None:
         self.field_conditions.pop(to_id(args[0].split(": ")[-1]), None)
 
-    def _on_sidestart(self, args: list[str]) -> None:
+    def _on_minor_sidestart(self, args: list[str]) -> None:
         if args[0].split(":")[0] == self.opponent_tag:
             self._opponent_side_conditions[to_id(args[1].split(": ")[-1])] = 0
 
-    def _on_sideend(self, args: list[str]) -> None:
+    def _on_minor_sideend(self, args: list[str]) -> None:
         if args[0].split(":")[0] == self.opponent_tag:
             self._opponent_side_conditions.pop(to_id(args[1].split(": ")[-1]), None)
 

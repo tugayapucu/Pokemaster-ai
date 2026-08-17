@@ -176,6 +176,78 @@ def test_replace_to_the_same_species_is_a_no_op():
     assert [mon.species for mon in tracker.opponent_side().revealed] == ["Garchomp"]
 
 
+def test_mega_evolution_changes_the_tracked_species():
+    """Aerodactyl-Mega has different base stats; keeping the base forme would
+    make every damage estimate against it wrong for the rest of the battle."""
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Aerodactyl|Aerodactyl, L50, M|100/100",
+        "|-damage|p2a: Aerodactyl|60/100",
+        "|-mega|p2a: Aerodactyl|Aerodactyl|Aerodactylite",
+        "|detailschange|p2a: Aerodactyl|Aerodactyl-Mega, L50, M",
+    )
+    side = tracker.opponent_side()
+    assert [mon.species for mon in side.revealed] == ["Aerodactyl-Mega"]
+    assert side.revealed[0].hp_percent == 60, "HP belongs to the same Pokemon"
+    assert side.active_slots[0] == 0
+    assert side.mega_used
+
+
+def test_volatile_conditions_start_and_end():
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Garchomp|Garchomp, L50, M|100/100",
+        "|-start|p2a: Garchomp|Substitute",
+    )
+    assert "substitute" in tracker.opponent_side().revealed[0].volatile_conditions
+
+    _sideline(tracker, "|-end|p2a: Garchomp|Substitute")
+    assert "substitute" not in tracker.opponent_side().revealed[0].volatile_conditions
+
+
+def test_protect_is_recorded_as_a_single_turn_effect():
+    """Knowing an opponent just protected matters -- consecutive Protects fail."""
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Garchomp|Garchomp, L50, M|100/100",
+        "|-singleturn|p2a: Garchomp|Protect",
+    )
+    assert "protect" in tracker.opponent_side().revealed[0].volatile_conditions
+
+
+def test_an_activated_ability_reveals_it():
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Garchomp|Garchomp, L50, M|100/100",
+        "|-activate|p2a: Garchomp|ability: Rough Skin",
+    )
+    assert tracker.opponent_side().revealed[0].revealed_ability == "roughskin"
+
+
+def test_an_activated_item_reveals_it():
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Garchomp|Garchomp, L50, M|100/100",
+        "|-activate|p2a: Garchomp|item: Sitrus Berry",
+    )
+    assert tracker.opponent_side().revealed[0].revealed_item == "sitrusberry"
+
+
+def test_our_own_forme_change_is_not_applied_to_the_opponent():
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Garchomp|Garchomp, L50, M|100/100",
+        "|detailschange|p1a: Charizard|Charizard-Mega-Y, L50, F",
+    )
+    assert [mon.species for mon in tracker.opponent_side().revealed] == ["Garchomp"]
+
+
 def test_status_and_cure_are_tracked():
     tracker = _tracker()
     _sideline(
