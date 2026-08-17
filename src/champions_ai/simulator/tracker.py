@@ -75,7 +75,7 @@ def _handler_name(line_type: str) -> str:
     return f"_on_{line_type.replace(':', '')}"
 
 
-def _split_ident(ident: str) -> tuple[str, int | None, str]:
+def split_ident(ident: str) -> tuple[str, int | None, str]:
     """`p2a: Chomper` -> ("p2", 0, "Chomper"). Slot is None for sideless idents."""
     position, _, name = ident.partition(": ")
     side = position[:2]
@@ -83,7 +83,7 @@ def _split_ident(ident: str) -> tuple[str, int | None, str]:
     return side, slot, name
 
 
-def _species_from_details(details: str) -> str:
+def species_from_details(details: str) -> str:
     """`Charizard-Mega-Y, L50, F` -> `Charizard-Mega-Y`."""
     return details.split(",")[0].strip()
 
@@ -91,7 +91,7 @@ def _species_from_details(details: str) -> str:
 _LEVEL = re.compile(r",\s*L(\d+)")
 
 
-def _level_from_details(details: str, default: int) -> int:
+def level_from_details(details: str, default: int) -> int:
     """`Charizard, L50, F` -> 50.
 
     Matched on the `, L<number>` field rather than by splitting on the letter
@@ -138,7 +138,15 @@ class _OpponentPokemon:
 class BattleTracker:
     """Accumulates one player's view of a battle and renders it as an Observation."""
 
-    def __init__(self, regulation: Regulation, player: int, own_team: Team) -> None:
+    def __init__(
+        self, regulation: Regulation, player: int, own_team: Team | None = None
+    ) -> None:
+        """`own_team` is absent when replaying a spectator log.
+
+        A spectator has no team sheet, and neither does anything reconstructing
+        a battle from a published replay. Only `own_side()` and
+        `team_preview()` need one; opponent tracking does not.
+        """
         if player not in (0, 1):
             raise ValueError(f"player must be 0 or 1, got {player}")
         self.regulation = regulation
@@ -146,7 +154,8 @@ class BattleTracker:
         self.own_tag = f"p{player + 1}"
         self.opponent_tag = f"p{2 - player}"
 
-        self._sets_by_species = {to_id(mon.species): mon for mon in own_team.pokemon}
+        pokemon = own_team.pokemon if own_team is not None else ()
+        self._sets_by_species = {to_id(mon.species): mon for mon in pokemon}
         self._request: dict | None = None
         # A fainted Pokemon reports "0 fnt" with no maximum, so remember it.
         self._own_max_hp: dict[str, int] = {}
@@ -239,8 +248,8 @@ class BattleTracker:
         details = args[1]
         self._opponent_roster.append(
             RevealedPokemon(
-                species=_species_from_details(details),
-                level=_level_from_details(details, self.regulation.level),
+                species=species_from_details(details),
+                level=level_from_details(details, self.regulation.level),
             )
         )
 
@@ -248,7 +257,7 @@ class BattleTracker:
         self._opponent_roster.clear()
 
     def _opponent_at(self, ident: str) -> _OpponentPokemon | None:
-        side, _, name = _split_ident(ident)
+        side, _, name = split_ident(ident)
         if side != self.opponent_tag:
             return None
         species = self._nickname_to_species.get(name)
@@ -258,11 +267,11 @@ class BattleTracker:
         ident, details = args[0], args[1]
         # `|replace|` (a broken Illusion) carries no HP field.
         condition = args[2] if len(args) > 2 else None
-        side, slot, name = _split_ident(ident)
+        side, slot, name = split_ident(ident)
         if side != self.opponent_tag:
             return
 
-        species = _species_from_details(details)
+        species = species_from_details(details)
         # Nicknames make ident unreliable on its own, so learn the mapping from
         # the details field the first time a Pokemon appears.
         known = self._nickname_to_species.get(name)
@@ -270,7 +279,7 @@ class BattleTracker:
             self._nickname_to_species[name] = species
             known = species
         if known not in self._opponents:
-            level = _level_from_details(details, self.regulation.level)
+            level = level_from_details(details, self.regulation.level)
             self._opponents[known] = _OpponentPokemon(known, level)
             self._opponent_order.append(known)
 
@@ -296,11 +305,11 @@ class BattleTracker:
         untangling them needs Illusion-aware bookkeeping this does not do.
         """
         ident, details = args[0], args[1]
-        side, slot, name = _split_ident(ident)
+        side, slot, name = split_ident(ident)
         if side != self.opponent_tag or slot is None:
             return
 
-        true_species = _species_from_details(details)
+        true_species = species_from_details(details)
         impersonated = self._opponent_slots[slot]
         if impersonated == true_species:
             return
@@ -358,12 +367,12 @@ class BattleTracker:
         still modelled as its base forme, silently and for the rest of the
         battle.
         """
-        self._change_species(args[0], _species_from_details(args[1]))
+        self._change_species(args[0], species_from_details(args[1]))
 
     _on_formechange = _on_detailschange
 
     def _change_species(self, ident: str, new_species: str) -> None:
-        side, slot, name = _split_ident(ident)
+        side, slot, name = split_ident(ident)
         if side != self.opponent_tag:
             return
         old = self._nickname_to_species.get(name)
@@ -415,7 +424,7 @@ class BattleTracker:
             mon.revealed_item = to_id(effect.split(": ", 1)[1])
 
     def _on_minor_mega(self, args: list[str]) -> None:
-        _, _, name = _split_ident(args[0])
+        _, _, name = split_ident(args[0])
         if self._nickname_to_species.get(name) in self._opponents:
             self._opponent_mega_used = True
 
@@ -531,7 +540,7 @@ class BattleTracker:
         team: list[BattlePokemon] = []
         active_slots: list[int | None] = []
         for index, entry in enumerate(entries):
-            species = _species_from_details(entry["details"])
+            species = species_from_details(entry["details"])
             # The request is authoritative for live identity: its move list is
             # already in Showdown id form, matching the move_data keys. The
             # supplied team only contributes what the request omits -- the Stat
@@ -539,7 +548,7 @@ class BattleTracker:
             declared = self._sets_by_species.get(to_id(species))
             pokemon_set = PokemonSet(
                 species=species,
-                level=_level_from_details(entry["details"], self.regulation.level),
+                level=level_from_details(entry["details"], self.regulation.level),
                 ability=to_id(entry.get("baseAbility") or ""),
                 moves=tuple(entry["moves"]),
                 item=to_id(entry["item"]) if entry.get("item") else None,
@@ -627,8 +636,35 @@ class BattleTracker:
             mega_used=self._opponent_mega_used,
         )
 
+    def observed_by_nickname(self) -> dict[str, ObservedPokemon]:
+        """Opponent Pokemon keyed by the name the protocol calls them.
+
+        Species is not a stable handle: a Charizard that Mega Evolves is filed
+        under `Charizard-Mega-Y` from that point on. The nickname survives the
+        change, so anything following one Pokemon across a battle keys on this.
+        """
+        return {
+            nickname: self._opponents[species].snapshot()
+            for nickname, species in self._nickname_to_species.items()
+            if species in self._opponents
+        }
+
+    def active_nicknames(self) -> tuple[str | None, ...]:
+        """Which opponent Pokemon holds each field slot, by nickname.
+
+        Inverting species back to nickname is unambiguous because Species
+        Clause forbids a repeated species on one team.
+        """
+        by_species = {species: name for name, species in self._nickname_to_species.items()}
+        return tuple(
+            None if occupant is None else by_species.get(occupant)
+            for occupant in self._opponent_slots
+        )
+
     def team_preview(self) -> TeamPreview:
         """The pick-N-of-6 decision point. Not an Observation -- no battle exists yet."""
+        if self._own_team is None:
+            raise RuntimeError("no own team supplied; cannot describe a team preview")
         if len(self._opponent_roster) != self.regulation.min_team_size:
             raise RuntimeError(
                 f"opponent roster has {len(self._opponent_roster)} Pokemon, "
