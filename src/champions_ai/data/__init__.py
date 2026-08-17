@@ -1,3 +1,8 @@
+from champions_ai.data.choices import (
+    ObservedChoice,
+    choices_by_decision,
+    extract_choices,
+)
 from champions_ai.data.replay import (
     Replay,
     ReplayMetadata,
@@ -22,10 +27,13 @@ __all__ = [
     "BattleTeam",
     "DecisionRecord",
     "Matchup",
+    "ObservedChoice",
     "Replay",
     "ReplayMetadata",
     "TeamPool",
     "Trajectory",
+    "choices_by_decision",
+    "extract_choices",
     "git_commit",
     "has_human_players",
     "looks_like_bot",
