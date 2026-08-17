@@ -3,6 +3,11 @@ from champions_ai.data.choices import (
     choices_by_decision,
     extract_choices,
 )
+from champions_ai.data.reconstruct import (
+    ReconstructedDecision,
+    move_data_from_dex,
+    reconstruct_decisions,
+)
 from champions_ai.data.replay import (
     Replay,
     ReplayMetadata,
@@ -28,6 +33,7 @@ __all__ = [
     "DecisionRecord",
     "Matchup",
     "ObservedChoice",
+    "ReconstructedDecision",
     "Replay",
     "ReplayMetadata",
     "TeamPool",
@@ -37,10 +43,12 @@ __all__ = [
     "git_commit",
     "has_human_players",
     "looks_like_bot",
+    "move_data_from_dex",
     "parse_metadata",
     "parse_pokemon_set",
     "parse_ratings",
     "parse_showdown_team",
+    "reconstruct_decisions",
     "unobservable_turns",
     "utc_now",
 ]
