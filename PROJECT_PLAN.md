@@ -1245,6 +1245,20 @@ Two things that exercise found, both worth more than the number:
 - **Handler dispatch conflated major and minor lines.** Names were derived by stripping a leading dash, so `|start|` (the battle begins) and `|-start|` (a volatile condition begins) resolved to the same handler and crashed on the first real battle. They are now separate namespaces, with a test asserting they cannot collide.
 
 Coverage should be re-measured whenever replays are ingested in volume, rather than assumed to have held.
+
+### Recovering human choices (2026-08-15)
+
+`data/choices.py` extracts what each player actually chose. Most of the work is *refusing* to count things that look like choices but are not — each would quietly poison a training set:
+
+- a move used `[from]` Sleep Talk or Dancer was selected by the game, not the player;
+- `|drag|` is a Pokémon forced out by Roar, which its owner did not ask for;
+- a switch replacing something that just fainted is a **replacement** decision, a different question from choosing to switch a healthy Pokémon out;
+- the **opening leads appear as switches before turn 1**, but are the outcome of Team Preview. This one is not theoretical: separating them dropped the apparent free-choice count across three replays from 71 to 59, so leaving them in would have inflated how often players appear to switch by about 20%;
+- `|cant|` means the choice never executed, so that player's turn is dropped entirely.
+
+Measured on real replays: 19 turns produce 39 decision points and **~3.1 usable free-choice labels per turn**. At ~1,000 games/day of roughly 6 turns each, that is on the order of 18,000 labelled human decisions per day — ample for imitation learning, subject to the usage-terms check.
+
+Still to build for the benchmark: reconstructing the *observation* at each decision point. The rule that keeps it honest is asymmetric — the acting player's own moveset may be recovered from the whole replay, because they genuinely knew their own team, but the opponent's must be limited to what had been revealed by that turn.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?
