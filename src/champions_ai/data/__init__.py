@@ -5,6 +5,7 @@ from champions_ai.data.replay import (
     looks_like_bot,
     parse_metadata,
     parse_ratings,
+    unobservable_turns,
 )
 from champions_ai.data.team_pool import BattleTeam, Matchup, TeamPool
 from champions_ai.data.team_text import parse_pokemon_set, parse_showdown_team
@@ -32,5 +33,6 @@ __all__ = [
     "parse_pokemon_set",
     "parse_ratings",
     "parse_showdown_team",
+    "unobservable_turns",
     "utc_now",
 ]

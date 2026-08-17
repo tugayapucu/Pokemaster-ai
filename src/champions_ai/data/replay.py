@@ -14,6 +14,15 @@ results rather than gloss over.
 Reconstruction must also respect time: a replay log contains the whole battle,
 so it is trivially easy to leak a later move, or the outcome, backwards into a
 decision's features. `AGENTS.md` forbids exactly that.
+
+Verified against real replays, with two consequences for anything built here:
+
+- **`|cant|` marks an unobservable decision.** When a Pokemon could not act --
+  paralysis, flinch, a disabled move -- the log records that it failed to move
+  and never the action its player chose. Those points are not training labels.
+- **The top-level `rating` field disagrees with the player lines** (one replay
+  reported 1578 for players rated 1553 and 1643, which is neither value nor
+  their mean). Its meaning is unclear, so only the `|player|` lines are read.
 """
 
 import json
@@ -153,6 +162,23 @@ BOT_NAME_PATTERNS = (re.compile(r"^pcrlbot", re.IGNORECASE),)
 
 def looks_like_bot(name: str) -> bool:
     return any(pattern.search(name) for pattern in BOT_NAME_PATTERNS)
+
+
+def unobservable_turns(log: tuple[str, ...]) -> frozenset[int]:
+    """Turns where a player's choice cannot be recovered.
+
+    `|cant|` means a Pokemon was unable to act, so the log shows the failure
+    and not the action that was chosen. Treating those turns as observed
+    choices would train on labels that were never decisions.
+    """
+    unobservable: set[int] = set()
+    turn = 0
+    for line in log:
+        if line.startswith("|turn|"):
+            turn = int(line.split("|")[2])
+        elif line.startswith("|cant|"):
+            unobservable.add(turn)
+    return frozenset(unobservable)
 
 
 def has_human_players(metadata: ReplayMetadata) -> bool:

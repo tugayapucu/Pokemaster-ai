@@ -1200,6 +1200,15 @@ The final repository should tell a coherent story from **simple baseline to soph
 - **Movesets and PP are absent**; moves become known only as they are used.
 
 So a model trained on replays learns "what would a player do given the *spectator* view", which is strictly less information than the player actually had. That is workable, and it is not the same thing as imitating a player — the difference should be stated in any result, not glossed. Reconstructing a decision point must also use only what was revealed *up to that turn*: the full log makes it trivially easy to leak later moves and the outcome backwards into a feature, which `AGENTS.md` explicitly forbids.
+
+Verified directly against three replays (2026-08-15), which also turned up four things worth knowing before building the dataset:
+
+- **Some decisions are simply unobservable.** `|cant|` appears when a Pokémon was unable to act — paralysis, flinch, a disabled move. The log then records *that it could not move*, never the action its player actually chose. Those decision points must be dropped from a training set rather than treated as a choice, or the model learns from labels that were never a decision.
+- **Open Team Sheets was accepted in 0 of 3 games.** It needs both players to opt in, so assume sheets are absent; handle `|showteam|` if it ever appears rather than relying on it.
+- **Mega Evolution is visible** — `|-mega|` followed by `|detailschange|` to the Mega forme. So Mega usage *is* learnable from replays, which matters given the heuristic currently cannot tell a Mega action apart from a normal one.
+- **The top-level `rating` field does not match the player lines.** One replay reported `rating: 1578` while its players were 1553 and 1643 — neither value, nor their mean. Its meaning is unclear, so `parse_ratings` reads the per-player Elo from `|player|` lines and the top-level field is ignored.
+
+The event vocabulary is also wider than the tracker currently handles (`-start`, `-activate`, `-fieldstart`, `-immune`, `-hitcount`, `cant`, `inactive`, …). Unknown line types are skipped rather than failing, so this degrades quietly — which means coverage should be *measured* when replay reconstruction is built, not assumed.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?

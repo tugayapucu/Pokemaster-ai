@@ -15,6 +15,7 @@ from champions_ai.data import (
     has_human_players,
     looks_like_bot,
     parse_ratings,
+    unobservable_turns,
 )
 
 LOG = "\n".join(
@@ -140,6 +141,27 @@ def test_round_trips_through_disk(replay, tmp_path):
     assert restored.metadata.replay_id == replay.metadata.replay_id
     assert restored.log == replay.log
     assert json.loads(path.read_text(encoding="utf-8"))["log"]
+
+
+def test_turns_where_a_pokemon_could_not_act_are_flagged_unobservable():
+    """`|cant|` records the failure, never the action its player chose."""
+    log = "\n".join([
+        "|player|p1|a|x|1500",
+        "|player|p2|b|y|1500",
+        "|turn|1",
+        "|move|p1a: X|Tackle|p2a: Y",
+        "|turn|2",
+        "|cant|p1a: X|par",
+        "|move|p2a: Y|Tackle|p1a: X",
+        "|turn|3",
+        "|move|p1a: X|Tackle|p2a: Y",
+    ])
+    replay = Replay.from_payload({**PAYLOAD, "log": log})
+    assert unobservable_turns(replay.log) == frozenset({2})
+
+
+def test_a_clean_battle_has_no_unobservable_turns(replay):
+    assert unobservable_turns(replay.log) == frozenset()
 
 
 def test_parse_ratings_directly():
