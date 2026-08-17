@@ -571,6 +571,33 @@ Support:
 
 ## Milestone 4 — Recommendation System V1
 
+### Status (2026-08-15): V1 built
+
+`src/champions_ai/recommendation/` ranks legal actions with confidences and human-readable reasons, driven by the *same* scorer the agent plays with — a test asserts advice and play agree, since a recommender that suggests what the agent would not do is describing someone else.
+
+Real output from a live position:
+
+```text
+TURN 1  --  considering 106 legal actions
+
+1. Charizard: Solar Beam -> the opposing Garchomp | Garchomp: Rock Slide  64%
+2. Charizard: Protect | Garchomp: Rock Slide                              16%
+3. Charizard: Flamethrower -> the opposing Charizard | Garchomp: Rock Slide 7%
+4. Other                                                                  13%
+
+why: Solar Beam deals ~35% of Garchomp's remaining HP; Rock Slide deals ~94%
+     of Charizard's remaining HP; knockout on a high roll; super effective
+     (4x); 90% accurate
+```
+
+Two fixes came from reading real output rather than from tests: at the first softmax temperature a *decisive* recommendation displayed as 11%, and `Flamethrower -> Charizard` was ambiguous because mirror matches are routine in Reg M-B (now "the opposing Charizard" / "your Venusaur").
+
+**Confidence is a share of a softmax over scores, not a win probability**, and is documented as such — a number shown to a human is read as a probability unless it says otherwise. A calibrated one comes from Milestone 7.
+
+Known gap carried forward: the heuristic does not model what Mega Evolution does to stats, so `X` and `X (+mega)` score identically. Indistinguishable options are collapsed in the shortlist, which hides the gap rather than fixing it.
+
+Still open from the deliverables below: search value and rollout value as alternative rankers, and the metrics (regret against a stronger reference, ranking stability, latency).
+
 ### Goal
 
 Turn the decision engine into a player-facing action ranker.
@@ -1208,7 +1235,16 @@ Verified directly against three replays (2026-08-15), which also turned up four 
 - **Mega Evolution is visible** — `|-mega|` followed by `|detailschange|` to the Mega forme. So Mega usage *is* learnable from replays, which matters given the heuristic currently cannot tell a Mega action apart from a normal one.
 - **The top-level `rating` field does not match the player lines.** One replay reported `rating: 1578` while its players were 1553 and 1643 — neither value, nor their mean. Its meaning is unclear, so `parse_ratings` reads the per-player Elo from `|player|` lines and the top-level field is ignored.
 
-The event vocabulary is also wider than the tracker currently handles (`-start`, `-activate`, `-fieldstart`, `-immune`, `-hitcount`, `cant`, `inactive`, …). Unknown line types are skipped rather than failing, so this degrades quietly — which means coverage should be *measured* when replay reconstruction is built, not assumed.
+The event vocabulary is also wider than the tracker handled. Unknown line types are skipped rather than failing, so this degrades quietly — so it is now **measured**, not assumed: `simulator/coverage.py` classifies every protocol line as handled, unhandled, or cosmetic.
+
+**Measured against real human replays: 75.6% → 97.2%** after closing the gaps it named. The remaining 2.8% is `|cant|` (already treated as an unobservable decision), `|teampreview|`, and `|-fieldactivate|`.
+
+Two things that exercise found, both worth more than the number:
+
+- **`|detailschange|` was unhandled, which was a *live* bug rather than a replay one.** It is the line sent when a Pokémon Mega Evolves, so an opponent that Mega'd kept being modelled as its base forme for the rest of the battle — with the wrong base stats behind every damage estimate the heuristic makes, in a format where Mega is central.
+- **Handler dispatch conflated major and minor lines.** Names were derived by stripping a leading dash, so `|start|` (the battle begins) and `|-start|` (a volatile condition begins) resolved to the same handler and crashed on the first real battle. They are now separate namespaces, with a test asserting they cannot collide.
+
+Coverage should be re-measured whenever replays are ingested in volume, rather than assumed to have held.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?
