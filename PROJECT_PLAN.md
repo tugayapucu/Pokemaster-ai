@@ -1332,6 +1332,31 @@ switch labels:  117, agreed on   8  ( 6.8%)
 **Humans switch on 11.0% of decisions; the heuristic switches on 1.7%.** All 117 switch labels had a matching switch available in our action set, so this is policy, not a reconstruction gap.
 
 That is one finding, not two. Protect and switching are both *decisions not to attack this turn*, and the heuristic attacks on 98.3% of turns against a human 89%. Every action is priced in damage dealt **now**, so anything paying off later — Protect, Tailwind, Trick Room, Rage Powder, switching — is invisible to it. Experiment 0001 reached the same limitation from the opposite direction, where one-turn search was inert because opponent replies were unknown. Both say the bottleneck is knowledge of what happens next, not search depth.
+
+### Acting on it: Protect scoring (2026-08-18)
+
+First change driven by the benchmark rather than by intuition. Full write-up in `docs/experiments/0003-protect-scoring.md`.
+
+Protect carried a flat 18 points plus a bonus below 35% HP, which cannot express either case that matters — a healthy Pokemon facing a knockout should protect, a weakened one facing nothing should not. It is now worth **the damage it avoids**, in the same currency as damage dealt, discounted by the engine's own stall rule (each consecutive use succeeds a third as often). The old code also matched the literal move id `protect` and silently missed Detect, Spiky Shield, King's Shield and the rest.
+
+Paired on identical labels — **McNemar's test, because comparing overlapping confidence intervals is the wrong test when both runs see the same 1,061 labels**:
+
+```
+old  418/1061 = 39.4%      only OLD agreed : 10
+new  439/1061 = 41.4%      only NEW agreed : 31
+McNemar chi2 = 9.76 on 41 discordant labels -> significant at p<0.01
+```
+
+It is calibrated rather than merely more eager, which was the risk: humans protect on **14.1%** of decisions, the heuristic now on **14.2%**.
+
+**Play strength did not move, and that is stated rather than buried.** 800 battles against the previous version give 51.6% (CI 48.2–55.1%, not significant); both score ~96% against Random. A 200-battle run had suggested 55.5% — noise, recorded because stopping there would have produced a false claim.
+
+Two lessons carried forward:
+
+- **Self-play head-to-head is the wrong primary instrument for scoring tweaks.** The two versions differ on ~14% of slots and agree on half of those, so they split near 50% whatever the merits — the same effect experiment 0001 hit. Worse, self-play cannot see a blind spot both agents share. Human agreement detected at p<0.01 a change that 800 battles could not distinguish from noise. Use self-play to confirm no regression; use agreement to detect improvement.
+- The change was **kept without claiming it wins more**: better-motivated, fixes a real coverage bug, replaces a magic constant with the game's rule, measurably closer to human judgement, no measurable cost.
+
+Also fixed on the way, a live bug: `|-singleturn|` effects never expired, so a Pokemon that used Protect once read as protected for the rest of the battle. The handler's own docstring said the point was that consecutive Protects grow likely to fail — which a permanent flag cannot express. Effects now expire at the turn boundary and a separate streak carries the signal, tracked for both sides.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?
