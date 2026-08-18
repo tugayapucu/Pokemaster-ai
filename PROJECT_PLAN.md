@@ -671,11 +671,23 @@ Human replays are the only source of real expert decisions this project has, and
 - [x] `data/replay.py` — fetch/parse a replay, read per-player Elo, filter visible bots, flag turns no replay can observe;
 - [x] `data/choices.py` — the **labels**: what each player actually chose, excluding four things that look like choices and are not;
 - [x] `data/reconstruct.py` — the **features**: what each player could legally see at each decision point, with the own/opponent knowledge boundary enforced and leak-tested;
-- [ ] bulk collection — **gated on checking Smogon's usage terms.** Only single-replay reads have been performed, for inspection. Public is not the same as licensed to redistribute, and this is a deliberate stop, not an oversight;
-- [ ] provenance records and split strategy for the collected set;
+- [x] `data/collect.py` — collection from the public API. **The usage-terms gate is resolved (2026-08-18);** see the note below. 50 rated games collected as a first batch;
+- [x] provenance records — `CollectionManifest` stores source, timestamp, git commit, filters and per-reason rejection counts next to the data, as section 4 requires;
+- [ ] split strategy (unseen players / unseen teams / future period) for the collected set;
 - [x] `evaluation/agreement.py` — the human-agreement benchmark that consumes both halves. Heuristic 44.1% vs a 21.3% random baseline; see section 12 and `docs/experiments/0002`.
 
 Measured yield: **~3.1 usable free-choice labels per turn**, or roughly 18,000 labelled human decisions per day at observed replay volume. Details, including the moveset-recovery bias that inflates agreement, are in section 12's open questions.
+
+### Usage terms — resolved 2026-08-18
+
+Checked directly rather than assumed. **Programmatic access is the documented, intended path**: `WEB-API.md` in the Showdown client repository states that "most PS APIs that you would want to access programmatically are available by adding `.json` to the URL", documents `search.json` with `before=` pagination, and serves everything with `Access-Control-Allow-Origin: *`. Its single "obviously don't _scrape_ it" remark is, in context, about the **HTML replay page**, and steers readers toward this API rather than away from it. `replay.pokemonshowdown.com` publishes no robots.txt (404); `smogon.com`'s names only Amazonbot.
+
+Two constraints follow from what the terms do **not** say, and both are now enforced in code rather than left to memory:
+
+- **No licence covers the replay logs.** MIT covers Showdown's *server code*; the privacy policy does not mention replays at all. So the corpus is collected for local research use, `CollectionManifest.usage_note` carries the constraint alongside the data, and `data/replays/` is gitignored with the reason written next to it. **Derived statistics and model weights are a separate question from redistributing the logs.**
+- **No rate limit is published**, which makes throttling our courtesy obligation rather than their permission. Every request passes through a deliberate delay (1/sec as used), and anything already on disk is never refetched — including *rejected* replays, so re-running with a looser filter costs no traffic.
+
+First batch, 2026-08-18: 436 listings considered → **50 kept**, 344 network requests. Rejections are themselves informative — **101 bot games (23%)**, 213 below the 1500 bar, 72 unrated. Bot names are visible in the listing, so those are skipped before any download.
 
 ---
 
@@ -1295,20 +1307,31 @@ Two live bugs surfaced from this work, neither of them replay-specific:
 
 `evaluation/agreement.py` scores an agent against what a rated human actually did. **This is the first measurement in the project that is not our code grading our own code** — every win rate before it compares agents we wrote against agents we wrote, so a shared blind spot is invisible.
 
-Measured on three rated ladder games, 59 free-choice labels (full write-up in `docs/experiments/0002-human-agreement.md`):
+Measured on **50 rated ladder games** (both players ≥1500, Elo 1500–1782, median 1589), 603 decision points, **1,061 free-choice labels** (full write-up in `docs/experiments/0002-human-agreement.md`):
 
 ```
-heuristic-v1  26/59 = 44.1%  (95% CI 32.2%-56.7%)  vs 21.3% random   beats random: yes
-random        12/59 = 20.3%  (95% CI 12.0%-32.3%)  vs 21.3% random   beats random: no
+heuristic-v1  418/1061 = 39.4%  (95% CI 36.5%-42.4%)  vs 21.1% random   beats random: yes
+random        228/1061 = 21.5%  (95% CI 19.1%-24.1%)  vs 21.1% random   beats random: no
 ```
 
-**`RandomAgent` landing on 20.3% against its own predicted 21.3% baseline is the check that matters** — the baseline is computed analytically rather than sampled, and a random policy lands where the theory says it should. That validates the metric before any claim is made with it.
+**`RandomAgent` landing on 21.5% against its own predicted 21.1% baseline is the check that matters** — the baseline is computed analytically rather than sampled, and a random policy lands where the theory says it should. That validates the metric before any claim is made with it.
+
+A 3-game pilot first reported 44.1% (CI 32.2–56.7%). The 50-game figure sits inside that interval, so nothing contradicts, but **the honest number is ~39%** and the interval narrowed from 24 points to 6. Recorded because the pilot figure was published first.
 
 Agreement is *not* strength: it rewards imitating the reference player, so a genuinely better move counts as a miss. Three numbers are reported with every figure because each moves it more than the agent does — the random baseline, the action-set size, and what could not be scored.
 
-**The disagreements are the useful part.** Of 33: **45% are status moves the heuristic passed over** (Protect 8, Trick Room 2, Hypnosis 2, Bulk Up, Follow Me, Perish Song), and **21% are the right move aimed at the wrong slot**. The heuristic played a damaging move instead almost every time.
+**The disagreements are the useful part.** Of 643: **37% are status moves the heuristic passed over** (Protect 90, Tailwind 20, Encore 14, Hypnosis 10, Trick Room 8, Rage Powder 8…), and **16% are the right move aimed at the wrong slot**.
 
-That is one finding, not two: **the heuristic cannot value a move whose payoff is on a later turn.** It is the same limitation experiment 0001 reached from the opposite direction — there, one-turn search was inert because opponent replies were unknown. Both say the bottleneck is knowledge of what happens next, not search depth.
+Splitting by action kind exposed something the pilot could not see — it contained exactly one switch label:
+
+```
+move labels  :  944, agreed on 410  (43.4%)
+switch labels:  117, agreed on   8  ( 6.8%)
+```
+
+**Humans switch on 11.0% of decisions; the heuristic switches on 1.7%.** All 117 switch labels had a matching switch available in our action set, so this is policy, not a reconstruction gap.
+
+That is one finding, not two. Protect and switching are both *decisions not to attack this turn*, and the heuristic attacks on 98.3% of turns against a human 89%. Every action is priced in damage dealt **now**, so anything paying off later — Protect, Tailwind, Trick Room, Rage Powder, switching — is invisible to it. Experiment 0001 reached the same limitation from the opposite direction, where one-turn search was inert because opponent replies were unknown. Both say the bottleneck is knowledge of what happens next, not search depth.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?
