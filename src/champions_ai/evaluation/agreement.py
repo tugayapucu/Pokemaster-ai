@@ -111,6 +111,21 @@ def action_signature(
     return ("move", move_id, key)
 
 
+def target_unobservable(choice: ObservedChoice, move_data: Mapping[str, MoveData]) -> bool:
+    """Whether the log hides a target the human definitely chose.
+
+    A move that failed or is mid-charge prints no target at all --
+    `|move|p1a: Kangaskhan|Fake Out||[still]`, followed by a hint that Fake Out
+    only works on the first turn out. The player picked a target; the log does
+    not say which. Treating that as an unrecoverable label would discard a real
+    decision, so the move is scored and the target is not.
+    """
+    if choice.kind != "move" or choice.target is not None or not choice.move:
+        return False
+    move = move_data.get(to_id(choice.move))
+    return move is not None and move.requires_target_choice
+
+
 @dataclass(frozen=True)
 class SlotComparison:
     """One slot on one turn: what the human did, and what the agent did."""
@@ -123,9 +138,15 @@ class SlotComparison:
     legal_count: int
     # Probability a uniform pick from the same action set would have matched.
     random_chance: float
+    # The log did not record which target the human picked, so only the move is
+    # compared here. Counted separately, since an unscored target is one fewer
+    # way to disagree.
+    target_unknown: bool = False
 
     @property
     def agrees(self) -> bool:
+        if self.target_unknown:
+            return self.agent is not None and self.agent[:2] == self.human[:2]
         return self.agent == self.human
 
     @property
@@ -153,6 +174,11 @@ class AgreementResult:
     @property
     def scored(self) -> int:
         return len(self.comparisons)
+
+    @property
+    def target_unknown(self) -> int:
+        """Labels where the log hid the target, so only the move was compared."""
+        return sum(1 for c in self.comparisons if c.target_unknown)
 
     @property
     def matches(self) -> int:
@@ -204,7 +230,8 @@ class AgreementResult:
             f"vs {self.random_baseline:.1%} random; "
             f"move-only {self.move_rate:.1%}; "
             f"{self.mean_actions:.1f} actions/slot; "
-            f"{self.unscorable} unscorable"
+            f"{self.unscorable} unscorable; "
+            f"{self.target_unknown} target-unknown"
         )
 
 
@@ -253,11 +280,18 @@ def measure_agreement(
 
         for choice in scorable:
             wanted = human_signature(choice, move_data)
+            hidden_target = target_unobservable(choice, move_data)
             options = legal_slot_actions(observation, choice.slot, move_data)
             available = [
                 action_signature(action, observation, choice.slot, move_data)
                 for action in options
             ]
+            if hidden_target and wanted is not None:
+                # Compare the move alone: the target the human chose is simply
+                # not in the log, which is a gap in the record rather than in
+                # their decision.
+                wanted = wanted[:2]
+                available = [None if a is None else a[:2] for a in available]
             if wanted is None or wanted not in available:
                 unscorable += 1
                 if len(examples) < 10:
@@ -278,13 +312,12 @@ def measure_agreement(
                     player=choice.player,
                     slot=choice.slot,
                     human=wanted,
-                    agent=(
-                        action_signature(agent_action, observation, choice.slot, move_data)
-                        if agent_action is not None
-                        else None
+                    agent=_agent_signature(
+                        agent_action, observation, choice.slot, move_data
                     ),
                     legal_count=len(options),
                     random_chance=available.count(wanted) / len(available),
+                    target_unknown=hidden_target,
                 )
             )
 
@@ -294,6 +327,17 @@ def measure_agreement(
         unscorable=unscorable,
         unscorable_examples=tuple(examples),
     )
+
+
+def _agent_signature(
+    action: SlotAction | None,
+    observation: Observation,
+    slot: int,
+    move_data: Mapping[str, MoveData],
+) -> Signature | None:
+    if action is None:
+        return None
+    return action_signature(action, observation, slot, move_data)
 
 
 def compare_agents(

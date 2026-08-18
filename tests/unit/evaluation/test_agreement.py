@@ -219,3 +219,40 @@ def test_an_empty_run_reports_nothing_rather_than_dividing_by_zero(battle):
     assert result.random_baseline == 0.0
     assert not result.beats_random
     assert "0/0" in result.summary()
+
+
+def test_a_failed_move_hides_its_target_but_is_still_a_real_choice(battle):
+    """`|move|p1a: Kangaskhan|Fake Out||[still]` -- the move failed, so Showdown
+    printed no target. The human still picked one; the log just does not say
+    which. Discarding the label would throw away a genuine decision.
+    """
+    from champions_ai.evaluation.agreement import target_unobservable
+
+    _, move_data = _setup(battle)
+    failed = ObservedChoice(
+        turn=2, player=0, slot=0, kind="move", actor="Incineroar",
+        move="Fake Out", target=None,
+    )
+    assert target_unobservable(failed, move_data)
+
+    # A move that never takes a target is a different case entirely.
+    spread = ObservedChoice(
+        turn=1, player=0, slot=0, kind="move", actor="Charizard",
+        move="Heat Wave", target=None,
+    )
+    assert not target_unobservable(spread, move_data)
+
+
+def test_a_hidden_target_is_scored_on_the_move_alone(battle):
+    log = (
+        *battle.through("|turn|1"),
+        "|move|p1a: Charizard|Heat Wave|p2a: Incineroar|[spread] p2a,p2b",
+        "|move|p1b: Garchomp|Fake Out||[still]",
+        "|-hint|Fake Out only works on your first turn out.",
+        "|turn|2",
+    )
+    decisions = battle.decisions(log)
+    move_data = move_data_from_dex(battle.dex)
+    result = measure_agreement(decisions, _Copycat(decisions, move_data), move_data)
+    assert result.target_unknown >= 1, "the failed Fake Out must be scored, not discarded"
+    assert result.unscorable == 0
