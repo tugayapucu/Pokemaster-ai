@@ -107,7 +107,9 @@ def test_a_guaranteed_status_beats_an_identical_plain_move(agent):
 
 def test_a_likely_status_is_worth_more_than_an_unlikely_one(agent):
     observation = _observation()
-    assert _score(agent, observation, "shocker").score > _score(agent, observation, "maybeburn").score
+    likely = _score(agent, observation, "shocker").score
+    unlikely = _score(agent, observation, "maybeburn").score
+    assert likely > unlikely
 
 
 def test_a_status_the_target_cannot_take_is_worth_nothing(agent):
