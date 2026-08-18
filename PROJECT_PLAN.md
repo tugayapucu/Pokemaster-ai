@@ -362,21 +362,54 @@ lead selection vs human leads   56.6%  vs 50.0% random   NOT significant
 
 ### Known gaps, in the order the evidence says to fix them
 
-1. **Switching.** Humans switch on 11.0% of decisions, the heuristic on 1.7%,
+1. **Move effects are not modelled at all** — see below. The heuristic prices
+   every move as expected damage, so a flinch, a status, a stat drop, recoil
+   and drain are all invisible. This is a *data* gap before it is a scoring
+   gap, and it sits underneath every other item here.
+2. **Switching.** Humans switch on 11.0% of decisions, the heuristic on 1.7%,
    agreeing on 8 of 117 switch labels. The largest single behavioural gap.
-2. **Team Preview is unvalidated.** 56.6% lead overlap against a 50% baseline
+3. **Team Preview is unvalidated.** 56.6% lead overlap against a 50% baseline
    on 53 scorable decisions — the interval contains the baseline, so it is not
    yet distinguishable from guessing. Needs more games, not more code.
-3. **Targeting.** ~17% of remaining disagreements are the right move aimed at
+4. **Targeting.** ~17% of remaining disagreements are the right move aimed at
    the wrong Pokemon.
-4. **Opponent modelling** (M10). Both experiments point here; the
+5. **Opponent modelling** (M10). Both experiments point here; the
    assumed-STAB prior in `mechanics/matchup.py` is the placeholder it replaces.
-5. **Struggle** is unmodelled, and is the whole of the benchmark's remaining
+6. **Struggle** is unmodelled, and is the whole of the benchmark's remaining
    unscorable labels.
-6. **Mega Evolution** is never offered by a reconstructed observation, so it is
+7. **Mega Evolution** is never offered by a reconstructed observation, so it is
    excluded from agreement rather than scored.
-7. **Nature** is stored as a name with no table mapping it to a stat, so
+8. **Nature** is stored as a name with no table mapping it to a stat, so
    matchup maths treats every Pokemon as neutral-natured.
+
+### Move effects: the gap underneath the others (identified 2026-08-18)
+
+`HeuristicAgent` scores every move as expected damage. Nothing else about a move reaches the score, and `MoveInfo` has no field to carry it — the bridge discards Showdown's `secondary`, `secondaries`, `drain`, `recoil` and `self` at the dump. **This is a data gap before it is a scoring gap.**
+
+What that costs, on real Reg M-B moves:
+
+| Move | What we see | What it is |
+|---|---|---|
+| Nuzzle | 20 BP, near worthless | **100% paralysis** |
+| Icy Wind | 55 BP spread | **100% Speed drop on both** — core VGC speed control |
+| Rock Slide | 75 BP spread | **30% flinch on both** |
+| Fake Out | 40 BP | **100% flinch, +3 priority**, first turn out only |
+| Zap Cannon | 120 BP at 50% accuracy | **100% paralysis**, which is what justifies the accuracy |
+| Flare Blitz | 120 BP | 120 BP **minus 33% recoil** |
+| Drain Punch | 75 BP | 75 BP **and heals half the damage dealt** |
+
+Measured on the 1,061-label benchmark: **41% of move labels (401/974) involve an effect we do not model.**
+
+**The headline number is misleading in our favour, and that is the important part.** Agreement on those moves is *higher* than on moves without them — 52.9% against 41.9% — because secondary effects cluster on high-base-power moves (Flare Blitz, Close Combat, Wave Crash, Moonblast are all 95–120 BP). A damage-first scorer picks them, humans pick them, and **we agree for the wrong reason**. The score conceals broken reasoning rather than exposing it.
+
+The real cost concentrates where base power is low or bad and the effect is the whole point: Fake Out (40 BP, 27 misses), Zap Cannon (50% accuracy bought with guaranteed paralysis, 12 misses), Rock Slide (7). Recoil and drain distort even the moves we get right.
+
+Planned in two stages, deliberately separated:
+
+- [ ] **Data.** Carry `secondary`/`secondaries` (chance, status, boosts, volatile), `drain`, `recoil` and self-boosts through the bridge dump into `MoveInfo`, guarded by an integration test against the engine — the same pattern that caught the missing `allies` target and the missing `endure` stall move. Cheap, low-risk, and required by everything after it.
+- [ ] **Scoring**, incrementally and one effect at a time so each is separately measurable: drain and recoil first (they are arithmetic on damage we already compute), then guaranteed status and stat drops, then probabilistic flinch. Fake Out additionally needs its first-turn-out restriction, which the engine enforces at runtime rather than reporting as `disabled` — confirmed by a human in our own data selecting it on turn 2 and getting the failure hint.
+
+Expect this to improve *reasoning* more than the agreement figure, for the same reason experiment 0003 found: where we already agree by coincidence, fixing the reason changes nothing the metric can see.
 
 ### Deliberately not done
 
