@@ -673,7 +673,7 @@ Human replays are the only source of real expert decisions this project has, and
 - [x] `data/reconstruct.py` — the **features**: what each player could legally see at each decision point, with the own/opponent knowledge boundary enforced and leak-tested;
 - [ ] bulk collection — **gated on checking Smogon's usage terms.** Only single-replay reads have been performed, for inspection. Public is not the same as licensed to redistribute, and this is a deliberate stop, not an oversight;
 - [ ] provenance records and split strategy for the collected set;
-- [ ] the human-agreement benchmark that consumes both halves.
+- [x] `evaluation/agreement.py` — the human-agreement benchmark that consumes both halves. Heuristic 44.1% vs a 21.3% random baseline; see section 12 and `docs/experiments/0002`.
 
 Measured yield: **~3.1 usable free-choice labels per turn**, or roughly 18,000 labelled human decisions per day at observed replay volume. Details, including the moveset-recovery bias that inflates agreement, are in section 12's open questions.
 
@@ -1291,7 +1291,24 @@ Two live bugs surfaced from this work, neither of them replay-specific:
 - **`MoveData` was missing the `allies` move target.** Showdown's vocabulary has fifteen values and ours had fourteen. Champions uses `allies` for **Howl** and **Life Dew**, both ordinary VGC moves, so the tracker raised a `ValidationError` while parsing the engine's own request payload the moment either was active. Now guarded by an integration test that checks our enum against the real dex dump — a unit test could not have caught it, because the value we had never heard of was missing from our test data too.
 - **`|teamsize|` reports the *picked* team size, not the declared one.** Verified against both a live engine battle and a published replay: it is emitted *after* Team Preview and reads `|teamsize|p1|4`. The tracker was already correct; this is recorded because the opposite assumption is the natural one and would silently double the opponent's apparent hidden bench.
 
-Still to build: the benchmark itself — how often does the heuristic pick what a rated human picked, reported alongside the choice-set size above.
+### The human-agreement benchmark (2026-08-18)
+
+`evaluation/agreement.py` scores an agent against what a rated human actually did. **This is the first measurement in the project that is not our code grading our own code** — every win rate before it compares agents we wrote against agents we wrote, so a shared blind spot is invisible.
+
+Measured on three rated ladder games, 59 free-choice labels (full write-up in `docs/experiments/0002-human-agreement.md`):
+
+```
+heuristic-v1  26/59 = 44.1%  (95% CI 32.2%-56.7%)  vs 21.3% random   beats random: yes
+random        12/59 = 20.3%  (95% CI 12.0%-32.3%)  vs 21.3% random   beats random: no
+```
+
+**`RandomAgent` landing on 20.3% against its own predicted 21.3% baseline is the check that matters** — the baseline is computed analytically rather than sampled, and a random policy lands where the theory says it should. That validates the metric before any claim is made with it.
+
+Agreement is *not* strength: it rewards imitating the reference player, so a genuinely better move counts as a miss. Three numbers are reported with every figure because each moves it more than the agent does — the random baseline, the action-set size, and what could not be scored.
+
+**The disagreements are the useful part.** Of 33: **45% are status moves the heuristic passed over** (Protect 8, Trick Room 2, Hypnosis 2, Bulk Up, Follow Me, Perish Song), and **21% are the right move aimed at the wrong slot**. The heuristic played a damaging move instead almost every time.
+
+That is one finding, not two: **the heuristic cannot value a move whose payoff is on a later turn.** It is the same limitation experiment 0001 reached from the opposite direction — there, one-turn search was inert because opponent replies were unknown. Both say the bottleneck is knowledge of what happens next, not search depth.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?
