@@ -1,5 +1,8 @@
 """Picking four of six, the first decision of every battle.
 
+Named `_selection` because pytest cannot import two test modules sharing a
+basename, and `tests/unit/domain/test_team_preview.py` already exists.
+
 Until now the strongest agent inherited the base default -- take the declared
 order and ignore the opponent entirely. These tests exist mostly to prove the
 choice is actually driven by the matchup, because an inert implementation
