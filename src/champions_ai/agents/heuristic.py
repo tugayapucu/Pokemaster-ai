@@ -59,6 +59,12 @@ PROTECT_SAVES_KO_BONUS = 90.0
 # Attacking advances the game and protecting does not, so blocking N% of your
 # HP is worth slightly less than dealing N% of theirs.
 PROTECT_TEMPO_COST = -20.0
+# Drain and recoil are priced in the same currency as damage dealt, because
+# that is exactly what they are: HP moved between the two bars. Weighted a
+# little below offence, since HP on our own bar is worth slightly less than HP
+# removed from theirs -- taking a Pokemon out removes its actions too.
+SUSTAIN_WEIGHT = 70.0
+
 # How a Team Preview pick is judged. A team is not a collection of good
 # Pokemon, it is a set of *answers*: what matters is having something for each
 # thing they brought, not maximising an average.
@@ -244,7 +250,46 @@ class HeuristicAgent(Agent):
             if move.hit_chance < 1:
                 reasons.append(f"{move.accuracy}% accurate")
 
+        sustain, sustain_reasons = self._sustain(move, estimate, attacker)
+        score += sustain * move.hit_chance
+        reasons.extend(sustain_reasons)
+
         return ScoredAction(action, score, tuple(reasons))
+
+    def _sustain(self, move, estimate, attacker) -> tuple[float, list[str]]:
+        """HP the move moves onto or off our own bar.
+
+        Drain and recoil are damage too, just pointed at us, so they belong in
+        the same currency rather than as a separate adjustment. Both are
+        clamped to what is actually available: healing above full is wasted,
+        and recoil cannot take more HP than the Pokemon has.
+        """
+        if not move.drain and not move.recoil:
+            return 0.0, []
+
+        dealt = estimate.average
+        value = 0.0
+        reasons: list[str] = []
+
+        if move.drain:
+            missing = max(0, attacker.max_hp - attacker.current_hp)
+            healed = min(move.drain_fraction * dealt, missing)
+            gain = healed / attacker.max_hp
+            value += gain * SUSTAIN_WEIGHT
+            if gain > 0:
+                reasons.append(f"heals back ~{gain:.0%} of its own HP")
+            else:
+                reasons.append("already at full HP, so the drain is wasted")
+
+        if move.recoil:
+            taken = min(move.recoil_fraction * dealt, attacker.current_hp)
+            loss = taken / attacker.max_hp
+            value -= loss * SUSTAIN_WEIGHT
+            reasons.append(f"but costs ~{loss:.0%} of its own HP in recoil")
+            if taken >= attacker.current_hp:
+                reasons.append("which would knock it out")
+
+        return value, reasons
 
     def _score_status_move(
         self,
