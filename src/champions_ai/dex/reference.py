@@ -42,6 +42,27 @@ class SpeciesInfo(BaseModel, frozen=True):
     base_species: str = ""
 
 
+class SecondaryEffect(BaseModel, frozen=True):
+    """A move's rider: what it does beyond damage, and how often.
+
+    `chance` is a percentage, and 100 means guaranteed rather than merely
+    likely -- Nuzzle always paralyses, Fake Out always flinches. Treating a
+    guaranteed rider as a coin flip is as wrong as ignoring it.
+    """
+
+    chance: int
+    status: str | None = None
+    volatile_status: str | None = None
+    # Stat stages inflicted on the *target*.
+    boosts: dict[str, int] = Field(default_factory=dict)
+    # Stat stages applied to the *user* when the rider fires.
+    self_boosts: dict[str, int] = Field(default_factory=dict)
+
+    @property
+    def is_guaranteed(self) -> bool:
+        return self.chance >= 100
+
+
 class MoveInfo(BaseModel, frozen=True):
     move_id: str
     name: str
@@ -58,7 +79,48 @@ class MoveInfo(BaseModel, frozen=True):
     # wider set than "blocks damage to the user": Endure shares the counter
     # while letting the hit land.
     stalling: bool = False
+    # What the move does beyond damage. Empty means "no rider", which is not
+    # the same as "unknown" -- the dump is exhaustive.
+    secondaries: tuple[SecondaryEffect, ...] = ()
+    # [numerator, denominator] fractions of damage dealt, or None.
+    drain: tuple[int, int] | None = None
+    recoil: tuple[int, int] | None = None
+    # Unconditional self-boosts, as distinct from a secondary's: Close Combat
+    # always drops its own defences rather than rolling for it.
+    self_boosts: dict[str, int] = Field(default_factory=dict)
     flags: frozenset[str] = frozenset()
+
+    @property
+    def drain_fraction(self) -> float:
+        """Share of damage dealt that heals the user."""
+        return self.drain[0] / self.drain[1] if self.drain else 0.0
+
+    @property
+    def recoil_fraction(self) -> float:
+        """Share of damage dealt that the user takes back."""
+        return self.recoil[0] / self.recoil[1] if self.recoil else 0.0
+
+    @property
+    def flinch_chance(self) -> float:
+        """Probability this move makes the target flinch, 0 to 1."""
+        return max(
+            (s.chance / 100 for s in self.secondaries if s.volatile_status == "flinch"),
+            default=0.0,
+        )
+
+    def status_chance(self, status: str) -> float:
+        return max(
+            (s.chance / 100 for s in self.secondaries if s.status == status),
+            default=0.0,
+        )
+
+    @property
+    def guaranteed_status(self) -> str | None:
+        """A status this move always inflicts -- Nuzzle's paralysis, not Scald's burn."""
+        for secondary in self.secondaries:
+            if secondary.is_guaranteed and secondary.status:
+                return secondary.status
+        return None
 
     @property
     def is_damaging(self) -> bool:
@@ -157,6 +219,19 @@ class Dex(BaseModel, frozen=True):
                 priority=entry["priority"],
                 target=entry["target"],
                 stalling=bool(entry.get("stallingMove", False)),
+                secondaries=tuple(
+                    SecondaryEffect(
+                        chance=secondary.get("chance", 100),
+                        status=secondary.get("status") or None,
+                        volatile_status=secondary.get("volatileStatus") or None,
+                        boosts=dict(secondary.get("boosts") or {}),
+                        self_boosts=dict(secondary.get("selfBoosts") or {}),
+                    )
+                    for secondary in entry.get("secondaries") or ()
+                ),
+                drain=tuple(entry["drain"]) if entry.get("drain") else None,
+                recoil=tuple(entry["recoil"]) if entry.get("recoil") else None,
+                self_boosts=dict(entry.get("selfBoosts") or {}),
                 flags=frozenset(entry.get("flags", ())),
             )
             for move_id, entry in payload["moves"].items()

@@ -122,6 +122,33 @@ function dexDump(msg) {
 		};
 	}
 
+// Showdown carries a move's real effects in `secondary`/`secondaries`,
+// `drain`, `recoil` and `self`. Dropping them at the dump left the Python side
+// pricing every move as raw damage, which misvalues most of what a VGC player
+// actually presses: Nuzzle is 20 BP and 100% paralysis, Icy Wind 55 BP and a
+// guaranteed Speed drop, Flare Blitz 120 BP minus a third of it back.
+function normaliseSecondary(entry) {
+	if (!entry) return null;
+	return {
+		chance: entry.chance === undefined ? 100 : entry.chance,
+		status: entry.status || null,
+		volatileStatus: entry.volatileStatus || null,
+		// `boosts` land on the target; `self.boosts` on the user.
+		boosts: entry.boosts || {},
+		selfBoosts: (entry.self && entry.self.boosts) || {},
+	};
+}
+
+function moveSecondaries(entry) {
+	const listed = [];
+	if (entry.secondaries) {
+		for (const secondary of entry.secondaries) listed.push(normaliseSecondary(secondary));
+	} else if (entry.secondary) {
+		listed.push(normaliseSecondary(entry.secondary));
+	}
+	return listed.filter(Boolean);
+}
+
 	const moves = {};
 	for (const entry of dex.moves.all()) {
 		if (entry.isNonstandard) continue;
@@ -140,6 +167,13 @@ function dexDump(msg) {
 			// hand-listed on the Python side, because a hand-copied list of
 			// engine facts is exactly what drifts.
 			stallingMove: !!entry.stallingMove,
+			secondaries: moveSecondaries(entry),
+			// Both are [numerator, denominator] fractions of damage dealt.
+			drain: entry.drain || null,
+			recoil: entry.recoil || null,
+			// Unconditional self-boosts, as distinct from a secondary's: Close
+			// Combat always drops its own defences, it does not roll for it.
+			selfBoosts: (entry.self && entry.self.boosts) || {},
 			flags: Object.keys(entry.flags || {}),
 		};
 	}

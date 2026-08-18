@@ -69,3 +69,46 @@ def test_wide_and_quick_guard_do_not_touch_the_counter(bridge):
     for move_id in ("wideguard", "quickguard"):
         assert not dex.get_move(move_id).stalling
         assert move_id not in STALL_MOVES
+
+
+def test_move_effects_survive_the_dump(bridge):
+    """The dump is where move effects were being silently discarded.
+
+    Checked against named moves with known riders rather than by counting,
+    because an empty `secondaries` is indistinguishable from a move that has
+    none -- the failure this guards is silent by construction.
+    """
+    dex = Dex.load(bridge)
+
+    nuzzle = dex.get_move("nuzzle")
+    assert nuzzle.guaranteed_status == "par", "Nuzzle is 20 BP and always paralyses"
+
+    fakeout = dex.get_move("fakeout")
+    assert fakeout.flinch_chance == 1.0
+    assert fakeout.priority == 3
+
+    rockslide = dex.get_move("rockslide")
+    assert 0 < rockslide.flinch_chance < 1, "Rock Slide flinches sometimes, not always"
+
+    icywind = dex.get_move("icywind")
+    assert any(s.boosts.get("spe") == -1 for s in icywind.secondaries)
+
+    assert dex.get_move("drainpunch").drain_fraction == 0.5
+    assert 0.3 < dex.get_move("flareblitz").recoil_fraction < 0.35
+    # Unconditional, not a rider: Close Combat never rolls for this.
+    assert dex.get_move("closecombat").self_boosts == {"def": -1, "spd": -1}
+
+
+def test_a_plain_move_carries_no_effects(bridge):
+    """Guards the test above against passing because everything looks empty.
+
+    Dragon Claw rather than Tackle: Champions has a restricted move pool and
+    Tackle is not in it.
+    """
+    dex = Dex.load(bridge)
+    plain = dex.get_move("dragonclaw")
+    assert plain.secondaries == ()
+    assert plain.drain is None and plain.recoil is None
+    assert plain.self_boosts == {}
+    assert plain.flinch_chance == 0.0
+    assert plain.guaranteed_status is None
