@@ -1,7 +1,7 @@
 # Pokémon Champions AI — Long-Term Project Plan
 
 > **Status:** Living project roadmap  
-> **Last updated:** 2026-08-10  
+> **Last updated:** 2026-08-18  
 > **Primary game:** Pokémon Champions  
 > **Primary competitive format:** Double Battles / VGC-style play  
 > **Primary objective:** Build a strong battle recommendation system and, over time, an autonomous Pokémon Champions agent using classical algorithms, supervised learning, reinforcement learning, search, opponent modelling, and self-play.
@@ -331,6 +331,61 @@ Observation
 `Observation` contains only information legally available to the relevant player.
 
 # 7. Long-Term Roadmap
+
+## Where the project actually is (2026-08-18)
+
+A single place to see status, because the per-milestone notes below have grown
+long. Each line links to where the detail lives.
+
+### Done and measured
+
+| | Status |
+|---|---|
+| **Domain model** (§6) | Complete. Immutable, `Observation` is the only path from truth to agent, leak tests verified non-vacuous. |
+| **Simulator bridge** (M1–2) | Showdown `sim` driven headlessly, per-player streams, seeded replay exact, 97.2% protocol coverage. |
+| **Legal actions** (M1) | Engine-reported availability (ADR 0003). Gap: Struggle unmodelled. |
+| **Baseline agents** (M3) | Random, Heuristic, Search. Heuristic beats Random 96.3%. |
+| **Evaluation harness** (M3) | Teams exchanged per matchup, Wilson intervals, conservative significance. |
+| **Damage model** (M1) | Verified exactly against engine output across 38 non-crit hits. |
+| **Replay pipeline** (M5) | Fetch, filter, choice labels, observation reconstruction, provenance manifests. Usage-terms gate resolved. |
+| **Human-agreement benchmark** (M5) | 1,061 labels from 50 rated games. The first external metric this project has. |
+| **Team Preview** (M13) | Implemented and explainable. **Not yet validated** — see below. |
+
+### Measured results worth remembering
+
+```
+heuristic-v1 vs random          96.3%  significant
+search-v1    vs heuristic-v1    49.3%  not significant   (experiment 0001)
+heuristic-v1 human agreement    42.2%  vs 21.7% random   (experiment 0002/0003)
+lead selection vs human leads   56.6%  vs 50.0% random   NOT significant
+```
+
+### Known gaps, in the order the evidence says to fix them
+
+1. **Switching.** Humans switch on 11.0% of decisions, the heuristic on 1.7%,
+   agreeing on 8 of 117 switch labels. The largest single behavioural gap.
+2. **Team Preview is unvalidated.** 56.6% lead overlap against a 50% baseline
+   on 53 scorable decisions — the interval contains the baseline, so it is not
+   yet distinguishable from guessing. Needs more games, not more code.
+3. **Targeting.** ~17% of remaining disagreements are the right move aimed at
+   the wrong Pokemon.
+4. **Opponent modelling** (M10). Both experiments point here; the
+   assumed-STAB prior in `mechanics/matchup.py` is the placeholder it replaces.
+5. **Struggle** is unmodelled, and is the whole of the benchmark's remaining
+   unscorable labels.
+6. **Mega Evolution** is never offered by a reconstructed observation, so it is
+   excluded from agreement rather than scored.
+7. **Nature** is stored as a name with no table mapping it to a stat, so
+   matchup maths treats every Pokemon as neutral-natured.
+
+### Deliberately not done
+
+- Bulk collection beyond research use: the replay logs carry no licence, so the
+  corpus is never redistributed (§12, and `CollectionManifest.usage_note`).
+- Anything in §3's out-of-scope list — client automation, matchmaking, botting.
+- A learned model. Baselines first, and the benchmark to judge them by now
+  exists.
+
 
 ## Milestone 0 — Research, Scope, and Reproducible Skeleton
 
@@ -939,6 +994,29 @@ Potential methods:
 - simulation-based evaluation.
 
 ---
+
+### Implementation status (2026-08-18)
+
+**Team Preview selection is implemented** — `HeuristicAgent.select_team_preview`, with `explain_team_preview` for the recommendation system. This was the project's original stated use case ("which 4 pokémon should I pick after seeing the opponent's 6") and had been silently inherited from the base class, which takes the declared order and ignores the opponent entirely.
+
+Scored as **coverage**, not as a sum of individually strong Pokémon: for each of their six, take our best answer among the four under consideration, and add those up. Four Pokémon that all beat the same threat and lose to everything else score badly, which is the intent. Six choose four is fifteen combinations, so the exhaustive answer is cheaper than approximating it.
+
+The matchup maths lives in `mechanics/matchup.py` rather than in the agent, because **switching asks the same question** — is what I would bring in better placed than what is out — and that is the next gap to close. It also absorbed the assumed-attack prior the Protect work introduced, so "we cannot see their moves" is modelled in exactly one place.
+
+**Measured against 200 real human lead choices, and it is not yet better than guessing:**
+
+```
+lead overlap 56.6% (30/53 decisions)  vs 50.0% random  95% CI 43.3%-69.0%
+```
+
+The interval contains the baseline. Stated plainly rather than presented as a win: the implementation is principled and explainable, but unvalidated.
+
+Two things limit that measurement, and the first is a trap worth recording:
+
+- **"Did we pick the same four?" is deliberately not measured.** A replay reveals a Pokémon's moves only if it was brought *and* used them, so the two left behind have no moveset, would score zero offence, and would never be picked. We would "predict" the human's four for a circular reason. That is a self-fulfilling metric, so only the lead ordering *among the four they brought* is scored.
+- Even that tilts our way: leads spend more turns on the field, so more of their moves are revealed, and the scoring rewards a known moveset.
+
+53 scorable decisions gives a ±13 point interval. **This needs more games, not more code.**
 
 ## Milestone 14 — User Interface and Productization
 
