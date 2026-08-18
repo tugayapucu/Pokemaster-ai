@@ -65,6 +65,44 @@ PROTECT_TEMPO_COST = -20.0
 # removed from theirs -- taking a Pokemon out removes its actions too.
 SUSTAIN_WEIGHT = 70.0
 
+# What a status is worth, as a fraction of a health bar. These are judgements,
+# not measurements, and they are ordered by how much of a Pokemon's
+# contribution the status removes rather than by how much damage it deals:
+# sleep takes turns away outright, paralysis halves Speed *and* skips turns,
+# burn halves physical attack, poison is chip damage and little else.
+STATUS_VALUE = {
+    "slp": 0.60,
+    "frz": 0.55,
+    "par": 0.35,
+    "brn": 0.30,
+    "tox": 0.25,
+    "psn": 0.15,
+}
+STATUS_WEIGHT = 100.0
+
+# Types that cannot receive a given status at all. Ignoring this made Nuzzle
+# look like a fine answer to an Electric-type and Will-O-Wisp to a Fire-type.
+STATUS_IMMUNE_TYPES = {
+    "par": {"Electric"},
+    "brn": {"Fire"},
+    "psn": {"Poison", "Steel"},
+    "tox": {"Poison", "Steel"},
+    "frz": {"Ice"},
+}
+
+# One stat stage, as a fraction of a health bar. Flat across stats on purpose:
+# weighting them separately is a refinement, and an unjustified table of six
+# numbers is harder to argue with than one.
+STAT_STAGE_VALUE = 0.12
+STAT_STAGE_WEIGHT = 100.0
+
+# Stats whose loss only matters if something actually hits us afterwards. An
+# offensive drop reduces our damage whatever happens; a defensive one is a bill
+# that only arrives if we are still there to be hit. Charging Close Combat the
+# full price for its own -1 Def/-1 SpD made the agent avoid one of the format's
+# best attacks.
+DEFENSIVE_STATS = frozenset({"def", "spd", "evasion"})
+
 # How a Team Preview pick is judged. A team is not a collection of good
 # Pokemon, it is a set of *answers*: what matters is having something for each
 # thing they brought, not maximising an average.
@@ -254,7 +292,89 @@ class HeuristicAgent(Agent):
         score += sustain * move.hit_chance
         reasons.extend(sustain_reasons)
 
+        rider, rider_reasons = self._rider_value(move, defender_species, observation, slot)
+        score += rider * move.hit_chance
+        reasons.extend(rider_reasons)
+
         return ScoredAction(action, score, tuple(reasons))
+
+    def _rider_value(
+        self, move, defender_species, observation: Observation, slot: int
+    ) -> tuple[float, list[str]]:
+        """What the move does besides damage: status, stat changes, self-cost.
+
+        Priced by expected value -- a 30% burn is worth 30% of a burn -- with
+        one exception that is not a rounding detail: a guaranteed rider is
+        certain, and Nuzzle's paralysis or Zap Cannon's are the entire reason
+        those moves are worth pressing at 20 base power and 50% accuracy.
+        """
+        value = 0.0
+        reasons: list[str] = []
+        target = self._observed_target(observation, slot)
+
+        for secondary in move.secondaries:
+            chance = secondary.chance / 100
+
+            if secondary.status:
+                gain = self._status_value(secondary.status, defender_species, target)
+                if gain:
+                    value += chance * gain * STATUS_WEIGHT
+                    certainty = "always" if secondary.is_guaranteed else f"{secondary.chance}%"
+                    reasons.append(f"{certainty} inflicts {secondary.status}")
+
+            for stat, stages in secondary.boosts.items():
+                # Negative stages on the target are good for us.
+                value += chance * -stages * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+                if stages < 0:
+                    reasons.append(f"drops their {stat}")
+
+            for stat, stages in secondary.self_boosts.items():
+                value += chance * stages * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+                if stages > 0:
+                    reasons.append(f"raises our {stat}")
+
+        # Unconditional, as distinct from a rider: Close Combat always drops
+        # its own defences rather than rolling for it.
+        attacker = self._own_active(observation, slot)
+        threat = 1.0
+        if attacker is not None and any(
+            stat in DEFENSIVE_STATS and stages < 0
+            for stat, stages in move.self_boosts.items()
+        ):
+            threat, _, _ = self._incoming_threat(observation, slot, attacker)
+
+        for stat, stages in move.self_boosts.items():
+            cost = stages * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+            if stat in DEFENSIVE_STATS and stages < 0:
+                # Priced against what is actually coming: dropping our defence
+                # in front of something harmless costs nothing.
+                cost *= threat
+            value += cost
+            if stages < 0:
+                reasons.append(f"but lowers our own {stat}")
+
+        return value, reasons
+
+    def _status_value(self, status: str, defender_species, target) -> float:
+        """Worth of landing `status`, or zero when it cannot land at all."""
+        if status not in STATUS_VALUE:
+            return 0.0
+        # A Pokemon can only carry one status, so a second never lands.
+        if target is not None and target.status:
+            return 0.0
+        immune = STATUS_IMMUNE_TYPES.get(status, set())
+        if immune & set(defender_species.types):
+            return 0.0
+        return STATUS_VALUE[status]
+
+    @staticmethod
+    def _observed_target(observation: Observation, slot: int):
+        """The opponent this slot would most likely be hitting, if visible."""
+        opponent = observation.opponent_side
+        for index in opponent.active_slots:
+            if index is not None and not opponent.revealed[index].fainted:
+                return opponent.revealed[index]
+        return None
 
     def _sustain(self, move, estimate, attacker) -> tuple[float, list[str]]:
         """HP the move moves onto or off our own bar.
