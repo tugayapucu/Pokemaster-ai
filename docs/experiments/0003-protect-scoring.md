@@ -113,3 +113,48 @@ benchmark is for.
   confirm no regression, and agreement to detect improvement.
 - Replace the assumed-STAB prior with something inferred from usage data when
   opponent modelling (Milestone 10) lands.
+
+## Postscript — what the model of Protect still gets wrong
+
+Written after checking the implementation against Showdown's move data rather
+than against memory. Two errors and one unmodelled rule came out of it.
+
+**Verified correct:** the ⅓ falloff the scoring relies on. Showdown's `stall`
+condition starts its counter at 3, triples it on each consecutive use
+(`onRestart`), and rolls `randomChance(1, counter)`. A failed attempt deletes
+the volatile, so a miss resets the chain — which the tracker reproduces, since
+a failed Protect emits no `|-singleturn|` line to extend the streak.
+
+**Error 1 — two sets had been conflated.** The engine marks 11 moves
+`stallingMove: true`; the list here named 9. But the missing two do not belong
+in the same set as the rest:
+
+| | Drives the counter | Blocks the hit on its user |
+|---|---|---|
+| Protect, Detect, Spiky Shield, King's Shield, Baneful Bunker, Obstruct, Silk Trap, Burning Bulwark, Max Guard | yes | yes |
+| **Endure** | yes | **no** — the hit lands, the user survives on 1 HP |
+| **Mat Block** | yes | shields the *side*, switch-in turn only |
+
+Pricing Endure as damage avoided would be flatly wrong, so the sets are now
+separate: `STALL_MOVES` for the tracker's streak, `PROTECT_MOVES` for scoring.
+Endure is in the Champions dex, so this was reachable: a Protect used after an
+Endure looked like a first use, expected to succeed, where the engine gives it
+one chance in three.
+
+Wide Guard, Quick Guard and Crafty Shield are correctly in neither set — they
+block a category of move and have not touched the counter since Gen 6.
+
+**Error 2 — the value model is narrower than the real move.** Protect is priced
+here purely as *damage avoided*. That is not the main reason VGC players press
+it. The commoner reasons are positional: scouting, stalling out Trick Room or
+Tailwind turns, letting a partner set up safely, wasting a Fake Out, or dodging
+a predicted double-target. None of those are visible to a damage-only model,
+which is very likely why agreement on *when* to protect is still only about
+half (74 of 150) even though the *rate* now matches humans almost exactly.
+
+**Unmodelled rule.** `protect`'s `onPrepareHit` is
+`!!this.queue.willAct() && this.runEvent('StallMove', pokemon)` — **Protect
+fails outright if nothing else is left to act this turn.** At +4 priority it
+almost always moves first in a four-Pokémon doubles turn, so this rarely fires,
+but it is a real rule the scoring does not know about. Modelling it needs turn
+ordering across all four slots, which the heuristic does not compute.
