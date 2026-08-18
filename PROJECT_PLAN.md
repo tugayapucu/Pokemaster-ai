@@ -664,6 +664,19 @@ Important split strategies may include:
 - future metagame period;
 - different regulation when scientifically meaningful.
 
+### Implementation status (2026-08-18)
+
+Human replays are the only source of real expert decisions this project has, and the parsing half of the pipeline is built and validated against real ladder games:
+
+- [x] `data/replay.py` — fetch/parse a replay, read per-player Elo, filter visible bots, flag turns no replay can observe;
+- [x] `data/choices.py` — the **labels**: what each player actually chose, excluding four things that look like choices and are not;
+- [x] `data/reconstruct.py` — the **features**: what each player could legally see at each decision point, with the own/opponent knowledge boundary enforced and leak-tested;
+- [ ] bulk collection — **gated on checking Smogon's usage terms.** Only single-replay reads have been performed, for inspection. Public is not the same as licensed to redistribute, and this is a deliberate stop, not an oversight;
+- [ ] provenance records and split strategy for the collected set;
+- [ ] the human-agreement benchmark that consumes both halves.
+
+Measured yield: **~3.1 usable free-choice labels per turn**, or roughly 18,000 labelled human decisions per day at observed replay volume. Details, including the moveset-recovery bias that inflates agreement, are in section 12's open questions.
+
 ---
 
 ## Milestone 6 — Imitation Learning
@@ -1258,7 +1271,27 @@ Coverage should be re-measured whenever replays are ingested in volume, rather t
 
 Measured on real replays: 19 turns produce 39 decision points and **~3.1 usable free-choice labels per turn**. At ~1,000 games/day of roughly 6 turns each, that is on the order of 18,000 labelled human decisions per day — ample for imitation learning, subject to the usage-terms check.
 
-Still to build for the benchmark: reconstructing the *observation* at each decision point. The rule that keeps it honest is asymmetric — the acting player's own moveset may be recovered from the whole replay, because they genuinely knew their own team, but the opponent's must be limited to what had been revealed by that turn.
+### Reconstructing what each player saw (2026-08-18)
+
+`data/reconstruct.py` supplies the other half of a supervised example: `choices.py` recovers *what* a player did, this recovers *what they were looking at*. Both trackers are fed the same spectator log, each treating the other player as its opponent, which makes the knowledge boundary asymmetric on purpose:
+
+- the **acting player's own side** is assembled from the whole replay. They knew their four picks and their movesets from the moment the battle started, so reading a move off turn 9 to populate their turn 2 view recovers knowledge they genuinely had;
+- the **opponent's side** is limited to what the log had revealed by that turn. Anything else is the future-leak `AGENTS.md` forbids, and it flatters results — the agent would "predict" a human's move while secretly knowing what the human did not.
+
+Validated on three real ladder replays — 33 decision points, 59 labels:
+
+- the move the human chose was in the reconstructed action set **58 of 58** times, so every move label is scorable;
+- **zero future leaks**, checked against ground truth read straight off the log rather than against the tracker that produced the observation;
+- 5.8 legal actions per slot on average.
+
+**The caveat is measured, not asserted.** Only **1.81 of 4 moves** are recoverable per Pokémon — a move never used leaves no trace — and 13 of 132 Pokémon-views had *none*. A smaller action set means fewer distractors, so this **inflates** agreement. Every decision therefore carries `known_move_counts`, and any agreement figure quoted without it overstates the result.
+
+Two live bugs surfaced from this work, neither of them replay-specific:
+
+- **`MoveData` was missing the `allies` move target.** Showdown's vocabulary has fifteen values and ours had fourteen. Champions uses `allies` for **Howl** and **Life Dew**, both ordinary VGC moves, so the tracker raised a `ValidationError` while parsing the engine's own request payload the moment either was active. Now guarded by an integration test that checks our enum against the real dex dump — a unit test could not have caught it, because the value we had never heard of was missing from our test data too.
+- **`|teamsize|` reports the *picked* team size, not the declared one.** Verified against both a live engine battle and a published replay: it is emitted *after* Team Preview and reads `|teamsize|p1|4`. The tracker was already correct; this is recorded because the opposite assumption is the natural one and would silently double the opponent's apparent hidden bench.
+
+Still to build: the benchmark itself — how often does the heuristic pick what a rated human picked, reported alongside the choice-set size above.
 - [ ] What information does the Champions client expose during a battle?
 - [x] What should the first supported regulation be? — **Resolved 2026-08-10:** Gen 9 VGC 2026 Regulation M-B (Doubles). Revisit when the regulation rotates.
 - [ ] How should team preview and lead selection be represented?
