@@ -22,6 +22,10 @@ class ObservedPokemon(BaseModel, frozen=True):
     status: str | None = None
     boosts: Boosts = Boosts()
     volatile_conditions: frozenset[str] = frozenset()
+    # Consecutive turns this Pokemon has just used Protect or a relative.
+    # Each successive use is far more likely to fail, so an agent weighing
+    # another one needs the count, not merely "it protected at some point".
+    protect_streak: int = 0
     revealed_moves: frozenset[str] = frozenset()
     revealed_ability: str | None = None
     revealed_item: str | None = None
@@ -36,6 +40,7 @@ class ObservedPokemon(BaseModel, frozen=True):
             status=mon.status,
             boosts=mon.boosts,
             volatile_conditions=mon.volatile_conditions,
+            protect_streak=mon.protect_streak,
             revealed_moves=mon.revealed_moves,
             revealed_ability=mon.current_ability if mon.ability_revealed else None,
             revealed_item=mon.current_item if mon.item_revealed else None,

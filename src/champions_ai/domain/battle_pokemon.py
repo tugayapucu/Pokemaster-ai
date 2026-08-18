@@ -13,6 +13,10 @@ class BattlePokemon(BaseModel, frozen=True):
     max_hp: int
     status: str | None = None
     volatile_conditions: frozenset[str] = frozenset()
+    # Consecutive turns this Pokemon has just used Protect or a relative.
+    # Symmetric with ObservedPokemon: our own streak governs whether
+    # protecting again is worth a turn just as much as an opponent's does.
+    protect_streak: int = 0
     boosts: Boosts = Boosts()
     current_ability: str | None = None
     current_item: str | None = None

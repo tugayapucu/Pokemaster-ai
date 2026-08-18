@@ -45,6 +45,15 @@ BOOST_FIELDS = {
 
 SLOT_LETTERS = "abcdef"
 
+# Moves that set the "stall" counter: using one on consecutive turns makes it
+# increasingly likely to fail, which is the whole reason a streak is tracked.
+PROTECT_MOVES = frozenset(
+    {
+        "protect", "detect", "kingsshield", "spikyshield", "banefulbunker",
+        "obstruct", "silktrap", "burningbulwark", "maxguard",
+    }
+)
+
 # Engine request flags -> our SpecialMechanic names (ADR 0003). Reg M-B only
 # raises canMegaEvo, but the rest are here so a regulation enabling them needs
 # no code change.
@@ -116,6 +125,11 @@ class _OpponentPokemon:
         self.status: str | None = None
         self.boosts = Boosts()
         self.volatiles: set[str] = set()
+        # Kept apart from `volatiles` because these last exactly one turn and
+        # must be dropped when the next begins -- a Protect that never expired
+        # made a Pokemon look permanently shielded for the rest of the battle.
+        self.single_turn: set[str] = set()
+        self.protect_streak = 0
         self.revealed_moves: set[str] = set()
         self.revealed_item: str | None = None
         self.revealed_ability: str | None = None
@@ -128,7 +142,8 @@ class _OpponentPokemon:
             fainted=self.fainted,
             status=self.status,
             boosts=self.boosts,
-            volatile_conditions=frozenset(self.volatiles),
+            volatile_conditions=frozenset(self.volatiles | self.single_turn),
+            protect_streak=self.protect_streak,
             revealed_moves=frozenset(self.revealed_moves),
             revealed_ability=self.revealed_ability,
             revealed_item=self.revealed_item,
@@ -170,6 +185,10 @@ class BattleTracker:
         self._opponent_side_conditions: dict[str, int] = {}
         self._nickname_to_species: dict[str, str] = {}
         self._opponent_mega_used = False
+        # Both sides: our own streak matters as much as theirs when
+        # deciding whether protecting again is worth a turn.
+        self._protect_streak: dict[tuple[str, str], int] = {}
+        self._protect_turn: dict[tuple[str, str], int] = {}
         self._opponent_roster: list[RevealedPokemon] = []
         self._own_team = own_team
 
@@ -228,7 +247,18 @@ class BattleTracker:
     # --------------------------------------------------------- line handlers
 
     def _on_turn(self, args: list[str]) -> None:
+        """A new turn begins, so anything that lasted one turn is over.
+
+        Without this a `|-singleturn|` effect accumulated forever: a Pokemon
+        that used Protect once read as protected for the rest of the battle.
+        """
         self._turn = int(args[0])
+        for mon in self._opponents.values():
+            mon.single_turn.clear()
+        for key, turn in list(self._protect_turn.items()):
+            if turn < self._turn - 1:
+                self._protect_streak.pop(key, None)
+                self._protect_turn.pop(key, None)
 
     def _on_win(self, args: list[str]) -> None:
         self._winner = args[0]
@@ -284,9 +314,14 @@ class BattleTracker:
             self._opponent_order.append(known)
 
         mon = self._opponents[known]
-        # A Pokemon switching in loses its boosts and volatiles.
+        # A Pokemon switching in loses its boosts and volatiles, and the
+        # engine's stall counter resets when it leaves the field.
         mon.boosts = Boosts()
         mon.volatiles.clear()
+        mon.single_turn.clear()
+        mon.protect_streak = 0
+        self._protect_streak.pop((side, name), None)
+        self._protect_turn.pop((side, name), None)
         if condition is not None:
             self._apply_condition(mon, condition)
         if slot is not None:
@@ -405,12 +440,41 @@ class BattleTracker:
     def _on_minor_singleturn(self, args: list[str]) -> None:
         """A one-turn effect, most importantly Protect.
 
-        Recorded because knowing an opponent just protected is real
-        information: consecutive Protects are increasingly likely to fail.
+        Two things are recorded, and they answer different questions. The
+        effect itself goes in `single_turn`, which expires when the next turn
+        begins. The *streak* persists, because consecutive Protects are
+        increasingly likely to fail and an agent deciding whether to protect
+        again needs to know it already did.
+
+        Tracked for both sides: our own streak matters as much as theirs.
         """
+        if len(args) < 2:
+            return
+        effect = to_id(args[1].split(": ")[-1])
+        side, _, name = split_ident(args[0])
+
         mon = self._opponent_at(args[0])
-        if mon and len(args) > 1:
-            mon.volatiles.add(to_id(args[1].split(": ")[-1]))
+        if mon is not None:
+            mon.single_turn.add(effect)
+
+        if effect not in PROTECT_MOVES:
+            return
+        key = (side, name)
+        # Consecutive only: a gap resets the counter, exactly as the engine's
+        # stall counter does.
+        previous = self._protect_turn.get(key)
+        streak = self._protect_streak.get(key, 0) + 1 if previous == self._turn - 1 else 1
+        self._protect_streak[key] = streak
+        self._protect_turn[key] = self._turn
+        if mon is not None:
+            mon.protect_streak = streak
+
+    def protect_streak(self, side: str, nickname: str) -> int:
+        """Consecutive turns this Pokemon has just used a Protect-family move."""
+        turn = self._protect_turn.get((side, nickname))
+        if turn is None or turn < self._turn - 1:
+            return 0
+        return self._protect_streak.get((side, nickname), 0)
 
     def _on_minor_activate(self, args: list[str]) -> None:
         """An ability or item did something, which reveals what it is."""
@@ -608,6 +672,11 @@ class BattleTracker:
                     volatile_conditions=volatiles,
                     disabled_moves=disabled,
                     available_specials=specials,
+                    # The request says nothing about the stall counter, so this
+                    # comes from the protocol stream instead.
+                    protect_streak=self.protect_streak(
+                        self.own_tag, split_ident(entry["ident"])[2]
+                    ),
                     has_been_active=bool(entry.get("active")),
                 )
             )
