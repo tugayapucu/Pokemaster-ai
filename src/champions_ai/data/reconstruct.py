@@ -228,6 +228,7 @@ def _own_side(
                 status=status,
                 volatile_conditions=volatiles,
                 protect_streak=seen.protect_streak if seen is not None else 0,
+                turns_on_field=seen.turns_on_field if seen is not None else 0,
                 boosts=boosts,
                 current_ability=pokemon_set.ability or None,
                 current_item=pokemon_set.item,

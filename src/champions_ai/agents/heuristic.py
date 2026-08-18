@@ -18,6 +18,7 @@ from itertools import combinations
 from champions_ai.agents.base import Agent
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
 from champions_ai.domain import (
+    FIRST_TURN_MOVES,
     PROTECT_MOVES,
     JointAction,
     MoveAction,
@@ -102,6 +103,16 @@ STAT_STAGE_WEIGHT = 100.0
 # full price for its own -1 Def/-1 SpD made the agent avoid one of the format's
 # best attacks.
 DEFENSIVE_STATS = frozenset({"def", "spd", "evasion"})
+
+# A flinch denies the target its whole turn. Priced above a single status
+# because it is immediate and unconditional once it lands -- but it is worth
+# nothing at all unless we move first, which is where most of its subtlety is.
+FLINCH_VALUE = 0.40
+FLINCH_WEIGHT = 100.0
+
+# Low enough that anything else legal is preferred, without being so
+# extreme that it swamps a whole joint action's score.
+UNUSABLE_MOVE_SCORE = -200.0
 
 # How a Team Preview pick is judged. A team is not a collection of good
 # Pokemon, it is a set of *answers*: what matters is having something for each
@@ -228,6 +239,16 @@ class HeuristicAgent(Agent):
             # move, so it scores neutrally rather than silently ranking last.
             return ScoredAction(action, 0.0, (f"no data: {error}",))
 
+        if move.move_id in FIRST_TURN_MOVES and attacker.turns_on_field > 1:
+            # The engine refuses these outright after the first turn out, and
+            # it does so at runtime rather than reporting them as disabled, so
+            # nothing upstream filters them for us.
+            return ScoredAction(
+                action,
+                UNUSABLE_MOVE_SCORE,
+                (f"{move.name} only works on its first turn out",),
+            )
+
         if not move.is_damaging:
             return self._score_status_move(observation, slot, action, move, attacker)
 
@@ -322,6 +343,17 @@ class HeuristicAgent(Agent):
                     certainty = "always" if secondary.is_guaranteed else f"{secondary.chance}%"
                     reasons.append(f"{certainty} inflicts {secondary.status}")
 
+            if secondary.volatile_status == "flinch":
+                first = self._moves_first(move, observation, slot)
+                if first > 0 and (target is None or not target.fainted):
+                    value += chance * first * FLINCH_VALUE * FLINCH_WEIGHT
+                    reasons.append(
+                        f"{secondary.chance}% flinch"
+                        + ("" if first == 1.0 else " if we move first")
+                    )
+                else:
+                    reasons.append("its flinch is wasted moving second")
+
             for stat, stages in secondary.boosts.items():
                 # Negative stages on the target are good for us.
                 value += chance * -stages * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
@@ -366,6 +398,42 @@ class HeuristicAgent(Agent):
         if immune & set(defender_species.types):
             return 0.0
         return STATUS_VALUE[status]
+
+    def _moves_first(self, move, observation: Observation, slot: int) -> float:
+        """Probability we act before the target: 1, 0.5 on a speed tie, or 0.
+
+        Priority settles it when the move has any -- Fake Out's +3 means its
+        flinch always lands, while Rock Slide's only pays when we outspeed.
+        Opposing priority is not modelled, so this is optimistic for a move
+        that could be beaten to the punch.
+        """
+        if move.priority > 0:
+            return 1.0
+        attacker = self._own_active(observation, slot)
+        if attacker is None:
+            return 0.0
+        ours = (attacker.computed_stats or {}).get("spe", 0)
+
+        fastest = 0
+        opponent = observation.opponent_side
+        for index in opponent.active_slots:
+            if index is None:
+                continue
+            observed = opponent.revealed[index]
+            if observed.fainted:
+                continue
+            try:
+                species = self.dex.get_species(observed.species)
+            except KeyError:
+                continue
+            theirs = estimate_stats(species.base_stats, self.assumed_opponent_points)["spe"]
+            fastest = max(fastest, theirs)
+
+        if not fastest:
+            return 1.0
+        if ours > fastest:
+            return 1.0
+        return 0.5 if ours == fastest else 0.0
 
     @staticmethod
     def _observed_target(observation: Observation, slot: int):

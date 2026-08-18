@@ -17,6 +17,8 @@ class BattlePokemon(BaseModel, frozen=True):
     # Symmetric with ObservedPokemon: our own streak governs whether
     # protecting again is worth a turn just as much as an opponent's does.
     protect_streak: int = 0
+    # Turns out, counting this one. Zero means unknown, not new.
+    turns_on_field: int = 0
     boosts: Boosts = Boosts()
     current_ability: str | None = None
     current_item: str | None = None

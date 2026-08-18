@@ -409,18 +409,22 @@ Planned in two stages, deliberately separated:
 - [x] **Data (done 2026-08-18).** `secondary`/`secondaries` (chance, status, boosts, volatile), `drain`, `recoil` and self-boosts now travel through the bridge dump into `MoveInfo`, guarded by an integration test against the engine — the same pattern that caught the missing `allies` target and the missing `endure` stall move. Cheap, low-risk, and required by everything after it.
 - [x] **Drain and recoil scored (done 2026-08-18).** Priced in the same currency as damage dealt, because that is what they are, and clamped to what is available — healing above full is wasted, recoil cannot take more HP than the Pokémon has. **Agreement 42.2% → 42.5%, McNemar chi2 = 0.64, not significant** (14 discordant labels of 1,091). Exactly the outcome predicted below: where we already agreed by coincidence, correcting the reason changes nothing the metric can see. Kept because Flare Blitz genuinely costs a third of its own bar and Drain Punch genuinely heals, the explanations are now truthful — which Milestone 4's recommendation system depends on — and it is a prerequisite for a position evaluator that counts HP honestly.
 - [x] **Status and stat changes scored (done 2026-08-18).** Expected value, except that a *guaranteed* rider is treated as certain — Nuzzle's paralysis and Zap Cannon's are the whole reason those moves are worth pressing at 20 base power and 50% accuracy. Type immunities are respected (Electric cannot be paralysed, Fire cannot be burned) and a status never stacks on an already-statused target. **Defensive self-drops are priced against the incoming threat** rather than at a flat rate: Close Combat's own -1 Def/-1 SpD is a bill that only arrives if we are still there to be hit, and charging full price made the agent avoid one of the format's best attacks.
-- [ ] **Flinch next** (Rock Slide 30%, Fake Out 100%). Held back deliberately: flinch is only worth anything if we move first, so it needs move-order logic the other riders did not, and Fake Out additionally needs "turns on the field" tracking for its first-turn-out rule. Fake Out is the single largest move-level miss at 31 labels.
+- [x] **Flinch scored and first-turn moves gated (done 2026-08-18).** Flinch is the one rider whose value depends on turn order — denying a target its turn is worth nothing once it has acted — so it is scaled by the chance we move first (priority settles it outright, otherwise speed, with a tie counting half). **Fake Out agreement doubled, 4 → 8 of 31 labels**, and the agent still under-presses it (18 against a human 31) rather than over-correcting.
+
+  Fake Out, First Impression and Mat Block are refused by the engine after the first turn out, and it does that at *runtime* rather than reporting them as disabled — confirmed by a human in our own replay data pressing Fake Out on turn two and getting the failure hint. So `BattleTracker` now records when each Pokémon arrived, for both sides, and `turns_on_field` reaches the agent through `BattlePokemon` and `ObservedPokemon` alike. Zero means *unknown* rather than "long ago", because blocking a legal move on missing data is worse than allowing an illegal one.
 
 **Cumulative result of the whole move-effects effort, paired on identical labels:**
 
 ```
 damage-only    460/1091 = 42.2%
-effects-aware  471/1091 = 43.2%
-21 labels newly correct, 10 newly wrong
-McNemar chi2 = 3.23  -- short of the 3.84 needed for p<0.05
+effects-aware  476/1091 = 43.6%
+30 labels newly correct, 14 newly wrong
+McNemar chi2 = 5.11  -- significant at p<0.05
 ```
 
-Directionally positive, not significant. Guaranteed-status moves turn out to be rare in the data (19 of 974 move labels), which caps what this could ever have been worth; the larger prize is flinch, still to come. Fake Out additionally needs its first-turn-out restriction, which the engine enforces at runtime rather than reporting as `disabled` — confirmed by a human in our own data selecting it on turn 2 and getting the failure hint.
+No individual step cleared significance on its own — drain/recoil 0.64, status and stat changes 1.39, flinch 1.23 — but the accumulation does.
+
+**A measurement trap worth recording, because it nearly buried the result.** The first attempt at this cumulative figure compared against a baseline that disabled the rider scoring but still inherited the first-turn gate, since that gate lives in `_score_move` rather than in the rider pass. The contaminated baseline read 42.6% and gave chi2 = 2.70 — not significant. Only a genuinely clean baseline showed 42.2% and chi2 = 5.11. When an A/B differs by several changes, it is worth checking that "A" really is A. Fake Out additionally needs its first-turn-out restriction, which the engine enforces at runtime rather than reporting as `disabled` — confirmed by a human in our own data selecting it on turn 2 and getting the failure hint.
 
 Expect this to improve *reasoning* more than the agreement figure, for the same reason experiment 0003 found: where we already agree by coincidence, fixing the reason changes nothing the metric can see.
 

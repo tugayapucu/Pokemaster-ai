@@ -26,6 +26,8 @@ class ObservedPokemon(BaseModel, frozen=True):
     # Each successive use is far more likely to fail, so an agent weighing
     # another one needs the count, not merely "it protected at some point".
     protect_streak: int = 0
+    # Turns out, counting this one. Zero means unknown, not new.
+    turns_on_field: int = 0
     revealed_moves: frozenset[str] = frozenset()
     revealed_ability: str | None = None
     revealed_item: str | None = None
@@ -41,6 +43,7 @@ class ObservedPokemon(BaseModel, frozen=True):
             boosts=mon.boosts,
             volatile_conditions=mon.volatile_conditions,
             protect_streak=mon.protect_streak,
+            turns_on_field=mon.turns_on_field,
             revealed_moves=mon.revealed_moves,
             revealed_ability=mon.current_ability if mon.ability_revealed else None,
             revealed_item=mon.current_item if mon.item_revealed else None,

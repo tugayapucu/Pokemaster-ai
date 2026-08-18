@@ -12,6 +12,7 @@ from champions_ai.domain.battle_state import BattleState
 from champions_ai.domain.boosts import Boosts
 from champions_ai.domain.legal_actions import legal_joint_actions, legal_slot_actions
 from champions_ai.domain.move_data import (
+    FIRST_TURN_MOVES,
     PROTECT_MOVES,
     STALL_MOVES,
     TARGETS_REQUIRING_CHOICE,
@@ -33,6 +34,7 @@ from champions_ai.domain.team import Team
 from champions_ai.domain.team_preview import TeamPreview
 
 __all__ = [
+    "FIRST_TURN_MOVES",
     "PROTECT_MOVES",
     "STALL_MOVES",
     "BattlePokemon",

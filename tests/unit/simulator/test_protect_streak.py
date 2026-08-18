@@ -184,3 +184,40 @@ def test_wide_guard_does_not_feed_the_counter():
         "|-singleturn|p2a: Incineroar|move: Protect",
     )
     assert _opponent(tracker).protect_streak == 1
+
+
+def test_turns_on_field_counts_from_arrival():
+    """A lead arrives before turn 1 and so reads 1 on turn 1."""
+    tracker = _tracker()
+    _feed(tracker, "|switch|p2a: Incineroar|Incineroar, L50, M|100/100", "|turn|1")
+    assert tracker.turns_on_field("p2", "Incineroar") == 1
+    _feed(tracker, "|turn|2")
+    assert tracker.turns_on_field("p2", "Incineroar") == 2
+
+
+def test_turns_on_field_resets_when_a_pokemon_returns():
+    """Switching out and back in is exactly what makes Fake Out usable again."""
+    tracker = _tracker()
+    _feed(
+        tracker,
+        "|switch|p2a: Incineroar|Incineroar, L50, M|100/100",
+        "|turn|1", "|turn|2", "|turn|3",
+        "|switch|p2a: Torkoal|Torkoal, L50, F|100/100",
+        "|turn|4",
+        "|switch|p2a: Incineroar|Incineroar, L50, M|100/100",
+        "|turn|5",
+    )
+    assert tracker.turns_on_field("p2", "Incineroar") == 1
+
+
+def test_turns_on_field_is_tracked_for_our_own_side_too():
+    tracker = _tracker()
+    _feed(tracker, "|switch|p1a: Charizard|Charizard, L50, M|153/153", "|turn|1")
+    assert tracker.turns_on_field("p1", "Charizard") == 1
+
+
+def test_an_unseen_arrival_reads_as_unknown():
+    """Zero means we never saw it switch in, not that it just got here."""
+    tracker = _tracker()
+    _feed(tracker, "|turn|4")
+    assert tracker.turns_on_field("p2", "Ghost") == 0

@@ -69,6 +69,14 @@ STALL_MOVES: frozenset[str] = frozenset(
 PROTECT_MOVES: frozenset[str] = STALL_MOVES - {"endure", "matblock"}
 
 
+# Moves the engine refuses unless this is the user's first turn on the field
+# (`activeMoveActions > 1` in Showdown's `onTry`). This is a *runtime* failure,
+# not something the request reports as disabled -- confirmed by a human in our
+# own replay data selecting Fake Out on turn two and getting the failure hint.
+# So an agent that does not track it will burn turns on a move that cannot work.
+FIRST_TURN_MOVES: frozenset[str] = frozenset({"fakeout", "firstimpression", "matblock"})
+
+
 class MoveData(BaseModel, frozen=True):
     """The minimum a move must expose for legal-action generation.
 

@@ -123,6 +123,7 @@ class _OpponentPokemon:
         # made a Pokemon look permanently shielded for the rest of the battle.
         self.single_turn: set[str] = set()
         self.protect_streak = 0
+        self.turns_on_field = 0
         self.revealed_moves: set[str] = set()
         self.revealed_item: str | None = None
         self.revealed_ability: str | None = None
@@ -137,6 +138,7 @@ class _OpponentPokemon:
             boosts=self.boosts,
             volatile_conditions=frozenset(self.volatiles | self.single_turn),
             protect_streak=self.protect_streak,
+            turns_on_field=self.turns_on_field,
             revealed_moves=frozenset(self.revealed_moves),
             revealed_ability=self.revealed_ability,
             revealed_item=self.revealed_item,
@@ -181,6 +183,10 @@ class BattleTracker:
         # Both sides: our own streak matters as much as theirs when
         # deciding whether protecting again is worth a turn.
         self._protect_streak: dict[tuple[str, str], int] = {}
+        # The turn each Pokemon arrived, for both sides. Fake Out and
+        # First Impression only work on the first turn out, and the engine
+        # enforces that at runtime rather than reporting it as disabled.
+        self._switch_turn: dict[tuple[str, str], int] = {}
         self._protect_turn: dict[tuple[str, str], int] = {}
         self._opponent_roster: list[RevealedPokemon] = []
         self._own_team = own_team
@@ -248,6 +254,11 @@ class BattleTracker:
         self._turn = int(args[0])
         for mon in self._opponents.values():
             mon.single_turn.clear()
+        for nickname, species in self._nickname_to_species.items():
+            if species in self._opponents:
+                self._opponents[species].turns_on_field = self.turns_on_field(
+                    self.opponent_tag, nickname
+                )
         for key, turn in list(self._protect_turn.items()):
             if turn < self._turn - 1:
                 self._protect_streak.pop(key, None)
@@ -291,6 +302,9 @@ class BattleTracker:
         # `|replace|` (a broken Illusion) carries no HP field.
         condition = args[2] if len(args) > 2 else None
         side, slot, name = split_ident(ident)
+        # Recorded for both sides, before the opponent-only bookkeeping below:
+        # our own Pokemon's arrival matters just as much for Fake Out.
+        self._switch_turn[(side, name)] = self._turn
         if side != self.opponent_tag:
             return
 
@@ -313,6 +327,7 @@ class BattleTracker:
         mon.volatiles.clear()
         mon.single_turn.clear()
         mon.protect_streak = 0
+        mon.turns_on_field = 0
         self._protect_streak.pop((side, name), None)
         self._protect_turn.pop((side, name), None)
         if condition is not None:
@@ -464,6 +479,19 @@ class BattleTracker:
         self._protect_turn[key] = self._turn
         if mon is not None:
             mon.protect_streak = streak
+
+    def turns_on_field(self, side: str, nickname: str) -> int:
+        """Turns this Pokemon has been out, counting the current one.
+
+        A lead arrives before turn 1 and so reads 1 on turn 1; a Pokemon
+        switched in during turn 3 reads 1 on turn 4, which is when it first
+        gets to act. Zero means we never saw it arrive, which is unknown rather
+        than "it just got here".
+        """
+        arrived = self._switch_turn.get((side, nickname))
+        if arrived is None:
+            return 0
+        return max(0, self._turn - arrived)
 
     def protect_streak(self, side: str, nickname: str) -> int:
         """Consecutive turns this Pokemon has just used a Protect-family move."""
@@ -671,6 +699,9 @@ class BattleTracker:
                     # The request says nothing about the stall counter, so this
                     # comes from the protocol stream instead.
                     protect_streak=self.protect_streak(
+                        self.own_tag, split_ident(entry["ident"])[2]
+                    ),
+                    turns_on_field=self.turns_on_field(
                         self.own_tag, split_ident(entry["ident"])[2]
                     ),
                     has_been_active=bool(entry.get("active")),
