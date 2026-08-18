@@ -33,6 +33,25 @@ TARGETS_REQUIRING_CHOICE: frozenset[str] = frozenset(
 )
 
 
+# Moves that drive the engine's "stall" counter: using one on consecutive turns
+# makes it increasingly likely to fail. Vocabulary rather than logic, so it
+# lives beside the move targets and both the tracker and any agent read it
+# from here.
+PROTECT_MOVES: frozenset[str] = frozenset(
+    {
+        "protect",
+        "detect",
+        "kingsshield",
+        "spikyshield",
+        "banefulbunker",
+        "obstruct",
+        "silktrap",
+        "burningbulwark",
+        "maxguard",
+    }
+)
+
+
 class MoveData(BaseModel, frozen=True):
     """The minimum a move must expose for legal-action generation.
 

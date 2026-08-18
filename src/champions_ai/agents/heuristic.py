@@ -15,8 +15,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from champions_ai.agents.base import Agent
-from champions_ai.dex import Dex, SpeciesInfo
+from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
 from champions_ai.domain import (
+    PROTECT_MOVES,
     JointAction,
     MoveAction,
     Observation,
@@ -37,8 +38,23 @@ ALLY_DAMAGE_PENALTY = -250.0
 IMMUNE_PENALTY = -60.0
 RESISTED_PENALTY = -15.0
 STATUS_MOVE_VALUE = 12.0
-PROTECT_BASE_VALUE = 18.0
-PROTECT_LOW_HP_BONUS = 45.0
+
+# Protect is priced as damage *avoided*, in the same currency as damage dealt,
+# so the two compete on equal terms instead of Protect carrying a flat value
+# that almost any attack outbids. Measured against real humans (experiment
+# 0002), the flat value made the heuristic protect almost never: 90 of 643
+# disagreements were a human protecting where it attacked.
+PROTECT_DAMAGE_WEIGHT = 100.0
+# Surviving a knockout is worth less than landing one -- you keep a Pokemon,
+# but you have not removed theirs.
+PROTECT_SAVES_KO_BONUS = 90.0
+# Attacking advances the game and protecting does not, so blocking N% of your
+# HP is worth slightly less than dealing N% of theirs.
+PROTECT_TEMPO_COST = -20.0
+# Base power assumed for an opponent attack we have not seen. Roughly a
+# standard STAB attack -- enough that an unrevealed Pokemon does not read as
+# harmless, which is the failure mode experiment 0001 documented.
+ASSUMED_MOVE_POWER = 80
 SWITCH_COST = -25.0
 SWITCH_WHEN_WEAKENED_BONUS = 55.0
 LOW_HP_FRACTION = 0.35
@@ -158,7 +174,7 @@ class HeuristicAgent(Agent):
             return ScoredAction(action, 0.0, (f"no data: {error}",))
 
         if not move.is_damaging:
-            return self._score_status_move(action, move, attacker)
+            return self._score_status_move(observation, slot, action, move, attacker)
 
         target = self._resolve_target(observation, slot, action)
         if target is None:
@@ -219,15 +235,137 @@ class HeuristicAgent(Agent):
 
         return ScoredAction(action, score, tuple(reasons))
 
-    def _score_status_move(self, action: MoveAction, move, attacker) -> ScoredAction:
-        if move.move_id == "protect":
-            score = PROTECT_BASE_VALUE
-            reasons = ["Protect blocks whatever is coming"]
-            if attacker.hp_fraction <= LOW_HP_FRACTION:
-                score += PROTECT_LOW_HP_BONUS
-                reasons.append("and this Pokemon cannot afford a hit")
-            return ScoredAction(action, score, tuple(reasons))
+    def _score_status_move(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        move: MoveInfo,
+        attacker,
+    ) -> ScoredAction:
+        if move.move_id in PROTECT_MOVES:
+            return self._score_protect(observation, slot, action, move, attacker)
         return ScoredAction(action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",))
+
+    def _score_protect(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        move: MoveInfo,
+        attacker,
+    ) -> ScoredAction:
+        """Worth what it stops, discounted by how likely it is to fail.
+
+        Priced against the incoming attack rather than against our own HP bar.
+        A healthy Pokemon facing a knockout should protect and a weakened one
+        facing nothing should not, and a flat value cannot express either.
+        """
+        fraction, would_ko, source = self._incoming_threat(observation, slot, attacker)
+
+        # The engine's stall counter: each consecutive use succeeds a third as
+        # often as the last. This is the game's own rule rather than a tuned
+        # constant, and it is what stops a threat-aware Protect being spammed.
+        success = 1.0 / (3.0**attacker.protect_streak)
+
+        score = fraction * PROTECT_DAMAGE_WEIGHT
+        reasons = [f"{move.name} would block ~{fraction:.0%} of this Pokemon's HP ({source})"]
+        if would_ko:
+            score += PROTECT_SAVES_KO_BONUS
+            reasons.append("which would otherwise be a knockout")
+
+        score = score * success + PROTECT_TEMPO_COST
+        if attacker.protect_streak:
+            reasons.append(
+                f"but it protected {attacker.protect_streak} turn(s) running, "
+                f"so this succeeds ~{success:.0%} of the time"
+            )
+        return ScoredAction(action, score, tuple(reasons))
+
+    def _incoming_threat(
+        self, observation: Observation, slot: int, defender
+    ) -> tuple[float, bool, str]:
+        """Worst expected hit on this Pokemon: (fraction of its HP, would KO, why).
+
+        Revealed moves are used when there are any. When there are none the
+        opponent is *not* treated as harmless -- experiment 0001 found that
+        assumption is exactly why one-turn search was inert. A standard STAB
+        attack is assumed instead, from their typing, which is information we
+        genuinely have the moment they are on the field.
+        """
+        try:
+            defender_species = self.dex.get_species(defender.pokemon_set.species)
+        except KeyError:
+            return 0.0, False, "unknown defender"
+
+        worst, worst_ko, source = 0.0, False, "nothing visible"
+        for index in observation.opponent_side.active_slots:
+            if index is None:
+                continue
+            observed = observation.opponent_side.revealed[index]
+            if observed.fainted:
+                continue
+            try:
+                species = self.dex.get_species(observed.species)
+            except KeyError:
+                continue
+
+            known = [m for m in self._revealed_moves(observed) if m.is_damaging]
+            candidates = known or self._assumed_moves(species)
+            label = "seen" if known else "assumed"
+
+            stats = estimate_stats(species.base_stats, self.assumed_opponent_points)
+            for move in candidates:
+                estimate = estimate_damage(
+                    self.dex,
+                    move,
+                    attacker=species,
+                    attack_stat=stats["atk" if move.category == "Physical" else "spa"],
+                    defender=defender_species,
+                    defense_stat=(defender.computed_stats or {}).get(
+                        "def" if move.category == "Physical" else "spd", 100
+                    ),
+                    defender_hp=max(1, defender.current_hp),
+                    level=observation.regulation.level,
+                    doubles=observation.regulation.game_type == "doubles",
+                )
+                expected = estimate.average_fraction * move.hit_chance
+                if expected > worst:
+                    worst = expected
+                    worst_ko = estimate.guaranteed_ko
+                    source = f"{species.name}, {label}"
+        return min(worst, 1.0), worst_ko, source
+
+    def _revealed_moves(self, observed) -> list[MoveInfo]:
+        found = []
+        for move_id in observed.revealed_moves:
+            try:
+                found.append(self.dex.get_move(move_id))
+            except KeyError:
+                continue
+        return found
+
+    def _assumed_moves(self, species: SpeciesInfo) -> list[MoveInfo]:
+        """A standard STAB attack per type, standing in for an unseen moveset.
+
+        A prior, not a fact. Replacing it with something inferred from usage
+        data is Milestone 10's job; the point here is only that an opponent
+        whose moves we have not seen must not read as harmless.
+        """
+        return [
+            MoveInfo(
+                move_id=f"assumed{typing.lower()}{category.lower()}",
+                name=f"an unseen {typing} attack",
+                type=typing,
+                category=category,
+                base_power=ASSUMED_MOVE_POWER,
+                accuracy=100,
+                priority=0,
+                target="normal",
+            )
+            for typing in species.types
+            for category in ("Physical", "Special")
+        ]
 
     # ------------------------------------------------------------- resolution
 

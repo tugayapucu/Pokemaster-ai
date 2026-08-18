@@ -11,7 +11,12 @@ from champions_ai.domain.battle_pokemon import BattlePokemon
 from champions_ai.domain.battle_state import BattleState
 from champions_ai.domain.boosts import Boosts
 from champions_ai.domain.legal_actions import legal_joint_actions, legal_slot_actions
-from champions_ai.domain.move_data import TARGETS_REQUIRING_CHOICE, MoveData, MoveTargetType
+from champions_ai.domain.move_data import (
+    PROTECT_MOVES,
+    TARGETS_REQUIRING_CHOICE,
+    MoveData,
+    MoveTargetType,
+)
 from champions_ai.domain.observation import Observation, ObservedPokemon, ObservedSide
 from champions_ai.domain.pokemon_set import PokemonSet
 from champions_ai.domain.regulation import (
@@ -27,6 +32,7 @@ from champions_ai.domain.team import Team
 from champions_ai.domain.team_preview import TeamPreview
 
 __all__ = [
+    "PROTECT_MOVES",
     "BattlePokemon",
     "BattleState",
     "Boosts",

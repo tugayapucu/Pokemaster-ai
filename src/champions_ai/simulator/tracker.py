@@ -15,6 +15,7 @@ once used, and a Pokemon they never send out stays unknown all battle.
 import re
 
 from champions_ai.domain import (
+    PROTECT_MOVES,
     BattlePokemon,
     Boosts,
     MoveData,
@@ -45,14 +46,6 @@ BOOST_FIELDS = {
 
 SLOT_LETTERS = "abcdef"
 
-# Moves that set the "stall" counter: using one on consecutive turns makes it
-# increasingly likely to fail, which is the whole reason a streak is tracked.
-PROTECT_MOVES = frozenset(
-    {
-        "protect", "detect", "kingsshield", "spikyshield", "banefulbunker",
-        "obstruct", "silktrap", "burningbulwark", "maxguard",
-    }
-)
 
 # Engine request flags -> our SpecialMechanic names (ADR 0003). Reg M-B only
 # raises canMegaEvo, but the rest are here so a regulation enabling them needs
