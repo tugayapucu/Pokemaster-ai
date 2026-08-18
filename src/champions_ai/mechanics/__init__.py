@@ -4,6 +4,13 @@ from champions_ai.mechanics.damage import (
     is_spread_move,
 )
 from champions_ai.mechanics.evaluation import PositionValue, evaluate_position
+from champions_ai.mechanics.matchup import (
+    ASSUMED_MOVE_POWER,
+    Matchup,
+    assumed_attacks,
+    matchup,
+    own_stats,
+)
 from champions_ai.mechanics.stats import (
     apply_boost,
     estimate_stats,
@@ -12,13 +19,18 @@ from champions_ai.mechanics.stats import (
 )
 
 __all__ = [
+    "ASSUMED_MOVE_POWER",
     "DamageEstimate",
+    "Matchup",
     "PositionValue",
     "apply_boost",
+    "assumed_attacks",
     "estimate_damage",
     "estimate_stats",
     "evaluate_position",
     "hp_stat",
     "is_spread_move",
+    "matchup",
     "other_stat",
+    "own_stats",
 ]

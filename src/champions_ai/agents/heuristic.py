@@ -13,6 +13,7 @@ Milestone 10, not a fact.
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from itertools import combinations
 
 from champions_ai.agents.base import Agent
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
@@ -24,8 +25,15 @@ from champions_ai.domain import (
     PassAction,
     SlotAction,
     SwitchAction,
+    TeamPreview,
+    TeamPreviewAction,
 )
-from champions_ai.mechanics import estimate_damage, estimate_stats
+from champions_ai.mechanics import (
+    assumed_attacks,
+    estimate_damage,
+    estimate_stats,
+    matchup,
+)
 
 # Scoring weights. Chosen to be legible rather than optimal: damage is the
 # baseline currency, and everything else is priced relative to it.
@@ -51,10 +59,13 @@ PROTECT_SAVES_KO_BONUS = 90.0
 # Attacking advances the game and protecting does not, so blocking N% of your
 # HP is worth slightly less than dealing N% of theirs.
 PROTECT_TEMPO_COST = -20.0
-# Base power assumed for an opponent attack we have not seen. Roughly a
-# standard STAB attack -- enough that an unrevealed Pokemon does not read as
-# harmless, which is the failure mode experiment 0001 documented.
-ASSUMED_MOVE_POWER = 80
+# How a Team Preview pick is judged. A team is not a collection of good
+# Pokemon, it is a set of *answers*: what matters is having something for each
+# thing they brought, not maximising an average.
+COVERAGE_WEIGHT = 1.0
+# A small pull towards picks that are good on average, to break ties between
+# two sets with the same worst case.
+AVERAGE_WEIGHT = 0.25
 SWITCH_COST = -25.0
 SWITCH_WHEN_WEAKENED_BONUS = 55.0
 LOW_HP_FRACTION = 0.35
@@ -311,7 +322,7 @@ class HeuristicAgent(Agent):
                 continue
 
             known = [m for m in self._revealed_moves(observed) if m.is_damaging]
-            candidates = known or self._assumed_moves(species)
+            candidates = known or assumed_attacks(species)
             label = "seen" if known else "assumed"
 
             stats = estimate_stats(species.base_stats, self.assumed_opponent_points)
@@ -345,27 +356,7 @@ class HeuristicAgent(Agent):
                 continue
         return found
 
-    def _assumed_moves(self, species: SpeciesInfo) -> list[MoveInfo]:
-        """A standard STAB attack per type, standing in for an unseen moveset.
 
-        A prior, not a fact. Replacing it with something inferred from usage
-        data is Milestone 10's job; the point here is only that an opponent
-        whose moves we have not seen must not read as harmless.
-        """
-        return [
-            MoveInfo(
-                move_id=f"assumed{typing.lower()}{category.lower()}",
-                name=f"an unseen {typing} attack",
-                type=typing,
-                category=category,
-                base_power=ASSUMED_MOVE_POWER,
-                accuracy=100,
-                priority=0,
-                target="normal",
-            )
-            for typing in species.types
-            for category in ("Physical", "Special")
-        ]
 
     # ------------------------------------------------------------- resolution
 
@@ -430,6 +421,112 @@ class HeuristicAgent(Agent):
             remaining = max(1, estimated["hp"] * observed.hp_percent // 100)
             return species, remaining, estimated[defending_key], False
         return None
+
+
+
+    # --------------------------------------------------------- team preview
+
+    def select_team_preview(
+        self, preview: TeamPreview, picked_team_size: int
+    ) -> TeamPreviewAction:
+        """Pick which Pokemon to bring, and in what order, from the matchup.
+
+        The first decision of every battle, and the one a player most wants
+        help with -- they can see six species and nothing else.
+
+        Scored as **coverage** rather than as a sum of individually good
+        Pokemon. A team wins Team Preview by having an answer to each thing the
+        opponent brought, so for every one of their six we take our *best*
+        answer among the four we are considering, and add those up. Picking
+        four Pokemon that all beat the same threat and lose to the rest scores
+        badly, which is the point.
+        """
+        picks = self._rank_team_preview(preview, picked_team_size)
+        return TeamPreviewAction(picks=picks)
+
+    def _rank_team_preview(
+        self, preview: TeamPreview, picked_team_size: int
+    ) -> tuple[int, ...]:
+        scores = self._matchup_table(preview)
+        if not scores:
+            return tuple(range(picked_team_size))
+
+        best_set, best_score = None, float("-inf")
+        # Six choose four is fifteen combinations, so the exhaustive answer is
+        # cheaper than any clever approximation would be.
+        for candidate in combinations(range(len(preview.own_team)), picked_team_size):
+            score = self._score_selection(candidate, scores, len(preview.opponent_team))
+            if score > best_score:
+                best_set, best_score = candidate, score
+
+        assert best_set is not None
+        # Lead with the two that fare best against their roster as a whole,
+        # since which of their six leads is still unknown.
+        return tuple(
+            sorted(
+                best_set,
+                key=lambda index: sum(scores[index]) / max(1, len(scores[index])),
+                reverse=True,
+            )
+        )
+
+    def _matchup_table(self, preview: TeamPreview) -> list[list[float]]:
+        """`table[ours][theirs]` -- our net matchup against each of their six."""
+        table: list[list[float]] = []
+        for ours in preview.own_team.pokemon:
+            row: list[float] = []
+            for theirs in preview.opponent_team:
+                try:
+                    species = self.dex.get_species(theirs.species)
+                    row.append(
+                        matchup(
+                            self.dex,
+                            ours,
+                            species,
+                            level=preview.regulation.level,
+                            doubles=preview.regulation.game_type == "doubles",
+                            assumed_points=self.assumed_opponent_points,
+                        ).net
+                    )
+                except KeyError:
+                    # Missing data must not read as a good or bad matchup.
+                    row.append(0.0)
+            table.append(row)
+        return table
+
+    @staticmethod
+    def _score_selection(
+        selection: tuple[int, ...], scores: list[list[float]], opponents: int
+    ) -> float:
+        coverage = sum(
+            max(scores[index][foe] for index in selection) for foe in range(opponents)
+        )
+        average = sum(
+            scores[index][foe] for index in selection for foe in range(opponents)
+        ) / max(1, len(selection) * opponents)
+        return COVERAGE_WEIGHT * coverage + AVERAGE_WEIGHT * average
+
+    def explain_team_preview(
+        self, preview: TeamPreview, picked_team_size: int
+    ) -> tuple[tuple[str, float], ...]:
+        """Per-pick reasons, for the recommendation system."""
+        scores = self._matchup_table(preview)
+        picks = self._rank_team_preview(preview, picked_team_size)
+        reasons = []
+        for index in picks:
+            row = scores[index]
+            worst = min(range(len(row)), key=lambda foe: row[foe])
+            best = max(range(len(row)), key=lambda foe: row[foe])
+            reasons.append(
+                (
+                    f"{preview.own_team.pokemon[index].species}: "
+                    f"best into {preview.opponent_team[best].species}, "
+                    f"worst into {preview.opponent_team[worst].species}",
+                    sum(row) / max(1, len(row)),
+                )
+            )
+        return tuple(reasons)
+
 
 
 def attacker_move_id(observation: Observation, slot: int, action: MoveAction) -> str:
