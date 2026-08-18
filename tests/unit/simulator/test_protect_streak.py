@@ -154,3 +154,33 @@ def test_our_own_streak_is_tracked_too():
     )
     assert tracker.protect_streak("p1", "Charizard") == 1
     assert tracker.protect_streak("p2", "Charizard") == 0, "sides must not collide"
+
+
+def test_endure_feeds_the_same_counter_as_protect():
+    """Endure shares the engine's stall counter without blocking anything.
+
+    Missing it left a following Protect looking like a first use -- expected to
+    succeed, where the engine actually gives it one chance in three.
+    """
+    tracker = _tracker()
+    _feed(
+        tracker,
+        *OPENING,
+        "|-singleturn|p2a: Incineroar|move: Endure",
+        "|turn|2",
+        "|-singleturn|p2a: Incineroar|move: Protect",
+    )
+    assert _opponent(tracker).protect_streak == 2
+
+
+def test_wide_guard_does_not_feed_the_counter():
+    """Since Gen 6 it may be used every turn, so it must not discount Protect."""
+    tracker = _tracker()
+    _feed(
+        tracker,
+        *OPENING,
+        "|-singleturn|p2a: Incineroar|move: Wide Guard",
+        "|turn|2",
+        "|-singleturn|p2a: Incineroar|move: Protect",
+    )
+    assert _opponent(tracker).protect_streak == 1

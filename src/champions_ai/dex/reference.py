@@ -53,6 +53,11 @@ class MoveInfo(BaseModel, frozen=True):
     accuracy: int | None
     priority: int
     target: str
+    # Whether this move drives the engine's shared "stall" counter, so a
+    # consecutive use succeeds a third as often as the last. Note this is a
+    # wider set than "blocks damage to the user": Endure shares the counter
+    # while letting the hit land.
+    stalling: bool = False
     flags: frozenset[str] = frozenset()
 
     @property
@@ -151,6 +156,7 @@ class Dex(BaseModel, frozen=True):
                 accuracy=entry["accuracy"],
                 priority=entry["priority"],
                 target=entry["target"],
+                stalling=bool(entry.get("stallingMove", False)),
                 flags=frozenset(entry.get("flags", ())),
             )
             for move_id, entry in payload["moves"].items()

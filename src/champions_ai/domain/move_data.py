@@ -33,11 +33,11 @@ TARGETS_REQUIRING_CHOICE: frozenset[str] = frozenset(
 )
 
 
-# Moves that drive the engine's "stall" counter: using one on consecutive turns
-# makes it increasingly likely to fail. Vocabulary rather than logic, so it
-# lives beside the move targets and both the tracker and any agent read it
-# from here.
-PROTECT_MOVES: frozenset[str] = frozenset(
+# Moves that drive the engine's shared "stall" counter (`stallingMove` in
+# Showdown's move data): each consecutive use succeeds a third as often as the
+# last. Verified against the engine by an integration test, because a
+# hand-copied list of engine facts is precisely what drifts.
+STALL_MOVES: frozenset[str] = frozenset(
     {
         "protect",
         "detect",
@@ -48,8 +48,25 @@ PROTECT_MOVES: frozenset[str] = frozenset(
         "silktrap",
         "burningbulwark",
         "maxguard",
+        "endure",
+        "matblock",
     }
 )
+
+# The subset that actually *blocks the hit on its user*, which is a different
+# question from sharing the counter and the one an agent pricing "damage
+# avoided" needs:
+#
+# - **Endure** shares the counter but does not block anything -- the hit lands
+#   and the user survives on 1 HP, so valuing it as damage avoided is simply
+#   wrong;
+# - **Mat Block** shields the whole side rather than the user, and only on the
+#   turn it switches in.
+#
+# Wide Guard, Quick Guard and Crafty Shield are absent from both sets: they
+# protect against a category of move, and since Gen 6 they do not touch the
+# stall counter at all.
+PROTECT_MOVES: frozenset[str] = STALL_MOVES - {"endure", "matblock"}
 
 
 class MoveData(BaseModel, frozen=True):

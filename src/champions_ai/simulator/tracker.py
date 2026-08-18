@@ -15,7 +15,7 @@ once used, and a Pokemon they never send out stays unknown all battle.
 import re
 
 from champions_ai.domain import (
-    PROTECT_MOVES,
+    STALL_MOVES,
     BattlePokemon,
     Boosts,
     MoveData,
@@ -450,7 +450,10 @@ class BattleTracker:
         if mon is not None:
             mon.single_turn.add(effect)
 
-        if effect not in PROTECT_MOVES:
+        # The *wider* set: Endure drives the same counter without blocking
+        # anything, so missing it would leave us expecting a Protect to
+        # succeed when the engine gives it one chance in three.
+        if effect not in STALL_MOVES:
             return
         key = (side, name)
         # Consecutive only: a gap resets the counter, exactly as the engine's

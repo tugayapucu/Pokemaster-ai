@@ -135,6 +135,11 @@ function dexDump(msg) {
 			accuracy: entry.accuracy === true ? null : entry.accuracy,
 			priority: entry.priority,
 			target: entry.target,
+			// Drives the engine's shared "stall" counter: a consecutive use
+			// succeeds a third as often as the last. Dumped rather than
+			// hand-listed on the Python side, because a hand-copied list of
+			// engine facts is exactly what drifts.
+			stallingMove: !!entry.stallingMove,
 			flags: Object.keys(entry.flags || {}),
 		};
 	}
