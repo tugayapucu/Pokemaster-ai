@@ -125,10 +125,14 @@ AVERAGE_WEIGHT = 0.25
 # whatever comes in. What it buys is a better matchup for every turn after, so
 # the gain is worth more than one turn of it -- but not many more, in a format
 # where battles last five or six turns.
-SWITCH_HORIZON = 1.5
+# Calibrated to the human switch *rate* rather than to the agreement score:
+# at 1.0 the agent switches on 11.0% of decisions and rated humans on 10.7%.
+# Fitting it to agreement would have been fitting it to the wrong thing -- see
+# docs/experiments/0004.
+SWITCH_HORIZON = 1.0
 # Saving a Pokemon that would otherwise be knocked out is worth roughly what
 # losing it would cost: a slot, an attacker and a switch option at once.
-SWITCH_SAVES_KO_BONUS = 70.0
+SWITCH_SAVES_KO_BONUS = 35.0
 LOW_HP_FRACTION = 0.35
 
 
