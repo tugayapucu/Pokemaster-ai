@@ -392,9 +392,11 @@ The rule that survives is narrower and about power, not arbitration:
    cause is not how switching is scored but what the agent cannot see — an
    opposing switch, a Pokémon worth preserving — which is Milestone 10, not a
    scoring term.
-3. **Team Preview is unvalidated.** 56.6% lead overlap against a 50% baseline
-   on 53 scorable decisions — the interval contains the baseline, so it is not
-   yet distinguishable from guessing. Needs more games, not more code.
+3. **Team Preview lead ordering carries no signal.** 48.4% against a 50%
+   baseline over 547 decisions (was 56.6% on 53 — the small sample flattered).
+   More data did not rescue it, so "lead with the best average matchup" is
+   likely the wrong rule rather than an undertrained one. The *pick-four* half
+   remains unmeasured, deliberately.
 4. **Targeting.** ~17% of remaining disagreements are the right move aimed at
    the wrong Pokemon.
 5. **Opponent modelling** (M10). Both experiments point here; the
@@ -1083,13 +1085,21 @@ Scored as **coverage**, not as a sum of individually strong Pokémon: for each o
 
 The matchup maths lives in `mechanics/matchup.py` rather than in the agent, because **switching asks the same question** — is what I would bring in better placed than what is out — and that is the next gap to close. It also absorbed the assumed-attack prior the Protect work introduced, so "we cannot see their moves" is modelled in exactly one place.
 
-**Measured against 200 real human lead choices, and it is not yet better than guessing:**
+**Measured, and it is no better than guessing — the larger sample made this worse, not better:**
 
 ```
-lead overlap 56.6% (30/53 decisions)  vs 50.0% random  95% CI 43.3%-69.0%
+ 53 decisions (50 games) : 56.6%   CI 43.3%-69.0%
+547 decisions (500 games): 48.4%   CI 44.3%-52.6%    baseline 50.0%
 ```
 
-The interval contains the baseline. Stated plainly rather than presented as a win: the implementation is principled and explainable, but unvalidated.
+The first figure looked mildly encouraging. At ten times the data the lead ordering sits *below* chance with the interval straddling it, so **the honest reading is that it carries no signal at all.** Same shape as experiment 0004: a small-sample number that flattered, then did not survive.
+
+Worth separating two decisions that were being treated as one:
+
+- **which four to bring** is scored as coverage and is *not* measured at all (see the circularity trap below), so nothing here says it is wrong;
+- **which two lead** is what these numbers cover, and "lead with the best average matchup" appears to be simply the wrong rule. Real leads turn on speed control, Fake Out pressure, Trick Room setters and what the opponent is likely to lead — none of which an average-matchup score expresses.
+
+One caveat on the measurement itself: a decision is skipped when any of the four brought Pokémon never revealed a move (453 of 1,000 were), which selects for longer games where all four acted. That is a mild bias of unknown direction, not an explanation for a null result.
 
 Two things limit that measurement, and the first is a trap worth recording:
 
