@@ -6,6 +6,14 @@ from champions_ai.evaluation.agreement import (
     human_signature,
     measure_agreement,
 )
+from champions_ai.evaluation.margin import (
+    BattleMargin,
+    MarginSummary,
+    margin_from_sides,
+    measure_side,
+    relative_power,
+    summarise,
+)
 from champions_ai.evaluation.runner import (
     BattleOutcome,
     MatchResult,
@@ -16,14 +24,20 @@ from champions_ai.evaluation.runner import (
 
 __all__ = [
     "AgreementResult",
+    "BattleMargin",
     "BattleOutcome",
+    "MarginSummary",
     "MatchResult",
     "SlotComparison",
     "action_signature",
     "compare_agents",
     "evaluate",
     "human_signature",
+    "margin_from_sides",
     "measure_agreement",
+    "measure_side",
     "play_battle",
+    "relative_power",
+    "summarise",
     "wilson_interval",
 ]

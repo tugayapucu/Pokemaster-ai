@@ -12,6 +12,11 @@ from dataclasses import dataclass, field
 from champions_ai.agents import Agent
 from champions_ai.data import BattleTeam, TeamPool, Trajectory, utc_now
 from champions_ai.env import BattleEnv, Decision, StepResult
+from champions_ai.evaluation.margin import (
+    BattleMargin,
+    margin_from_sides,
+    summarise,
+)
 
 Z_95 = 1.959963984540054
 
@@ -52,10 +57,21 @@ class BattleOutcome:
     winner: int | None
     turns: int
     matchup: str = ""
+    # How decisively it ended, from the first agent's point of view. None when
+    # the battle stopped without a readable final state.
+    margin: BattleMargin | None = None
 
     @property
     def first_agent_won(self) -> bool:
         return self.winner == self.first_agent_played_as
+
+    @property
+    def pokemon_margin(self) -> int:
+        return self.margin.pokemon_margin if self.margin else 0
+
+    @property
+    def hp_margin(self) -> float:
+        return self.margin.hp_margin if self.margin else 0.0
 
 
 @dataclass(frozen=True)
@@ -101,6 +117,26 @@ class MatchResult:
         return low > 0.5 or high < 0.5
 
     @property
+    def pokemon_margin(self):
+        """Mean surviving-Pokemon difference, with a confidence interval.
+
+        Far more sensitive than the win rate on the same battles: a 4-0 and a
+        4-3 are the same bit of win/loss evidence and very different results.
+        """
+        return summarise(
+            f"{self.agent_a} vs {self.agent_b} pokemon margin",
+            [o.pokemon_margin for o in self.outcomes if o.margin],
+        )
+
+    @property
+    def hp_margin(self):
+        """Mean surviving-HP difference, as a fraction of a full team."""
+        return summarise(
+            f"{self.agent_a} vs {self.agent_b} hp margin",
+            [o.hp_margin for o in self.outcomes if o.margin],
+        )
+
+    @property
     def matchups_played(self) -> int:
         return len(self.matchup_scores)
 
@@ -112,6 +148,13 @@ class MatchResult:
     def summary(self) -> str:
         low, high = self.confidence_interval_a
         verdict = "significant" if self.is_significant else "not significant"
+        margin = self.pokemon_margin
+        margin_text = (
+            f" | margin {margin.mean:+.2f} pokemon"
+            f" ({'significant' if margin.is_significant else 'not significant'})"
+            if margin.values
+            else ""
+        )
         return (
             f"{self.agent_a} vs {self.agent_b}: "
             f"{self.wins_a}-{self.wins_b}"
@@ -120,6 +163,7 @@ class MatchResult:
             f"win rate {self.win_rate_a:.1%} "
             f"(95% CI {low:.1%}-{high:.1%}, {verdict}) | "
             f"avg {self.average_turns:.1f} turns"
+            + margin_text
             + (
                 f" | ahead in {self.matchups_won}/{self.matchups_played} matchups"
                 if self.matchup_scores
@@ -205,6 +249,19 @@ def evaluate(
             result = play_battle(env, ordered, teams, seed=battle_seed)
             total_turns += result.turn
 
+            # Read from each player's *own* side. An ObservedSide shows only
+            # what was revealed, so counting an opponent's survivors from one
+            # would silently miss anything they never sent out.
+            try:
+                margin = margin_from_sides(
+                    env.tracker(a_player).own_side(),
+                    env.tracker(1 - a_player).own_side(),
+                )
+            except RuntimeError:
+                # No request seen -- the battle ended before a side was
+                # readable. Recorded as absent rather than as a zero margin.
+                margin = None
+
             if result.winner is None:
                 draws += 1
                 scored = 0
@@ -224,6 +281,7 @@ def evaluate(
                     winner=result.winner,
                     turns=result.turn,
                     matchup=matchup.label,
+                    margin=margin,
                 )
             )
             if keep_trajectories:
