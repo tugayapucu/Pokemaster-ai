@@ -1,20 +1,20 @@
-# Experiment 0004 — Switching on the matchup, and two metrics that disagree
+# Experiment 0004 — Switching on the matchup
 
-**Date:** 2026-08-20
-**Git commit:** see `git log` for the `feat(agents): switch on the matchup` commit
-**Result: the headline finding is not about switching.** Human agreement says the change is significantly **worse**. Play strength says it is significantly **better**. Both were measured properly, and they point in opposite directions.
+**Date:** 2026-08-20 (first run), **revised 2026-08-20** after 10× more data
+**Git commit:** see `git log` for `feat(agents): switch on the matchup` and its revert
+**Result: NEGATIVE. Reverted.** The first version of this document concluded the opposite, on evidence that did not survive being re-run properly. The correction is the most useful part of it.
 
 ## Hypothesis
 
 Experiment 0002 found the largest behavioural gap in the agent: rated humans
-switch on **10.7%** of decisions and `heuristic-v1` on **1.8%**, agreeing on 11
-of 117 switch labels. The cause was structural — switching scored a flat −25
-with a bonus when weakened, so it was almost never worth a turn.
+switch on **11.5%** of decisions and `heuristic-v1` on **1.8%**, agreeing on 113
+of 1,281 switch labels. Switching scored a flat −25 with a bonus when weakened,
+so it was almost never worth a turn.
 
 Pricing a switch by **the matchup it buys**, minus the turn and the free hit it
 costs, should close that gap.
 
-## Change
+## Change (since reverted)
 
 ```
 value = (incoming_matchup − current_matchup) × SWITCH_HORIZON
@@ -22,100 +22,108 @@ value = (incoming_matchup − current_matchup) × SWITCH_HORIZON
         + bonus if staying in would be knocked out
 ```
 
-The matchup comes from `mechanics/matchup.py`, the same function Team Preview
-uses, now given the engine's computed stats, current HP on both sides, and
-whichever opponent moves have actually been revealed.
+`SWITCH_HORIZON` was calibrated to the **human switch rate** rather than to the
+agreement score: at 1.0 the agent switched on 11.0% of decisions against a human
+10.7%.
 
-`SWITCH_HORIZON` was calibrated to the **human switch rate**, not to the
-agreement score: at 1.0 the agent switches on 11.0% of decisions against a human
-10.7%. Fitting it to agreement would have been fitting it to the thing this
-experiment goes on to show is the wrong target.
+## What it did to the switch decision itself
 
-## Result 1 — human agreement got worse
+It worked, on the narrow question:
 
 ```
-flat-switch     476/1091 = 43.6%
-matchup-switch  438/1091 = 40.1%     (at the uncalibrated first attempt)
-                455/1091 = 41.7%     (at the calibrated rate)
-
-only OLD agreed 69   only NEW agreed 31
-McNemar chi2 = 13.69 — significant at p<0.01, against the change
+switch labels agreed:  113/1281 (8.8%)  ->  297/1281 (23.2%)
+agent switch rate:     2.1%             ->  14.0%   (human 11.5%)
 ```
 
-Switch labels specifically improved a great deal — 11 → 38 of 117 — but every
-gain there was outweighed by losses on move turns. A parameter sweep confirmed
-this is not a tuning artefact: **at every setting tried, overall agreement was
-below the flat baseline.**
+Nearly triple the switch agreement. Had that been the only measurement, this
+would read as a clear success.
 
-| horizon | KO bonus | switch rate | agreement | switch labels |
-|---|---|---|---|---|
-| 0.50 | 0 | 5.6% | 42.3% | 16/117 |
-| 1.00 | 35 | **11.0%** | 41.7% | 31/117 |
-| 1.50 | 70 | 15.7% | 40.1% | 38/117 |
-
-Matching the human switch *rate* does not mean switching on the *same turns*.
-
-## Result 2 — play strength got better
+## Result 1 — overall agreement fell, decisively
 
 ```
-matchup-switch vs flat-switch:  354-246 over 600 battles
-win rate 59.0% (95% CI 55.0%-62.9%, significant), ahead in 32/56 matchups
+flat-switch     4793/11133 = 43.1%
+matchup-switch  4418/11133 = 39.7%
 
-matchup-switch vs random: 190-10 = 95.0%
-flat-switch    vs random: 191-9  = 95.5%
+only OLD agreed 593    only NEW agreed 218
+McNemar chi2 = 172.47 — overwhelmingly significant, against the change
 ```
 
-Significant over 600 battles, and spread across matchups rather than
-concentrated in a few favourable pairings.
+Every gain on switch turns was outweighed several times over by losses on move
+turns. A parameter sweep confirmed this is not a tuning artefact: at every
+setting tried, overall agreement sat below the flat baseline.
 
-## The finding
+On the first 50-game corpus this same comparison gave chi2 = 13.69. At 500
+games it is 172. **More data did not soften the verdict, it hardened it.**
 
-**The two instruments disagree, both significantly, in opposite directions.**
-This is the first time that has happened in this project, and it is worth more
-than the switching change itself.
+## Result 2 — the strength result did not replicate
 
-Agreement was built with the caveat stated in its own module docstring —
-*"it rewards imitating the reference player, so a genuinely better move counts
-as a miss"*. Until now that was a disclaimer. It is now a measurement.
+This is where the first version of this document went wrong. It concluded from
+a single 600-battle run:
 
-The reconciliation is not that either metric is broken:
+```
+FIRST RUN   (600 battles, 8-team pool)      354-246 = 59.0%  significant
+```
 
-- **Agreement is a proxy for reasoning like a competent player.** Our sample is
-  Elo 1500–1782, median 1589 — competent, not optimal. Humans switch on
-  particular turns for reasons the agent cannot see: predicting an opposing
-  switch, preserving a Pokémon for a later matchup, positioning for Trick Room.
-  Our agent switches on *different* turns, and agreement scores every one of
-  those as a miss whether or not it was right.
-- **Head-to-head is a direct measure of the thing we want**, but only against
-  one specific opponent, and it was blind to the Protect change in experiment
-  0003 that agreement caught at p<0.01.
+and kept the change on that basis. Re-run at higher power on a larger pool:
 
-Neither dominates. They measure different things and both are worth keeping.
+```
+seed 31     (800 battles, 12-team pool)     410-390 = 51.2%  NOT significant
+seed 4242   (800 battles, 12-team pool)     437-363 = 54.6%  significant
+pooled      (1,600 battles)                 847-753 = 52.9%
+
+vs Random:  matchup-switch 290-10 = 96.7%
+            flat-switch    297-3  = 99.0%
+```
+
+The 59% was overfit to one pool and one seed. Pooled, the edge is ~3 points and
+one of the two seeds shows nothing at all — and against Random the change is
+**worse**, losing 10 games where the flat version loses 3.
+
+## The error, stated plainly
+
+Experiment 0003 recorded this exact failure mode and warned about it:
+
+> The 200-battle run suggested 55.5%; at 800 it regressed to 51.6%. **The first
+> number was noise**, and is recorded here because stopping at 200 would have
+> produced a false claim.
+
+Then this experiment stopped at 600 battles and produced a false claim. Writing
+down the lesson did not prevent repeating it; only re-running did.
+
+The methodology note that came out of the first version — *"head-to-head is the
+arbiter when the two metrics conflict"* — was reasoning from a number that was
+not real. **The metrics were never actually in conflict.** Agreement said no,
+strength said nothing much either way, and only an underpowered run made it look
+like a disagreement.
 
 ## Decision
 
-**Kept.** Play strength is the goal; agreement is a proxy for it. When a proxy
-and the thing it proxies for disagree at significance, the thing wins.
+**Reverted.** Three independent signals and none support the change:
 
-This inverts the rule experiment 0003 proposed — "use self-play to confirm no
-regression, and agreement to detect improvement". The corrected rule:
+| Measure | Verdict |
+|---|---|
+| Human agreement, 11,133 labels | **Worse**, chi2 = 172 |
+| Head-to-head, 1,600 battles | ~52.9%, marginal, one seed null |
+| Against Random, 300 battles | **Worse** — 96.7% against 99.0% |
 
-- **Agreement is the more sensitive instrument for scoring changes**, which
-  0003 demonstrated by detecting at p<0.01 what 800 battles could not.
-- **Head-to-head is the arbiter when they conflict**, because it measures the
-  objective rather than a stand-in for it.
-- **A change that moves them in opposite directions is interesting, not
-  broken**, and should be recorded rather than resolved by dropping whichever
-  result is inconvenient.
+The matchup machinery in `mechanics/matchup.py` stays: Team Preview uses it, and
+the speed-edge fix it carries was justified independently.
+
+## What this leaves
+
+**Switching is still the largest known behavioural gap, and it is now an
+honestly open one.** The agent switches on 2.1% of decisions where humans switch
+on 11.5%. We know the gap, we know one formulation that does not close it, and
+`tests/unit/agents/test_switch_scoring.py` pins the crudeness deliberately so
+the next attempt starts from a truthful baseline rather than a flattering one.
 
 ## Next actions
 
-- Re-run both metrics on any change touching switching, and expect them to
-  diverge again.
-- The agreement drop is concentrated on **move** turns where the agent now
-  switches instead. Worth inspecting directly: some of those are likely genuine
-  errors rather than the agent knowing better, and separating the two would
-  sharpen both metrics.
-- Collect more replays. At 1,091 labels the agreement interval is ±3 points;
-  the switch subset is only 117 labels and carries far more noise than the
-  headline suggests.
+- **Do not conclude a head-to-head from under ~1,500 battles**, and always run
+  at least two seeds on a pool of ten or more teams. Twice now the first number
+  has been wrong in the same direction.
+- Any future switching attempt must beat flat switching on **agreement and
+  against Random**, not only in a head-to-head against the thing it replaces.
+- The likelier cause of the gap is not how switching is *scored* but what the
+  agent cannot see — an opposing switch, a Pokémon worth preserving for a later
+  matchup. That is opponent modelling (Milestone 10), not a scoring term.

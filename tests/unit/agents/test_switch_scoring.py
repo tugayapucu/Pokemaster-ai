@@ -1,13 +1,24 @@
-"""Switching, priced by the matchup it buys.
+"""Switching: a flat cost plus a rescue bonus.
 
-The old scoring was a flat cost plus a bonus when weakened, which made
-switching almost never worth it: rated humans switch on 10.7% of decisions and
-that agent on 1.8%, agreeing on 11 of 117 switch labels.
+Deliberately crude, and these tests pin the crudeness rather than pretend
+otherwise. Rated humans switch on 11.5% of decisions and this agent on 1.8%,
+which is a real gap.
+
+A matchup-based replacement was built and **reverted** (experiment 0004). It
+tripled switch agreement and lost on everything else: overall agreement, play
+against Random, and a head-to-head edge that vanished at higher power. These
+tests therefore describe the simple version that is actually in the code, so
+the next attempt starts from an honest baseline.
 """
 
 import pytest
 
-from champions_ai.agents.heuristic import HeuristicAgent
+from champions_ai.agents.heuristic import (
+    LOW_HP_FRACTION,
+    SWITCH_COST,
+    SWITCH_WHEN_WEAKENED_BONUS,
+    HeuristicAgent,
+)
 from champions_ai.dex import Dex
 from champions_ai.domain import (
     REGULATION_M_B,
@@ -50,7 +61,6 @@ DEX = Dex.from_payload({
     "types": TYPES, "chart": CHART,
 })
 MOVE_FOR = {"Firemon": "ember", "Watermon": "splash", "Plainmon": "bonk"}
-STATS = {"atk": 130, "def": 100, "spa": 130, "spd": 100, "spe": 120}
 
 
 def _battle_mon(species, hp=175, max_hp=175):
@@ -58,16 +68,16 @@ def _battle_mon(species, hp=175, max_hp=175):
         pokemon_set=PokemonSet(species=species, level=50, ability="x",
                                moves=(MOVE_FOR[species],)),
         current_hp=hp, max_hp=max_hp,
-        computed_stats=dict(STATS),
+        computed_stats={"atk": 130, "def": 100, "spa": 130, "spd": 100, "spe": 120},
         choosable_moves=(MOVE_FOR[species],),
     )
 
 
-def _observation(active, bench, foe="Watermon", active_hp=175):
+def _observation(active, bench, foe="Watermon", active_hp=175, active_slots=(0, None)):
     team = (_battle_mon(active, hp=active_hp),) + tuple(_battle_mon(s) for s in bench)
     return Observation(
         regulation=REGULATION_M_B, turn=2, player=0,
-        own_side=Side(team=team, active_slots=(0, None)),
+        own_side=Side(team=team, active_slots=active_slots),
         opponent_side=ObservedSide(
             revealed=(ObservedPokemon(species=foe, level=50, hp_percent=100, fainted=False),),
             active_slots=(0, None),
@@ -80,54 +90,48 @@ def agent():
     return HeuristicAgent(DEX, name="test")
 
 
-def test_switching_into_a_better_matchup_beats_switching_into_a_worse_one(agent):
-    """Against a Firemon, our Watermon both hits for double and takes half.
-
-    The foe is deliberately Fire rather than Water: Water into Water and Normal
-    into Water are both neutral in this chart, so that pairing would compare two
-    genuinely identical options and assert a difference that does not exist.
-    """
-    observation = _observation("Firemon", ["Watermon", "Plainmon"], foe="Firemon")
-    into_water = agent.score_slot_action(observation, 0, SwitchAction(team_index=1)).score
-    into_plain = agent.score_slot_action(observation, 0, SwitchAction(team_index=2)).score
-    assert into_water > into_plain
-
-
-def test_switching_out_of_a_good_matchup_is_unattractive(agent):
-    """Already winning the matchup, so giving up a turn to change it is a loss."""
-    observation = _observation("Watermon", ["Firemon"], foe="Firemon")
-    assert agent.score_slot_action(observation, 0, SwitchAction(team_index=1)).score < 0
+def test_switching_a_healthy_pokemon_costs_a_turn(agent):
+    observation = _observation("Firemon", ["Watermon"], foe="Firemon")
+    scored = agent.score_slot_action(observation, 0, SwitchAction(team_index=1))
+    assert scored.score == SWITCH_COST
+    assert any("costs a turn" in r for r in scored.reasons)
 
 
 def test_a_pokemon_about_to_be_knocked_out_is_worth_saving(agent):
-    healthy = _observation("Firemon", ["Plainmon"], foe="Watermon", active_hp=175)
-    nearly_dead = _observation("Firemon", ["Plainmon"], foe="Watermon", active_hp=8)
+    healthy = _observation("Firemon", ["Plainmon"], active_hp=175)
+    nearly_dead = _observation("Firemon", ["Plainmon"], active_hp=8)
     assert (
         agent.score_slot_action(nearly_dead, 0, SwitchAction(team_index=1)).score
-        > agent.score_slot_action(healthy, 0, SwitchAction(team_index=1)).score
+        == SWITCH_COST + SWITCH_WHEN_WEAKENED_BONUS
     )
+    assert agent.score_slot_action(healthy, 0, SwitchAction(team_index=1)).score == SWITCH_COST
 
 
-def test_filling_an_empty_slot_picks_the_best_placed_pokemon(agent):
-    """A forced replacement has no turn to give up, so only the matchup counts."""
-    team = (_battle_mon("Watermon"), _battle_mon("Firemon"))
-    observation = Observation(
-        regulation=REGULATION_M_B, turn=2, player=0,
-        own_side=Side(team=team, active_slots=(None, None)),
-        opponent_side=ObservedSide(
-            revealed=(ObservedPokemon(species="Watermon", level=50, hp_percent=100,
-                                      fainted=False),),
-            active_slots=(0, None),
-        ),
+def test_the_weakened_bonus_applies_at_the_threshold(agent):
+    at_threshold = _observation(
+        "Firemon", ["Plainmon"], active_hp=int(175 * LOW_HP_FRACTION)
     )
-    water = agent.score_slot_action(observation, 0, SwitchAction(team_index=0))
-    fire = agent.score_slot_action(observation, 0, SwitchAction(team_index=1))
-    assert water.score > fire.score
-    assert "best placed" in water.reasons[0]
+    scored = agent.score_slot_action(at_threshold, 0, SwitchAction(team_index=1))
+    assert scored.score == SWITCH_COST + SWITCH_WHEN_WEAKENED_BONUS
+    assert any("weakened" in r for r in scored.reasons)
 
 
-def test_the_reason_names_both_pokemon(agent):
-    observation = _observation("Firemon", ["Watermon"], foe="Firemon")
-    reasons = agent.score_slot_action(observation, 0, SwitchAction(team_index=1)).reasons
-    assert any("Watermon" in r and "Firemon" in r for r in reasons)
-    assert any("gives up" in r for r in reasons)
+def test_filling_an_empty_slot_is_not_treated_as_giving_up_a_turn(agent):
+    """A forced replacement has no turn to surrender, so it must not be charged
+    the switch cost -- otherwise every replacement scores as a mistake."""
+    observation = _observation("Firemon", ["Watermon"], active_slots=(None, None))
+    scored = agent.score_slot_action(observation, 0, SwitchAction(team_index=1))
+    assert scored.score == 0.0
+    assert "empty slot" in scored.reasons[0]
+
+
+def test_the_matchup_is_deliberately_not_consulted(agent):
+    """Pins the known limitation: a switch into a favourable matchup scores
+    exactly the same as one into an awful matchup. Experiment 0004 tried to fix
+    this and the fix lost on the measures that matter."""
+    into_good = _observation("Plainmon", ["Watermon"], foe="Firemon")
+    into_bad = _observation("Plainmon", ["Firemon"], foe="Watermon")
+    assert (
+        agent.score_slot_action(into_good, 0, SwitchAction(team_index=1)).score
+        == agent.score_slot_action(into_bad, 0, SwitchAction(team_index=1)).score
+    )

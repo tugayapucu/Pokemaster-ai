@@ -121,18 +121,18 @@ COVERAGE_WEIGHT = 1.0
 # A small pull towards picks that are good on average, to break ties between
 # two sets with the same worst case.
 AVERAGE_WEIGHT = 0.25
-# Switching gives up this turn's attack and hands the opponent a free hit on
-# whatever comes in. What it buys is a better matchup for every turn after, so
-# the gain is worth more than one turn of it -- but not many more, in a format
-# where battles last five or six turns.
-# Calibrated to the human switch *rate* rather than to the agreement score:
-# at 1.0 the agent switches on 11.0% of decisions and rated humans on 10.7%.
-# Fitting it to agreement would have been fitting it to the wrong thing -- see
-# docs/experiments/0004.
-SWITCH_HORIZON = 1.0
-# Saving a Pokemon that would otherwise be knocked out is worth roughly what
-# losing it would cost: a slot, an attacker and a switch option at once.
-SWITCH_SAVES_KO_BONUS = 35.0
+# Switching costs a turn and buys a better position. Priced flatly, which is
+# crude and known to be crude: rated humans switch on 11.5% of decisions and
+# this agent on 1.8%.
+#
+# A matchup-based replacement was built, measured and **reverted** -- see
+# docs/experiments/0004. It tripled switch agreement (6.8% -> 23.2%) and still
+# came out worse on every other measure: 3.4 points of overall agreement
+# (McNemar chi2 = 172 on 11,133 labels), worse against Random (96.7% against
+# 99.0%), and a head-to-head edge that did not survive being re-run at higher
+# power. Switching remains an open problem, not a solved one.
+SWITCH_COST = -25.0
+SWITCH_WHEN_WEAKENED_BONUS = 55.0
 LOW_HP_FRACTION = 0.35
 
 
@@ -220,110 +220,24 @@ class HeuristicAgent(Agent):
     def _score_switch(
         self, observation: Observation, slot: int, action: SwitchAction
     ) -> ScoredAction:
-        """Worth the matchup it buys, minus the turn and the free hit it costs.
+        """A flat cost, plus a bonus for rescuing something nearly dead.
 
-        The old scoring was a flat cost plus a bonus when weakened, which made
-        switching almost never worth it: measured against rated humans, they
-        switched on 11.0% of decisions and this agent on 1.7%, agreeing on 8 of
-        117 switch labels.
+        Deliberately unsophisticated. The matchup-based version this replaced
+        is recoverable from git history and documented in experiment 0004; it
+        was reverted on evidence, not abandoned for lack of one.
         """
-        incoming = observation.own_side.team[action.team_index]
-        current = self._own_active(observation, slot)
+        attacker = self._own_active(observation, slot)
+        if attacker is None:
+            # The slot is empty, so this is a forced replacement rather than a
+            # choice to give up momentum.
+            return ScoredAction(action, 0.0, ("filling an empty slot",))
 
-        if current is None:
-            # An empty slot must be refilled, so there is no turn to give up
-            # and nothing to compare against -- only which Pokemon is best
-            # placed against what is on the field.
-            replacement = self._matchup_against_field(observation, incoming)
-            return ScoredAction(
-                action,
-                replacement * DAMAGE_WEIGHT,
-                (f"{incoming.pokemon_set.species} is best placed to come in",),
-            )
-
-        staying = self._matchup_against_field(observation, current)
-        coming_in = self._matchup_against_field(observation, incoming)
-
-        gain = (coming_in - staying) * SWITCH_HORIZON * DAMAGE_WEIGHT
-        reasons = [
-            f"{incoming.pokemon_set.species} matches up "
-            f"{'better' if coming_in > staying else 'worse'} than "
-            f"{current.pokemon_set.species}"
-        ]
-
-        # Giving up this turn's attack is the price, and it is only a price if
-        # there was something worth attacking.
-        forgone, _, _ = self._best_offence(observation, slot, current)
-        score = gain - forgone * DAMAGE_WEIGHT
-        if forgone > 0:
-            reasons.append(f"but gives up a ~{forgone:.0%} hit this turn")
-
-        threat, would_ko, _ = self._incoming_threat(observation, slot, current)
-        if would_ko:
-            score += SWITCH_SAVES_KO_BONUS
-            reasons.append(f"and saves {current.pokemon_set.species} from a knockout")
-        elif threat >= current.hp_fraction:
-            score += SWITCH_SAVES_KO_BONUS * 0.5
-            reasons.append(f"{current.pokemon_set.species} may not survive the turn")
-
+        score = SWITCH_COST
+        reasons = ["switching costs a turn"]
+        if attacker.hp_fraction <= LOW_HP_FRACTION:
+            score += SWITCH_WHEN_WEAKENED_BONUS
+            reasons.append(f"{attacker.pokemon_set.species} is weakened")
         return ScoredAction(action, score, tuple(reasons))
-
-    def _matchup_against_field(self, observation: Observation, mon) -> float:
-        """Our net matchup against the live opponents, from this Pokemon.
-
-        Averaged rather than maximised: in doubles both of them get to act, so
-        being excellent against one and helpless against the other is not the
-        same as being solid against both.
-        """
-        scores = []
-        opponent = observation.opponent_side
-        for index in opponent.active_slots:
-            if index is None:
-                continue
-            observed = opponent.revealed[index]
-            if observed.fainted:
-                continue
-            try:
-                species = self.dex.get_species(observed.species)
-            except KeyError:
-                continue
-            revealed = [m for m in self._revealed_moves(observed) if m.is_damaging]
-            estimated = estimate_stats(species.base_stats, self.assumed_opponent_points)
-            scores.append(
-                matchup(
-                    self.dex,
-                    mon.pokemon_set,
-                    species,
-                    level=observation.regulation.level,
-                    doubles=observation.regulation.game_type == "doubles",
-                    assumed_points=self.assumed_opponent_points,
-                    our_stats=mon.computed_stats or None,
-                    our_hp=max(1, mon.current_hp),
-                    their_hp=max(1, estimated["hp"] * observed.hp_percent // 100),
-                    their_moves=revealed or None,
-                ).net
-            )
-        return sum(scores) / len(scores) if scores else 0.0
-
-    def _best_offence(
-        self, observation: Observation, slot: int, attacker
-    ) -> tuple[float, str | None, bool]:
-        """The best damaging move available to this slot right now."""
-        best, name, ko = 0.0, None, False
-        for index, move_id in enumerate(attacker.selectable_moves):
-            if move_id in attacker.disabled_moves:
-                continue
-            try:
-                move = self.dex.get_move(move_id)
-            except KeyError:
-                continue
-            if not move.is_damaging:
-                continue
-            scored = self._score_move(observation, slot, MoveAction(move_index=index))
-            if scored.score > best * DAMAGE_WEIGHT:
-                best = max(best, scored.score / DAMAGE_WEIGHT)
-                name, ko = move.name, False
-        return max(0.0, min(best, 1.0)), name, ko
 
     def _score_move(
         self, observation: Observation, slot: int, action: MoveAction

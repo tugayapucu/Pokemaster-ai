@@ -354,12 +354,24 @@ long. Each line links to where the detail lives.
 ### Measured results worth remembering
 
 ```
-heuristic-v1 vs random           95-98%  significant
+CORPUS: 500 rated replays, 3,503 turns, 6,137 decision points, 11,133 labels
+        Elo 1500-1848, median 1614, zero reconstruction failures
+
+heuristic-v1 vs random           96-99%  significant
 search-v1    vs heuristic-v1     49.3%   not significant   (experiment 0001)
-heuristic-v1 human agreement     41.7%   vs 21.7% random   (experiments 0002-0004)
-lead selection vs human leads    56.6%   vs 50.0% random   NOT significant
-matchup-switch vs flat-switch    59.0%   significant       (experiment 0004)
+heuristic-v1 human agreement     43.1%   vs 22.2% random   (CI 42.1-44.0%)
+lead selection vs human leads     56.6%   vs 50.0% random   NOT significant
+matchup-switch                   REVERTED                  (experiment 0004)
 ```
+
+At 11,133 labels the agreement interval is **±0.9 points**, which is enough to judge a single scoring change on its own rather than only in aggregate.
+
+**Correction to an earlier claim.** A previous version of this section reported that human agreement and head-to-head strength had "disagreed, both significantly, in opposite directions", and drew a methodology rule from it. That rested on a 600-battle result of 59.0% which **did not replicate**: 1,600 battles across two seeds give 52.9%, one seed null, and the change is *worse* against Random. The metrics were never in conflict — agreement said no, strength said very little, and an underpowered run made it look like a disagreement. See experiment 0004.
+
+The rule that survives is narrower and about power, not arbitration:
+
+- **agreement is the sensitive instrument** for scoring changes, detecting at p<0.01 what 800 self-play battles could not (experiment 0003);
+- **do not conclude a head-to-head from under ~1,500 battles**, and always run at least two seeds over a pool of ten or more teams. Twice now the first number has been wrong in the same direction.
 
 **The two metrics have now disagreed, both significantly, in opposite directions** (experiment 0004). Matchup-based switching *lowers* human agreement (43.6% → 41.7%, McNemar chi2 = 13.69 against) while *winning* head to head (354-246 over 600 battles). Neither instrument is broken — they measure different things:
 
@@ -373,11 +385,13 @@ matchup-switch vs flat-switch    59.0%   significant       (experiment 0004)
    every move as expected damage, so a flinch, a status, a stat drop, recoil
    and drain are all invisible. This is a *data* gap before it is a scoring
    gap, and it sits underneath every other item here.
-2. ~~**Switching.**~~ **Addressed 2026-08-20** (experiment 0004). Switching is
-   now priced by the matchup it buys, calibrated to the human switch rate
-   (11.0% against 10.7%) and agreeing on 31 of 117 switch labels rather than
-   11. Wins head to head at 59.0% while *lowering* human agreement — see the
-   note above, which is the more important finding.
+2. **Switching — still open, and now honestly so.** Rated humans switch on
+   11.5% of decisions and the agent on 2.1%, agreeing on 113 of 1,281 switch
+   labels. A matchup-based replacement was built and **reverted** (experiment
+   0004): it tripled switch agreement and lost on everything else. The likelier
+   cause is not how switching is scored but what the agent cannot see — an
+   opposing switch, a Pokémon worth preserving — which is Milestone 10, not a
+   scoring term.
 3. **Team Preview is unvalidated.** 56.6% lead overlap against a 50% baseline
    on 53 scorable decisions — the interval contains the baseline, so it is not
    yet distinguishable from guessing. Needs more games, not more code.
@@ -391,10 +405,12 @@ matchup-switch vs flat-switch    59.0%   significant       (experiment 0004)
    excluded from agreement rather than scored.
 8. **Nature** is stored as a name with no table mapping it to a stat, so
    matchup maths treats every Pokemon as neutral-natured.
-9. **The agreement drop from switching is unexplained at the label level.** It
-   is concentrated on *move* turns where the agent now switches instead; some
-   of those are surely genuine errors rather than the agent knowing better, and
-   separating the two would sharpen both metrics.
+9. **The random baseline is very slightly optimistic.** It is computed as
+   uniform over *slot* actions, while `RandomAgent` picks uniformly over
+   *joint* actions, and `JointAction` validation filters some combinations —
+   so the marginals differ. Invisible at 1,091 labels (20.3% against a
+   predicted 21.3%), detectable at 11,133 (23.1% against 22.2%). More data did
+   not break the metric, it exposed an approximation that was always in it.
 
 ### Move effects: the gap underneath the others (identified 2026-08-18)
 
