@@ -8,6 +8,7 @@ from champions_ai.data.collect import (
     CollectionManifest,
     ThrottledFetcher,
     collect_replays,
+    load_all,
     load_collection,
 )
 from champions_ai.data.reconstruct import (
@@ -53,6 +54,7 @@ __all__ = [
     "extract_choices",
     "git_commit",
     "has_human_players",
+    "load_all",
     "load_collection",
     "looks_like_bot",
     "move_data_from_dex",

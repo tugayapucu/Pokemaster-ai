@@ -15,8 +15,10 @@ from champions_ai.data.collect import (
     CollectionManifest,
     collect_replays,
     iter_listings,
+    load_all,
     load_collection,
     load_or_fetch,
+    manifest_paths,
 )
 
 
@@ -260,3 +262,62 @@ def test_reloading_a_manifest_needs_no_network(tmp_path, api):
     path = tmp_path / "manifest.json"
     collected.manifest.save(path)
     assert CollectionManifest.load(path).replay_ids == ("a", "c")
+
+
+# ------------------------------------------------- provenance across many runs
+
+
+def test_each_run_gets_its_own_manifest(tmp_path, api):
+    """Overwriting one run's manifest with the next loses how the earlier batch
+    was selected, which is the provenance the dataset is supposed to keep."""
+    collected = collect_replays(FORMAT, tmp_path, target=10, fetcher=api, min_rating=1500)
+    path = collected.save(tmp_path)
+    assert path.name.startswith("manifest-")
+    assert path.exists()
+
+
+def test_two_runs_leave_two_manifests(tmp_path, api):
+    first = collect_replays(FORMAT, tmp_path, target=1, fetcher=api, min_rating=1500)
+    first.manifest.save(tmp_path / "manifest-2026-01-01T00-00-00.json")
+    second = collect_replays(FORMAT, tmp_path, target=10, fetcher=api, min_rating=None)
+    second.manifest.save(tmp_path / "manifest-2026-02-02T00-00-00.json")
+    assert len(manifest_paths(tmp_path)) == 2
+
+
+def test_load_all_merges_runs_without_duplicating(tmp_path, api):
+    strict = collect_replays(FORMAT, tmp_path, target=10, fetcher=api, min_rating=1500)
+    strict.manifest.save(tmp_path / "manifest-2026-01-01T00-00-00.json")
+    loose = collect_replays(FORMAT, tmp_path, target=10, fetcher=api, min_rating=None)
+    loose.manifest.save(tmp_path / "manifest-2026-02-02T00-00-00.json")
+
+    merged = load_all(tmp_path)
+    ids = [r.metadata.replay_id for r in merged.replays]
+    assert sorted(ids) == ["a", "b", "c"], "the union, each replay once"
+    assert len(ids) == len(set(ids))
+
+
+def test_the_merged_manifest_reports_the_loosest_filter(tmp_path, api):
+    """A set assembled from several passes is only as selective as its least
+    selective part, so it must not claim the stricter bar."""
+    strict = collect_replays(FORMAT, tmp_path, target=10, fetcher=api, min_rating=1500)
+    strict.manifest.save(tmp_path / "manifest-2026-01-01T00-00-00.json")
+    loose = collect_replays(FORMAT, tmp_path, target=10, fetcher=api, min_rating=None)
+    loose.manifest.save(tmp_path / "manifest-2026-02-02T00-00-00.json")
+
+    merged = load_all(tmp_path).manifest
+    assert merged.min_rating is None
+    assert merged.considered == strict.manifest.considered + loose.manifest.considered
+    assert "not be redistributed" in merged.usage_note
+
+
+def test_load_all_needs_at_least_one_manifest(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_all(tmp_path)
+
+
+def test_load_all_skips_a_replay_whose_file_is_gone(tmp_path, api):
+    """A manifest naming a file that is not there must not break the load."""
+    collected = collect_replays(FORMAT, tmp_path, target=10, fetcher=api, min_rating=1500)
+    collected.manifest.save(tmp_path / "manifest-2026-01-01T00-00-00.json")
+    (tmp_path / "a.json").unlink()
+    assert [r.metadata.replay_id for r in load_all(tmp_path).replays] == ["c"]

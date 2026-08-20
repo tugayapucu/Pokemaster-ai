@@ -98,6 +98,17 @@ class CollectionManifest:
     def kept(self) -> int:
         return len(self.replay_ids)
 
+    def default_path(self, cache_dir: Path) -> Path:
+        """`manifest-<collected_at>.json`, one per run.
+
+        Runs are kept apart rather than merged into a single file because each
+        carries its own filter, date and rejection counts. Overwriting one with
+        the next would lose the record of how an earlier batch was selected,
+        which is exactly the provenance AGENTS.md asks a dataset to keep.
+        """
+        stamp = self.collected_at.replace(":", "-")
+        return cache_dir / f"manifest-{stamp}.json"
+
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {**self.__dict__, "replay_ids": list(self.replay_ids)}
@@ -119,6 +130,12 @@ class Collection:
 
     def __len__(self) -> int:
         return len(self.replays)
+
+    def save(self, cache_dir: Path) -> Path:
+        """Write this run's manifest alongside the replays, and return its path."""
+        path = self.manifest.default_path(cache_dir)
+        self.manifest.save(path)
+        return path
 
 
 def search_page(
@@ -144,7 +161,7 @@ def iter_listings(
     fetcher: Fetcher,
     *,
     source: str = DEFAULT_SOURCE,
-    max_pages: int = 20,
+    max_pages: int = 250,
 ) -> Iterator[dict]:
     """Walk the listing backwards in time, page by page.
 
@@ -287,9 +304,56 @@ def collect_replays(
 
 
 def load_collection(cache_dir: Path, manifest_path: Path) -> Collection:
-    """Rebuild a collection from disk, without any network access."""
+    """Rebuild one run from disk, without any network access."""
     manifest = CollectionManifest.load(manifest_path)
     return Collection(
         manifest=manifest,
         replays=[Replay.load(cache_dir / f"{rid}.json") for rid in manifest.replay_ids],
     )
+
+
+def manifest_paths(cache_dir: Path) -> list[Path]:
+    """Every run's manifest, oldest first. Includes the unstamped legacy name."""
+    return sorted(cache_dir.glob("manifest*.json"))
+
+
+def load_all(cache_dir: Path) -> Collection:
+    """Every replay collected across every run, deduplicated by id.
+
+    The manifest returned is a union: its counts are summed and its filters
+    describe the *loosest* run, because a set assembled from several passes is
+    only as selective as its least selective part. Anything stricter should be
+    filtered by the caller rather than assumed.
+    """
+    seen: dict[str, Replay] = {}
+    manifests = [CollectionManifest.load(path) for path in manifest_paths(cache_dir)]
+    if not manifests:
+        raise FileNotFoundError(f"no manifest in {cache_dir}")
+
+    for manifest in manifests:
+        for replay_id in manifest.replay_ids:
+            if replay_id in seen:
+                continue
+            path = cache_dir / f"{replay_id}.json"
+            if path.exists():
+                seen[replay_id] = Replay.load(path)
+
+    ratings = [m.min_rating for m in manifests]
+    combined = CollectionManifest(
+        schema_version=manifests[-1].schema_version,
+        format_id=manifests[-1].format_id,
+        source=manifests[-1].source,
+        collected_at=manifests[-1].collected_at,
+        git_commit=manifests[-1].git_commit,
+        # The loosest bar any run used, so nothing claims to be stricter than it is.
+        min_rating=None if any(r is None for r in ratings) else min(ratings),
+        exclude_bots=all(m.exclude_bots for m in manifests),
+        usage_note=USAGE_NOTE,
+        replay_ids=tuple(seen),
+        considered=sum(m.considered for m in manifests),
+        rejected_bot=sum(m.rejected_bot for m in manifests),
+        rejected_unrated=sum(m.rejected_unrated for m in manifests),
+        rejected_rating=sum(m.rejected_rating for m in manifests),
+        rejected_format=sum(m.rejected_format for m in manifests),
+    )
+    return Collection(manifest=combined, replays=list(seen.values()))
