@@ -513,6 +513,36 @@ The pattern is consistent and it is not about information. A rule that prices *d
 
 **So the next step is to learn the policy rather than write it.** The features are adequate; the mapping from features to actions is what is missing, and there are 11,133 labelled human decisions to learn it from.
 
+### Damage calibration against ground truth (2026-08-21)
+
+The only measurement in this project with an objective answer. Agreement is ambiguous (experiment 0006) and head-to-head is our agents grading our agents; damage dealt in a real battle is a fact. Measured over **5,054 non-crit attacks** from the corpus.
+
+```
+                        median predicted/actual   within 10 points
+damage only                            0.89x               35.8%
++ stat stages                          0.90x               39.2%
++ weather                              0.90x               39.7%
++ attacking-stat investment            0.97x               40.7%
+```
+
+Knockout prediction, which is what actually drives decisions:
+
+```
+"guaranteed" actually faints   80.0%  ->  82.6%
+"no KO" actually kills         19.8%  ->  15.8%
+guaranteed calls                1019  ->   1164
+```
+
+Three findings, and two of them corrected a guess of mine:
+
+- **Stat stages reached nothing.** `Boosts` was tracked on both sides and `apply_boost` was written for it, and no caller connected them — a Pokémon that had just used Swords Dance scored identically to one that had not.
+- **Weather was the wrong target.** Sun at 0.82× was the worst *group*, but 538 of 5,054 attacks, and `weather: none` already sat at the overall 0.90×. The bias was never weather-shaped. Modelled anyway because it is correct and the recommendation text must be truthful, but it moved accuracy by 0.5 points.
+- **The cause was the attacking stat, not items.** Sweeping the attacker's assumed investment with the defender held uniform removes the bias entirely (0.84× at 0 points, 1.02× at 32, best fit at 24). The earlier spread test missed it by moving both sides together. The item hypothesis is refuted by the same corpus: 694 reveals, dominated by *defensive* items, essentially no Life Orb or Choice.
+
+The model is deliberately asymmetric — the attacking stat gets investment credit, defensive stats stay uniform — which is not a legal single-Pokémon spread and is not meant to be. It is a predictor over two populations: whoever is attacking is likely built to attack, whoever is being attacked is a mixed bag. A legal concentrated spread on both sides fitted worse (1.14–1.18×). There is a test pinning the asymmetry so it does not get "fixed" into consistency.
+
+**Play strength is unchanged**, at 97.3% against Random and a +2.12 Pokémon margin, and that was the stated expectation before the work rather than after. The justification is prediction accuracy and truthful recommendations, which is a product requirement independent of win rate.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
