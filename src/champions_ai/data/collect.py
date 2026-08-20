@@ -23,6 +23,7 @@ enforced here rather than left to memory:
 
 import json
 import time
+import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
@@ -45,29 +46,69 @@ USAGE_NOTE = (
 Fetcher = Callable[[str], object]
 
 
+# HTTP statuses worth trying again. A 404 means the replay is not there and
+# never will be; a 500 or 503 means the server had a moment.
+RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
 class ThrottledFetcher:
     """Fetches JSON, never faster than `min_interval` seconds apart.
 
     The interval is not a tuning knob to be minimised: no rate limit is
     published, so this is the whole of our politeness budget.
+
+    Retries exist because a collection runs for an hour, and an hour is long
+    enough for a dropped connection, a sleeping machine or a momentary 503.
+    Losing the whole run to one blip would be the expensive kind of fragile.
+    Backoff is multiplied on each attempt, and a 404 is never retried -- a
+    replay that is not there will not appear on the second ask.
     """
 
-    def __init__(self, *, min_interval: float = 1.0, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        *,
+        min_interval: float = 1.0,
+        timeout: float = 30.0,
+        retries: int = 4,
+        backoff: float = 3.0,
+    ) -> None:
         self.min_interval = min_interval
         self.timeout = timeout
+        self.retries = retries
+        self.backoff = backoff
         self._last = 0.0
         self.requests = 0
+        self.retried = 0
 
-    def __call__(self, url: str) -> object:
+    def _fetch_once(self, url: str) -> object:
         wait = self.min_interval - (time.monotonic() - self._last)
         if wait > 0:
             time.sleep(wait)
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        self._last = time.monotonic()
-        self.requests += 1
-        return payload
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        finally:
+            # Counted from the attempt, not the success, so the politeness
+            # interval holds even when a request fails.
+            self._last = time.monotonic()
+
+    def __call__(self, url: str) -> object:
+        for attempt in range(self.retries + 1):
+            try:
+                payload = self._fetch_once(url)
+            except urllib.error.HTTPError as error:
+                if error.code not in RETRYABLE_STATUS or attempt == self.retries:
+                    raise
+            except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+                if attempt == self.retries:
+                    raise
+            else:
+                self.requests += 1
+                return payload
+            self.retried += 1
+            time.sleep(self.backoff * (attempt + 1))
+        raise RuntimeError(f"unreachable: retries exhausted for {url}")
 
 
 @dataclass(frozen=True)
@@ -242,8 +283,9 @@ def collect_replays(
     min_rating: int | None = 1500,
     exclude_bots: bool = True,
     source: str = DEFAULT_SOURCE,
-    max_pages: int = 20,
+    max_pages: int = 250,
     on_progress: Callable[[str, int, int], None] | None = None,
+    checkpoint_every: int = 25,
 ) -> Collection:
     """Collect up to `target` usable replays, newest first.
 
@@ -259,6 +301,28 @@ def collect_replays(
     fetch = fetcher if fetcher is not None else ThrottledFetcher()
     kept: list[Replay] = []
     counts = {"considered": 0, "bot": 0, "unrated": 0, "rating": 0, "format": 0}
+    # Fixed at the start so the checkpoint path stays put for the whole run,
+    # and so the timestamp records when collection began rather than when it
+    # happened to finish.
+    started_at = utc_now()
+
+    def build() -> CollectionManifest:
+        return CollectionManifest(
+            schema_version=SCHEMA_VERSION,
+            format_id=format_id,
+            source=source,
+            collected_at=started_at,
+            git_commit=git_commit(),
+            min_rating=min_rating,
+            exclude_bots=exclude_bots,
+            usage_note=USAGE_NOTE,
+            replay_ids=tuple(r.metadata.replay_id for r in kept),
+            considered=counts["considered"],
+            rejected_bot=counts["bot"],
+            rejected_unrated=counts["unrated"],
+            rejected_rating=counts["rating"],
+            rejected_format=counts["format"],
+        )
 
     for entry in iter_listings(format_id, fetch, source=source, max_pages=max_pages):
         if len(kept) >= target:
@@ -283,24 +347,13 @@ def collect_replays(
         kept.append(replay)
         if on_progress is not None:
             on_progress(replay.metadata.replay_id, len(kept), counts["considered"])
+        # Written as we go: an hour-long run that dies at minute fifty would
+        # otherwise leave a directory of catalogued files with no record of
+        # which run fetched them or under what filter.
+        if checkpoint_every and len(kept) % checkpoint_every == 0:
+            build().save(build().default_path(cache_dir))
 
-    manifest = CollectionManifest(
-        schema_version=SCHEMA_VERSION,
-        format_id=format_id,
-        source=source,
-        collected_at=utc_now(),
-        git_commit=git_commit(),
-        min_rating=min_rating,
-        exclude_bots=exclude_bots,
-        usage_note=USAGE_NOTE,
-        replay_ids=tuple(r.metadata.replay_id for r in kept),
-        considered=counts["considered"],
-        rejected_bot=counts["bot"],
-        rejected_unrated=counts["unrated"],
-        rejected_rating=counts["rating"],
-        rejected_format=counts["format"],
-    )
-    return Collection(manifest=manifest, replays=kept)
+    return Collection(manifest=build(), replays=kept)
 
 
 def load_collection(cache_dir: Path, manifest_path: Path) -> Collection:

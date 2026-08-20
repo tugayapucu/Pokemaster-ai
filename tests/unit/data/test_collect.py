@@ -7,12 +7,14 @@ we only find out by running it against the real thing.
 """
 
 import json
+import urllib.error
 
 import pytest
 
 from champions_ai.data.collect import (
     USAGE_NOTE,
     CollectionManifest,
+    ThrottledFetcher,
     collect_replays,
     iter_listings,
     load_all,
@@ -321,3 +323,70 @@ def test_load_all_skips_a_replay_whose_file_is_gone(tmp_path, api):
     collected.manifest.save(tmp_path / "manifest-2026-01-01T00-00-00.json")
     (tmp_path / "a.json").unlink()
     assert [r.metadata.replay_id for r in load_all(tmp_path).replays] == ["c"]
+
+
+# --------------------------------------------------- surviving a long run
+
+
+class FlakyApi(FakeApi):
+    """Fails the first `failures` calls, then behaves. Stands in for an hour
+    of wall-clock: a dropped connection, a sleeping machine, a stray 503."""
+
+    def __init__(self, replays, failures=2, error=None):
+        super().__init__(replays)
+        self.remaining_failures = failures
+        self.error = error or urllib.error.URLError("connection reset")
+
+    def __call__(self, url):
+        if self.remaining_failures > 0:
+            self.remaining_failures -= 1
+            raise self.error
+        return super().__call__(url)
+
+
+def test_a_transient_failure_is_retried_not_fatal():
+    api = FlakyApi({"a": _replay_payload("a", 1600, 1600)}, failures=2)
+    fetcher = ThrottledFetcher(min_interval=0, backoff=0)
+    fetcher._fetch_once = lambda url: api(url)
+    assert fetcher("https://example/a.json")["id"] == "a"
+    assert fetcher.retried == 2
+
+
+def test_retries_eventually_give_up():
+    api = FlakyApi({"a": _replay_payload("a", 1600, 1600)}, failures=99)
+    fetcher = ThrottledFetcher(min_interval=0, retries=2, backoff=0)
+    fetcher._fetch_once = lambda url: api(url)
+    with pytest.raises(urllib.error.URLError):
+        fetcher("https://example/a.json")
+
+
+def test_a_missing_replay_is_not_retried():
+    """A 404 will not become a 200 on the second ask, and retrying it just
+    spends someone else's server time."""
+    api = FlakyApi(
+        {}, failures=99,
+        error=urllib.error.HTTPError("u", 404, "Not Found", None, None),
+    )
+    fetcher = ThrottledFetcher(min_interval=0, retries=3, backoff=0)
+    fetcher._fetch_once = lambda url: api(url)
+    with pytest.raises(urllib.error.HTTPError):
+        fetcher("https://example/gone.json")
+    assert fetcher.retried == 0
+
+
+def test_the_manifest_is_checkpointed_during_a_run(tmp_path, api):
+    """An hour-long run that dies at minute fifty must not leave catalogued
+    files with no record of which run fetched them."""
+    collect_replays(FORMAT, tmp_path, target=10, fetcher=api,
+                    min_rating=None, checkpoint_every=1)
+    written = manifest_paths(tmp_path)
+    assert written, "a manifest should exist before the run returns"
+    assert CollectionManifest.load(written[0]).replay_ids
+
+
+def test_the_checkpoint_path_does_not_move_mid_run(tmp_path, api):
+    """collected_at is fixed when the run starts, so checkpoints overwrite one
+    file rather than littering a new one per batch."""
+    collect_replays(FORMAT, tmp_path, target=10, fetcher=api,
+                    min_rating=None, checkpoint_every=1)
+    assert len(manifest_paths(tmp_path)) == 1
