@@ -32,6 +32,7 @@ from champions_ai.domain import (
 from champions_ai.mechanics import (
     apply_boost,
     assumed_attacks,
+    assumed_stats,
     estimate_damage,
     estimate_stats,
     matchup,
@@ -580,9 +581,15 @@ class HeuristicAgent(Agent):
             candidates = known or assumed_attacks(species)
             label = "seen" if known else "assumed"
 
-            stats = estimate_stats(species.base_stats, self.assumed_opponent_points)
             for move in candidates:
                 physical = move.category == "Physical"
+                # Credit investment to the stat the move actually uses: an
+                # opponent swinging a physical move is likely built for it.
+                stats = assumed_stats(
+                    species.base_stats,
+                    self.assumed_opponent_points,
+                    attacking="atk" if physical else "spa",
+                )
                 estimate = estimate_damage(
                     self.dex,
                     move,

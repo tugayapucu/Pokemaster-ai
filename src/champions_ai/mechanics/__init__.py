@@ -12,19 +12,23 @@ from champions_ai.mechanics.matchup import (
     own_stats,
 )
 from champions_ai.mechanics.stats import (
+    ASSUMED_ATTACKING_POINTS,
     apply_boost,
+    assumed_stats,
     estimate_stats,
     hp_stat,
     other_stat,
 )
 
 __all__ = [
+    "ASSUMED_ATTACKING_POINTS",
     "ASSUMED_MOVE_POWER",
     "DamageEstimate",
     "Matchup",
     "PositionValue",
     "apply_boost",
     "assumed_attacks",
+    "assumed_stats",
     "estimate_damage",
     "estimate_stats",
     "evaluate_position",

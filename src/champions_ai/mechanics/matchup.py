@@ -19,7 +19,12 @@ from dataclasses import dataclass
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
 from champions_ai.domain import PokemonSet
 from champions_ai.mechanics.damage import estimate_damage
-from champions_ai.mechanics.stats import estimate_stats, hp_stat, other_stat
+from champions_ai.mechanics.stats import (
+    assumed_stats,
+    estimate_stats,
+    hp_stat,
+    other_stat,
+)
 
 # Base power assumed for an attack we have not seen. Roughly a standard STAB
 # move -- enough that an unknown Pokemon does not read as harmless, which is
@@ -205,12 +210,17 @@ def matchup(
         their_hp if their_hp is not None else their_stats["hp"], level, doubles,
         weather,
     )
+    # Their attacking stats get the investment credit; the defensive ones they
+    # showed us above do not.
+    their_offence = dict(their_stats)
+    for key in ("atk", "spa"):
+        their_offence[key] = assumed_stats(theirs.base_stats, assumed_points, attacking=key)[key]
     defence, their_ko = _best_fraction(
         dex,
         # Revealed moves when the caller has any: a threat we have actually
         # seen beats a guess about one we have not.
         their_moves if their_moves else assumed_attacks(theirs),
-        theirs, their_stats, our_species, our_stats,
+        theirs, their_offence, our_species, our_stats,
         our_hp if our_hp is not None else our_stats["hp"], level, doubles,
         weather,
     )

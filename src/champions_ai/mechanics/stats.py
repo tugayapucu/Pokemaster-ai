@@ -53,6 +53,26 @@ def other_stat(base: int, points: int = 0, *, nature: int = 0) -> int:
     return stat
 
 
+# What a Pokemon is assumed to have invested in the stat it is *attacking*
+# with. Fitted against 5,054 real attacks rather than chosen: a uniform 11
+# across the board under-predicts damage by 10% (0.90x observed), and sweeping
+# the attacker's investment removes the bias entirely, crossing 1.00x at about
+# 28 and peaking on within-ten-points accuracy at 24.
+#
+# The justification is evidential, not cosmetic. A Pokemon using a physical
+# move is far more likely to have invested in Attack than a Pokemon drawn at
+# random, so *using* the move is evidence about the spread behind it.
+#
+# It is deliberately asymmetric: the attacking stat gets this, the defensive
+# stats stay uniform. That is not a legal single-Pokemon spread -- 24 plus five
+# uniform stats exceeds the 66-point budget -- and it is not meant to be one.
+# It is a predictor over two different populations: whoever is attacking is
+# likely built to attack, while whoever is being attacked is a mixed bag.
+# Modelling a real, legal, concentrated spread on both sides was tried and
+# fitted worse (1.14-1.18x), because it left every attacker too frail.
+ASSUMED_ATTACKING_POINTS = 24
+
+
 def estimate_stats(base_stats: BaseStats, points_per_stat: int = 0) -> dict[str, int]:
     """A plausible stat line for a Pokemon whose investment is unknown.
 
@@ -68,6 +88,27 @@ def estimate_stats(base_stats: BaseStats, points_per_stat: int = 0) -> dict[str,
         "spd": other_stat(base_stats.special_defense, points_per_stat),
         "spe": other_stat(base_stats.speed, points_per_stat),
     }
+
+
+def assumed_stats(
+    base_stats: BaseStats,
+    points_per_stat: int,
+    *,
+    attacking: str | None = None,
+    attacking_points: int = ASSUMED_ATTACKING_POINTS,
+) -> dict[str, int]:
+    """Like `estimate_stats`, but crediting investment where a move is being used.
+
+    `attacking` is the stat key the move draws on -- "atk" or "spa". Passing
+    None gives the plain uniform estimate, which is what a defender gets.
+    """
+    stats = estimate_stats(base_stats, points_per_stat)
+    if attacking is None:
+        return stats
+    raw = {"atk": base_stats.attack, "spa": base_stats.special_attack}.get(attacking)
+    if raw is not None:
+        stats[attacking] = other_stat(raw, attacking_points)
+    return stats
 
 
 def apply_boost(stat: int, stage: int) -> int:
