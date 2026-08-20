@@ -362,6 +362,8 @@ search-v1    vs heuristic-v1     49.3%   not significant   (experiment 0001)
 heuristic-v1 human agreement     43.1%   vs 22.2% random   (CI 42.1-44.0%)
 lead selection vs human leads     56.6%   vs 50.0% random   NOT significant
 matchup-switch                   REVERTED                  (experiment 0004)
+opponent-knowledge oracle        +0.09%  flat ceiling      (experiment 0005)
+learned linear policy            +4.2% agreement / 32.5% win rate (experiment 0006)
 ```
 
 At 11,133 labels the agreement interval is **±0.9 points**, which is enough to judge a single scoring change on its own rather than only in aggregate.
@@ -381,12 +383,12 @@ The rule that survives is narrower and about power, not arbitration:
 
 ### Known gaps, in the order the evidence says to fix them
 
-0. **The heuristic's decision rule is the limit, not its inputs** (experiment
-   0005). Perfect opponent knowledge moves agreement by less than a tenth of a
-   point, and Protect still accounts for 853 misses under the strongest
-   possible oracle. Learning the policy from the 11,133 human labels is now the
-   evidence-backed next step, rather than adding more features to a rule that
-   cannot use them.
+0. **No training signal tied to winning.** Experiment 0005 showed the decision
+   rule is the limit rather than the inputs; experiment 0006 then showed that
+   learning that rule *from human imitation* produces a far weaker player. The
+   open problem is therefore an objective, not an architecture: self-play, a
+   value model, or imitation filtered to positions where the human demonstrably
+   came out ahead.
 1. **Move effects are not modelled at all** — see below. The heuristic prices
    every move as expected damage, so a flinch, a status, a stat drop, recoil
    and drain are all invisible. This is a *data* gap before it is a scoring
@@ -469,6 +471,31 @@ No individual step cleared significance on its own — drain/recoil 0.64, status
 **A measurement trap worth recording, because it nearly buried the result.** The first attempt at this cumulative figure compared against a baseline that disabled the rider scoring but still inherited the first-turn gate, since that gate lives in `_score_move` rather than in the rider pass. The contaminated baseline read 42.6% and gave chi2 = 2.70 — not significant. Only a genuinely clean baseline showed 42.2% and chi2 = 5.11. When an A/B differs by several changes, it is worth checking that "A" really is A. Fake Out additionally needs its first-turn-out restriction, which the engine enforces at runtime rather than reporting as `disabled` — confirmed by a human in our own data selecting it on turn 2 and getting the failure hint.
 
 Expect this to improve *reasoning* more than the agreement figure, for the same reason experiment 0003 found: where we already agree by coincidence, fixing the reason changes nothing the metric can see.
+
+### The single most important methodological result (experiment 0006)
+
+A policy trained to imitate rated humans beats the heuristic by **+4.2 points of agreement** on held-out data (p<0.01) and loses to it **520–1080 over 1,600 battles**, while also being worse against Random (93.7% against 99.0%). Both measurements are well powered.
+
+The mechanism was measured, not guessed:
+
+```
+slots where a guaranteed knockout was available : 633
+  heuristic took it   : 630  (99.5%)
+  learned policy took : 478  (75.5%)
+```
+
+It declines a free knockout one time in four, because humans decline *apparent* knockouts often — sometimes knowing better, and sometimes because our `guaranteed_ko` is computed against **estimated** opponent stats and is simply wrong. Imitation absorbed our own estimation error as a policy bias. The model is not mis-trained; it is trained on exactly the objective it was given, and that objective is not the one we want.
+
+**So: agreement generates hypotheses, strength validates them, and neither is optional.**
+
+| | Detects | Fails at |
+|---|---|---|
+| Human agreement | Small behavioural changes, cheaply, against real human decisions | Rewards imitating human limits *and our own estimation errors* |
+| Head-to-head | Whether the agent actually wins | Blind below ~3 points; needs 1,500+ battles across two seeds |
+
+This also reframes earlier analysis. The recurring finding that the heuristic "over-values damage and knockouts relative to humans" is real and **not necessarily a defect** — the heuristic beats Random 99% and beats a policy trained to correct exactly that tendency. Some of the gap between our agent and human choices is the agent being right.
+
+Move effects (0002–0003) remain justified because they improved agreement *and* cost nothing in strength. That is the bar for any future change.
 
 ### What the measurements have actually settled (2026-08-20)
 

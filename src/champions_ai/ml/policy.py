@@ -15,6 +15,14 @@ Because `heuristic_score` is one of the features, the model can reproduce the
 hand-written heuristic exactly by putting all its weight there. Any improvement
 is therefore an improvement *over* the heuristic on identical information, which
 is the question experiment 0005 left open.
+
+**Do not wire `LinearPolicyAgent` in as the project's agent.** It beats
+`HeuristicAgent` by 4.2 points of human agreement on held-out data and loses to
+it 520-1080 over 1,600 battles, because it learned to decline a guaranteed
+knockout one time in four -- humans decline apparent knockouts often enough, and
+some of ours are not real, that imitation absorbed our own estimation error as a
+policy bias. Kept as a reproducible research result, not as a player. See
+docs/experiments/0006.
 """
 
 import json
