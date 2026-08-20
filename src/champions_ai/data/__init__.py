@@ -25,6 +25,7 @@ from champions_ai.data.replay import (
     parse_ratings,
     unobservable_turns,
 )
+from champions_ai.data.split import CorpusSplit, is_test, split_replays
 from champions_ai.data.team_pool import BattleTeam, Matchup, TeamPool
 from champions_ai.data.team_text import parse_pokemon_set, parse_showdown_team
 from champions_ai.data.trajectory import (
@@ -39,6 +40,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "BattleTeam",
     "Collection",
+    "CorpusSplit",
     "CollectionManifest",
     "DecisionRecord",
     "Matchup",
@@ -54,6 +56,7 @@ __all__ = [
     "extract_choices",
     "git_commit",
     "has_human_players",
+    "is_test",
     "load_all",
     "load_collection",
     "looks_like_bot",
@@ -63,6 +66,7 @@ __all__ = [
     "parse_ratings",
     "parse_showdown_team",
     "reconstruct_decisions",
+    "split_replays",
     "unobservable_turns",
     "utc_now",
 ]
