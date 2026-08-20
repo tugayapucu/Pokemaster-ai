@@ -124,6 +124,7 @@ def _best_fraction(
     defender_hp: int,
     level: int,
     doubles: bool,
+    weather: str | None = None,
 ) -> tuple[float, float]:
     """(expected fraction of the defender's HP removed, chance of a knockout).
 
@@ -147,6 +148,7 @@ def _best_fraction(
             defender_hp=defender_hp,
             level=level,
             doubles=doubles,
+            weather=weather,
         )
         expected = estimate.average_fraction * move.hit_chance
         if expected > best:
@@ -173,6 +175,7 @@ def matchup(
     our_hp: int | None = None,
     their_hp: int | None = None,
     their_moves: list[MoveInfo] | None = None,
+    weather: str | None = None,
 ) -> Matchup:
     """Score our Pokemon against a species we know nothing else about.
 
@@ -200,6 +203,7 @@ def matchup(
     offence, our_ko = _best_fraction(
         dex, our_moves, our_species, our_stats, theirs, their_stats,
         their_hp if their_hp is not None else their_stats["hp"], level, doubles,
+        weather,
     )
     defence, their_ko = _best_fraction(
         dex,
@@ -208,6 +212,7 @@ def matchup(
         their_moves if their_moves else assumed_attacks(theirs),
         theirs, their_stats, our_species, our_stats,
         our_hp if our_hp is not None else our_stats["hp"], level, doubles,
+        weather,
     )
     # A speed tie is a coin flip, not a loss. Scoring it as a loss made a
     # neutral attacker that happened to be faster outrank a super-effective

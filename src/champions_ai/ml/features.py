@@ -159,6 +159,7 @@ class FeatureExtractor:
             level=observation.regulation.level,
             doubles=observation.regulation.game_type == "doubles",
             attacker_burned=active.status == "brn",
+            weather=observation.weather,
         )
         values["damage_fraction"] = estimate.average_fraction
         values["guaranteed_ko"] = 1.0 if estimate.guaranteed_ko else 0.0

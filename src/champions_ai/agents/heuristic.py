@@ -289,6 +289,7 @@ class HeuristicAgent(Agent):
             level=observation.regulation.level,
             doubles=observation.regulation.game_type == "doubles",
             attacker_burned=attacker.status == "brn",
+            weather=observation.weather,
         )
 
         reasons: list[str] = []
@@ -598,6 +599,7 @@ class HeuristicAgent(Agent):
                     defender_hp=max(1, defender.current_hp),
                     level=observation.regulation.level,
                     doubles=observation.regulation.game_type == "doubles",
+                    weather=observation.weather,
                 )
                 expected = estimate.average_fraction * move.hit_chance
                 if expected > worst:
@@ -767,6 +769,8 @@ class HeuristicAgent(Agent):
                             level=preview.regulation.level,
                             doubles=preview.regulation.game_type == "doubles",
                             assumed_points=self.assumed_opponent_points,
+                            # No weather at Team Preview: the battle has not
+                            # started, so none is set yet.
                         ).net
                     )
                 except KeyError:
