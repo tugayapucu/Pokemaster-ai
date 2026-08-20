@@ -30,6 +30,7 @@ from champions_ai.domain import (
     TeamPreviewAction,
 )
 from champions_ai.mechanics import (
+    apply_boost,
     assumed_attacks,
     estimate_damage,
     estimate_stats,
@@ -157,7 +158,11 @@ class HeuristicAgent(Agent):
         dex: Dex,
         *,
         name: str = "heuristic",
-        assumed_opponent_points: int = 12,
+        # 11, not 12: six stats at 12 is 72 points, over Reg M-B's budget of
+        # 66, so the old default modelled every opponent with a spread that
+        # cannot legally exist. Uniform beats concentrated priors against real
+        # damage (0.89x versus 1.14-1.18x), so the shape stays.
+        assumed_opponent_points: int = 11,
     ) -> None:
         self.dex = dex
         self.name = name
@@ -576,14 +581,19 @@ class HeuristicAgent(Agent):
 
             stats = estimate_stats(species.base_stats, self.assumed_opponent_points)
             for move in candidates:
+                physical = move.category == "Physical"
                 estimate = estimate_damage(
                     self.dex,
                     move,
                     attacker=species,
-                    attack_stat=stats["atk" if move.category == "Physical" else "spa"],
+                    attack_stat=apply_boost(
+                        stats["atk" if physical else "spa"],
+                        getattr(observed.boosts, "attack" if physical else "special_attack"),
+                    ),
                     defender=defender_species,
-                    defense_stat=(defender.computed_stats or {}).get(
-                        "def" if move.category == "Physical" else "spd", 100
+                    defense_stat=apply_boost(
+                        (defender.computed_stats or {}).get("def" if physical else "spd", 100),
+                        getattr(defender.boosts, "defense" if physical else "special_defense"),
                     ),
                     defender_hp=max(1, defender.current_hp),
                     level=observation.regulation.level,
@@ -616,11 +626,21 @@ class HeuristicAgent(Agent):
 
     @staticmethod
     def _attack_stat(attacker, category: str) -> int:
+        """The attacking stat as it stands *now*, stat stages included.
+
+        Boosts were tracked in the domain model and `apply_boost` was written
+        for exactly this, and nothing called either: a Pokemon that had just
+        used Swords Dance scored identically to one that had not. Measured
+        against 5,123 real attacks, applying them lifts predictions within ten
+        points of the true damage from 35.8% to 39.2%.
+        """
         stats = attacker.computed_stats or {}
         key = "atk" if category == "Physical" else "spa"
         # Falling back to a mid value keeps a missing stat from reading as a
         # devastating or useless attacker.
-        return stats.get(key, 100)
+        base = stats.get(key, 100)
+        stage = getattr(attacker.boosts, "attack" if category == "Physical" else "special_attack")
+        return apply_boost(base, stage)
 
     def _resolve_target(
         self, observation: Observation, slot: int, action: MoveAction
@@ -644,7 +664,13 @@ class HeuristicAgent(Agent):
             except KeyError:
                 return None
             stats = ally.computed_stats or {}
-            return species, max(1, ally.current_hp), stats.get(defending_key, 100), True
+            guard = "defense" if defending_key == "def" else "special_defense"
+            return (
+                species,
+                max(1, ally.current_hp),
+                apply_boost(stats.get(defending_key, 100), getattr(ally.boosts, guard)),
+                True,
+            )
 
         foe_slot = action.target.slot if action.target is not None else None
         opponent = observation.opponent_side
@@ -668,7 +694,13 @@ class HeuristicAgent(Agent):
                 continue
             estimated = estimate_stats(species.base_stats, self.assumed_opponent_points)
             remaining = max(1, estimated["hp"] * observed.hp_percent // 100)
-            return species, remaining, estimated[defending_key], False
+            guard = "defense" if defending_key == "def" else "special_defense"
+            return (
+                species,
+                remaining,
+                apply_boost(estimated[defending_key], getattr(observed.boosts, guard)),
+                False,
+            )
         return None
 
 

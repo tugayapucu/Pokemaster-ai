@@ -167,7 +167,8 @@ def matchup(
     *,
     level: int,
     doubles: bool = True,
-    assumed_points: int = 12,
+    # See HeuristicAgent: twelve per stat exceeds the regulation budget.
+    assumed_points: int = 11,
     our_stats: dict[str, int] | None = None,
     our_hp: int | None = None,
     their_hp: int | None = None,
