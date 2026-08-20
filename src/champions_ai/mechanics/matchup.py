@@ -26,10 +26,18 @@ from champions_ai.mechanics.stats import estimate_stats, hp_stat, other_stat
 # the failure mode experiment 0001 documented for one-turn search.
 ASSUMED_MOVE_POWER = 80
 
-# How much outspeeding is worth, as a fraction of a Pokemon's HP. Moving first
-# is not damage, but in a format where battles last five or six turns it
-# decides who gets to act at all.
-SPEED_EDGE = 0.15
+# Moving first is worth the exchange it prevents: if we would remove them this
+# turn, they never get to hit us. So the edge is the chance our hit *ends it*
+# times what ending it saves -- not a flat constant, and not the damage
+# fraction either. Damage fraction is the wrong proxy for a knockout: a 38%
+# hit is a long way from lethal, so charging a slow attacker 38% of its output
+# punished it for damage that was never going to land the blow.
+#
+# The flat version was measured wrong. At the old SPEED_EDGE of 0.15 the swing
+# between outspeeding and being outsped was 0.30, while a 2x type advantage
+# buys only the neutral damage fraction back, whose median across the real
+# Champions dex is 0.224. Speed therefore beat a doubled type advantage on 78%
+# of typical hits, which is not how the format plays.
 
 
 def assumed_attacks(species: SpeciesInfo) -> list[MoveInfo]:
@@ -84,7 +92,12 @@ class Matchup:
     defence: float
     """Fraction of our HP their best expected attack would remove."""
     speed_edge: float
-    """+SPEED_EDGE when faster, 0 on a tie, -SPEED_EDGE when slower."""
+    """Signed value of the turn order: positive when we act first.
+
+    Scales with `offence * defence`, so it is large in a knockout race and
+    near zero when neither side can hurt the other -- which is what moving
+    first actually means.
+    """
 
     @property
     def outspeeds(self) -> bool:
@@ -111,8 +124,15 @@ def _best_fraction(
     defender_hp: int,
     level: int,
     doubles: bool,
-) -> float:
+) -> tuple[float, float]:
+    """(expected fraction of the defender's HP removed, chance of a knockout).
+
+    The knockout chance comes from the damage roll the estimator already
+    computes rather than from the fraction: guaranteed when the worst roll
+    finishes it, half when only the best roll does.
+    """
     best = 0.0
+    best_ko = 0.0
     for move in moves:
         if not move.is_damaging:
             continue
@@ -128,8 +148,16 @@ def _best_fraction(
             level=level,
             doubles=doubles,
         )
-        best = max(best, estimate.average_fraction * move.hit_chance)
-    return min(best, 1.0)
+        expected = estimate.average_fraction * move.hit_chance
+        if expected > best:
+            best = expected
+            if estimate.guaranteed_ko:
+                best_ko = move.hit_chance
+            elif estimate.possible_ko:
+                best_ko = 0.5 * move.hit_chance
+            else:
+                best_ko = 0.0
+    return min(best, 1.0), best_ko
 
 
 def matchup(
@@ -140,15 +168,25 @@ def matchup(
     level: int,
     doubles: bool = True,
     assumed_points: int = 12,
+    our_stats: dict[str, int] | None = None,
+    our_hp: int | None = None,
+    their_hp: int | None = None,
+    their_moves: list[MoveInfo] | None = None,
 ) -> Matchup:
     """Score our Pokemon against a species we know nothing else about.
 
     Our side uses the real moveset and real Stat Points, because we have them.
     Theirs uses `assumed_attacks` and an even Stat Point spread, because at
     Team Preview nothing else is visible.
+
+    The overrides exist for the *in-battle* caller, which knows more than Team
+    Preview does: the engine's computed stats, current HP on both sides, and
+    whichever of the opponent's moves have actually been revealed. Passing them
+    is what makes the same function answer "should I switch" as well as "who
+    should I bring".
     """
     our_species = dex.get_species(ours.species)
-    our_stats = own_stats(dex, ours)
+    our_stats = our_stats if our_stats is not None else own_stats(dex, ours)
     their_stats = estimate_stats(theirs.base_stats, assumed_points)
 
     our_moves = []
@@ -158,21 +196,27 @@ def matchup(
         except KeyError:
             continue
 
-    offence = _best_fraction(
+    offence, our_ko = _best_fraction(
         dex, our_moves, our_species, our_stats, theirs, their_stats,
-        their_stats["hp"], level, doubles,
+        their_hp if their_hp is not None else their_stats["hp"], level, doubles,
     )
-    defence = _best_fraction(
-        dex, assumed_attacks(theirs), theirs, their_stats, our_species, our_stats,
-        our_stats["hp"], level, doubles,
+    defence, their_ko = _best_fraction(
+        dex,
+        # Revealed moves when the caller has any: a threat we have actually
+        # seen beats a guess about one we have not.
+        their_moves if their_moves else assumed_attacks(theirs),
+        theirs, their_stats, our_species, our_stats,
+        our_hp if our_hp is not None else our_stats["hp"], level, doubles,
     )
     # A speed tie is a coin flip, not a loss. Scoring it as a loss made a
     # neutral attacker that happened to be faster outrank a super-effective
     # one that merely tied.
     if our_stats["spe"] > their_stats["spe"]:
-        edge = SPEED_EDGE
+        # We end it first, so their hit never arrives.
+        edge = our_ko * defence
     elif our_stats["spe"] < their_stats["spe"]:
-        edge = -SPEED_EDGE
+        # They end it first, so our attack never happens.
+        edge = -their_ko * offence
     else:
         edge = 0.0
     return Matchup(offence=offence, defence=defence, speed_edge=edge)

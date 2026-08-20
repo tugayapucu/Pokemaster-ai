@@ -52,8 +52,19 @@ def test_the_advantage_is_not_confined_to_a_few_matchups(head_to_head):
 
 
 def test_the_heuristic_ends_battles_faster_than_random_flailing(head_to_head):
-    """Efficient knockouts should shorten games; ~10 turns was the Random baseline."""
-    assert head_to_head.average_turns < 9
+    """Efficient knockouts should shorten games; ~10 turns was the Random baseline.
+
+    The bound was 9 while the agent scored nothing but damage. Pricing move
+    effects (2026-08-18) made it press Protect, status and flinch, all of which
+    lengthen a game on purpose, and it drifted to just over 9 on this pool.
+
+    Widened rather than reverted, because the change was checked for a strength
+    regression and there is none: 295-5 against Random versus the damage-only
+    agent's 296-4, and 204-196 head to head over 400 battles. The assertion is
+    meant to catch flailing, and the Random baseline it is measured against is
+    ~10.
+    """
+    assert head_to_head.average_turns < 9.5
 
 
 def test_the_run_reproduces(env, dex, team_pool, head_to_head):

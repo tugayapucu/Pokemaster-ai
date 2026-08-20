@@ -152,17 +152,40 @@ def test_the_leads_come_first_and_are_the_best_average_matchup(agent):
     assert preview.own_team.pokemon[action.picks[0]].species == "Firemon"
 
 
-def test_speed_advantage_and_type_advantage_genuinely_compete(agent):
-    """Recorded rather than asserted away: against a slower Grass roster, a
-    faster neutral attacker edges out a super-effective slower one."""
+def test_speed_is_worth_nothing_when_neither_side_can_end_it(agent):
+    """Moving first only matters if your hit finishes the job.
+
+    Under the old flat speed term, a faster neutral attacker outranked a
+    slower super-effective one even though neither could knock the other out
+    in a turn -- speed was being paid for an exchange it never prevented.
+    """
     from champions_ai.mechanics import matchup
 
     grass = DEX.get_species("Grassmon")
     fire = matchup(DEX, _set("Firemon"), grass, level=50, assumed_points=12)
     fast = matchup(DEX, _set("Fastmon"), grass, level=50, assumed_points=12)
+
     assert fire.offence > fast.offence, "the type advantage is real"
-    assert fast.speed_edge > fire.speed_edge, "so is the speed advantage"
-    assert abs(fire.net - fast.net) < 0.1, "and they very nearly cancel"
+    assert fire.speed_edge == pytest.approx(0.0, abs=1e-9)
+    assert fast.speed_edge == pytest.approx(0.0, abs=1e-9)
+    assert fire.net > fast.net, "so the type advantage should simply win"
+
+
+def test_speed_matters_a_great_deal_in_a_knockout_race(agent):
+    """The other half: when our hit does end it, moving first saves the reply."""
+    from champions_ai.mechanics import matchup
+
+    # A target already down to a sliver, which the in-battle caller expresses
+    # with `their_hp` -- the same override switching uses.
+    frail = DEX.get_species("Slowmon")
+    healthy = matchup(DEX, _set("Fastmon"), frail, level=50, assumed_points=0)
+    finishing = matchup(
+        DEX, _set("Fastmon"), frail, level=50, assumed_points=0, their_hp=20
+    )
+    assert healthy.speed_edge == pytest.approx(0.0, abs=1e-9), "no knockout, no edge"
+    assert finishing.speed_edge > 0, "outspeeding a knockout must be worth something"
+    # The edge is exactly the hit we avoid taking by ending it first.
+    assert finishing.speed_edge == pytest.approx(finishing.defence)
 
 
 def test_a_speed_tie_is_not_scored_as_a_loss(agent):
