@@ -381,6 +381,12 @@ The rule that survives is narrower and about power, not arbitration:
 
 ### Known gaps, in the order the evidence says to fix them
 
+0. **The heuristic's decision rule is the limit, not its inputs** (experiment
+   0005). Perfect opponent knowledge moves agreement by less than a tenth of a
+   point, and Protect still accounts for 853 misses under the strongest
+   possible oracle. Learning the policy from the 11,133 human labels is now the
+   evidence-backed next step, rather than adding more features to a rule that
+   cannot use them.
 1. **Move effects are not modelled at all** — see below. The heuristic prices
    every move as expected damage, so a flinch, a status, a stat drop, recoil
    and drain are all invisible. This is a *data* gap before it is a scoring
@@ -399,8 +405,12 @@ The rule that survives is narrower and about power, not arbitration:
    remains unmeasured, deliberately.
 4. **Targeting.** ~17% of remaining disagreements are the right move aimed at
    the wrong Pokemon.
-5. **Opponent modelling** (M10). Both experiments point here; the
-   assumed-STAB prior in `mechanics/matchup.py` is the placeholder it replaces.
+5. ~~**Opponent modelling** (M10).~~ **Dropped off the critical path 2026-08-20
+   (experiment 0005).** Measured before building it: an oracle handed the
+   opponent's *entire* moveset gains **+0.09 points** of agreement (chi2 = 0.4),
+   and an oracle handed the move they actually use this turn is **worse**
+   (−0.49%, chi2 = 8.8). The binding constraint is the policy, not the features.
+   The assumed-STAB prior stays as the placeholder it is.
 6. **Struggle** is unmodelled, and is the whole of the benchmark's remaining
    unscorable labels.
 7. **Mega Evolution** is never offered by a reconstructed observation, so it is
@@ -459,6 +469,22 @@ No individual step cleared significance on its own — drain/recoil 0.64, status
 **A measurement trap worth recording, because it nearly buried the result.** The first attempt at this cumulative figure compared against a baseline that disabled the rider scoring but still inherited the first-turn gate, since that gate lives in `_score_move` rather than in the rider pass. The contaminated baseline read 42.6% and gave chi2 = 2.70 — not significant. Only a genuinely clean baseline showed 42.2% and chi2 = 5.11. When an A/B differs by several changes, it is worth checking that "A" really is A. Fake Out additionally needs its first-turn-out restriction, which the engine enforces at runtime rather than reporting as `disabled` — confirmed by a human in our own data selecting it on turn 2 and getting the failure hint.
 
 Expect this to improve *reasoning* more than the agreement figure, for the same reason experiment 0003 found: where we already agree by coincidence, fixing the reason changes nothing the metric can see.
+
+### What the measurements have actually settled (2026-08-20)
+
+Four attempts to improve the agent by giving it *better information or better hand-written rules* have now been measured, and three failed:
+
+| Attempt | Outcome |
+|---|---|
+| One-turn search (0001) | Inert — diverged from the heuristic on 6% of turns |
+| Move effects (0002-0003) | **Worked** — +1.4 points cumulative, chi2 = 5.11 |
+| Matchup switching (0004) | Reverted — worse on agreement, Random, and a head-to-head that did not replicate |
+| Team Preview lead ordering | No signal — 48.4% against a 50% baseline |
+| Opponent-knowledge oracle (0005) | **+0.09 points.** The ceiling itself is nearly flat |
+
+The pattern is consistent and it is not about information. A rule that prices *damage now minus damage taken now* cannot express why a human protects, switches or leads, and handing it perfect knowledge of the opponent does not change that — it makes Protect worse, because the assumed-threat prior had been compensating for the missing reasoning.
+
+**So the next step is to learn the policy rather than write it.** The features are adequate; the mapping from features to actions is what is missing, and there are 11,133 labelled human decisions to learn it from.
 
 ### Deliberately not done
 
