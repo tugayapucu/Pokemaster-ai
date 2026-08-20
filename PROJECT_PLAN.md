@@ -354,11 +354,18 @@ long. Each line links to where the detail lives.
 ### Measured results worth remembering
 
 ```
-heuristic-v1 vs random          96.3%  significant
-search-v1    vs heuristic-v1    49.3%  not significant   (experiment 0001)
-heuristic-v1 human agreement    42.2%  vs 21.7% random   (experiment 0002/0003)
-lead selection vs human leads   56.6%  vs 50.0% random   NOT significant
+heuristic-v1 vs random           95-98%  significant
+search-v1    vs heuristic-v1     49.3%   not significant   (experiment 0001)
+heuristic-v1 human agreement     41.7%   vs 21.7% random   (experiments 0002-0004)
+lead selection vs human leads    56.6%   vs 50.0% random   NOT significant
+matchup-switch vs flat-switch    59.0%   significant       (experiment 0004)
 ```
+
+**The two metrics have now disagreed, both significantly, in opposite directions** (experiment 0004). Matchup-based switching *lowers* human agreement (43.6% → 41.7%, McNemar chi2 = 13.69 against) while *winning* head to head (354-246 over 600 battles). Neither instrument is broken — they measure different things:
+
+- **agreement is the more sensitive detector** for scoring changes, catching at p<0.01 what 800 self-play battles could not (experiment 0003);
+- **head-to-head is the arbiter when they conflict**, because it measures the objective rather than a stand-in for it;
+- a change that moves them oppositely is **interesting, not broken**, and gets recorded rather than resolved by dropping the inconvenient half.
 
 ### Known gaps, in the order the evidence says to fix them
 
@@ -366,8 +373,11 @@ lead selection vs human leads   56.6%  vs 50.0% random   NOT significant
    every move as expected damage, so a flinch, a status, a stat drop, recoil
    and drain are all invisible. This is a *data* gap before it is a scoring
    gap, and it sits underneath every other item here.
-2. **Switching.** Humans switch on 11.0% of decisions, the heuristic on 1.7%,
-   agreeing on 8 of 117 switch labels. The largest single behavioural gap.
+2. ~~**Switching.**~~ **Addressed 2026-08-20** (experiment 0004). Switching is
+   now priced by the matchup it buys, calibrated to the human switch rate
+   (11.0% against 10.7%) and agreeing on 31 of 117 switch labels rather than
+   11. Wins head to head at 59.0% while *lowering* human agreement — see the
+   note above, which is the more important finding.
 3. **Team Preview is unvalidated.** 56.6% lead overlap against a 50% baseline
    on 53 scorable decisions — the interval contains the baseline, so it is not
    yet distinguishable from guessing. Needs more games, not more code.
@@ -381,6 +391,10 @@ lead selection vs human leads   56.6%  vs 50.0% random   NOT significant
    excluded from agreement rather than scored.
 8. **Nature** is stored as a name with no table mapping it to a stat, so
    matchup maths treats every Pokemon as neutral-natured.
+9. **The agreement drop from switching is unexplained at the label level.** It
+   is concentrated on *move* turns where the agent now switches instead; some
+   of those are surely genuine errors rather than the agent knowing better, and
+   separating the two would sharpen both metrics.
 
 ### Move effects: the gap underneath the others (identified 2026-08-18)
 
