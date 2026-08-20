@@ -119,6 +119,11 @@ function dexDump(msg) {
 			abilities: Object.values(entry.abilities),
 			weightkg: entry.weightkg,
 			baseSpecies: entry.baseSpecies,
+			// Purely visual variants -- Furfrou-Debutante, Unown-B, Shellos-East.
+			// They share every stat with the base form and get no dex entry of
+			// their own, so without this the Python side cannot look them up at
+			// all even though they appear on real teams.
+			cosmeticFormes: entry.cosmeticFormes || [],
 		};
 	}
 

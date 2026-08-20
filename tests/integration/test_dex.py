@@ -112,3 +112,28 @@ def test_a_plain_move_carries_no_effects(bridge):
     assert plain.self_boosts == {}
     assert plain.flinch_chance == 0.0
     assert plain.guaranteed_status is None
+
+
+def test_cosmetic_formes_resolve_to_their_base_entry(bridge):
+    """Furfrou-Debutante has Furfrou's stats to the last point and no entry of
+    its own. Before this it raised, and every caller that guarded the KeyError
+    silently scored an ordinary team member neutrally on every move.
+    """
+    dex = Dex.load(bridge)
+    assert dex.species_aliases, "the dump must carry cosmeticFormes"
+
+    base = dex.get_species("Furfrou")
+    assert dex.get_species("Furfrou-Debutante") is base
+
+    # Every alias must point at an entry that actually exists.
+    for forme, target in dex.species_aliases.items():
+        assert target in dex.species, f"{forme} aliases missing species {target}"
+
+
+def test_a_species_outside_the_regulation_still_raises(bridge):
+    """Resolution must not turn a genuine gap into a silent default."""
+    import pytest
+
+    dex = Dex.load(bridge)
+    with pytest.raises(KeyError):
+        dex.get_species("Definitely-Not-A-Pokemon")

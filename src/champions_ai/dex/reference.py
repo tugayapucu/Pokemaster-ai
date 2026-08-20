@@ -40,6 +40,8 @@ class SpeciesInfo(BaseModel, frozen=True):
     abilities: tuple[str, ...] = ()
     weight_kg: float = 0.0
     base_species: str = ""
+    # Visual-only variants that share this entry's stats and typing.
+    cosmetic_formes: tuple[str, ...] = ()
 
 
 class SecondaryEffect(BaseModel, frozen=True):
@@ -162,6 +164,9 @@ class Dex(BaseModel, frozen=True):
     """The reference tables a heuristic or evaluator needs."""
 
     species: dict[str, SpeciesInfo] = Field(default_factory=dict)
+    # Cosmetic forme id -> the id of the entry that actually holds the data.
+    # Stored rather than derived so a cached dex needs no rebuild step.
+    species_aliases: dict[str, str] = Field(default_factory=dict)
     moves: dict[str, MoveInfo] = Field(default_factory=dict)
     types: tuple[str, ...] = ()
     type_chart: TypeChart = TypeChart()
@@ -171,8 +176,18 @@ class Dex(BaseModel, frozen=True):
 
         A missing species would otherwise silently flatten every type
         calculation involving it, which is far harder to notice than a crash.
+
+        Cosmetic formes resolve to their base entry rather than raising. They
+        are visual only -- Furfrou-Debutante has Furfrou's stats and typing to
+        the last point -- and they have no entry of their own, so without this
+        a perfectly ordinary team member scored neutrally on every move.
         """
-        found = self.species.get(to_id(name))
+        key = to_id(name)
+        found = self.species.get(key)
+        if found is None:
+            base = self.species_aliases.get(key)
+            if base is not None:
+                found = self.species.get(base)
         if found is None:
             raise KeyError(f"no species data for {name!r}")
         return found
@@ -205,6 +220,7 @@ class Dex(BaseModel, frozen=True):
                 abilities=tuple(entry.get("abilities", ())),
                 weight_kg=entry.get("weightkg", 0.0),
                 base_species=entry.get("baseSpecies", entry["name"]),
+                cosmetic_formes=tuple(entry.get("cosmeticFormes", ())),
             )
             for species_id, entry in payload["species"].items()
         }
@@ -236,8 +252,14 @@ class Dex(BaseModel, frozen=True):
             )
             for move_id, entry in payload["moves"].items()
         }
+        aliases = {
+            to_id(forme): species_id
+            for species_id, info in species.items()
+            for forme in info.cosmetic_formes
+        }
         return cls(
             species=species,
+            species_aliases=aliases,
             moves=moves,
             types=tuple(payload["types"]),
             type_chart=TypeChart(multipliers=payload["chart"]),
