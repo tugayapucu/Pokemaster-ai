@@ -13,8 +13,17 @@ Three things have to be reported alongside any figure here, because each can
 move it more than the agent does:
 
 - **the random baseline.** Agreement of 40% is strong against a 15% baseline
-  and terrible against 38%. Computed exactly, as the mean probability that a
-  uniform pick from the same action set matches, rather than by sampling.
+  and terrible against 38%. Computed exactly rather than sampled, as the mean
+  probability that a uniform pick over the *joint* actions produces a matching
+  action in this slot.
+
+  Joint rather than per-slot, because that is what a random policy actually
+  does: it picks one legal `JointAction`, and `JointAction` validation filters
+  some combinations (no two slots switching to the same Pokemon, one Mega per
+  turn). The marginal over a slot is therefore *not* uniform, and treating it
+  as uniform made the baseline slightly optimistic -- invisible at 1,091 labels
+  and detectable at 11,133, where RandomAgent scored 23.1% against a predicted
+  22.2%.
 - **the action-set size.** Reconstructed movesets are partial (see
   `data/reconstruct.py`), so the agent chooses from fewer options than the
   human did. That inflates agreement, and the baseline moves with it.
@@ -136,7 +145,8 @@ class SlotComparison:
     human: Signature
     agent: Signature | None
     legal_count: int
-    # Probability a uniform pick from the same action set would have matched.
+    # Probability a uniform pick over the legal joint actions puts a matching
+    # action in this slot. Not 1/legal_count: the joint marginal is uneven.
     random_chance: float
     # The log did not record which target the human picked, so only the move is
     # compared here. Counted separately, since an unscored target is one fewer
@@ -286,12 +296,25 @@ def measure_agreement(
                 action_signature(action, observation, choice.slot, move_data)
                 for action in options
             ]
+            # What a uniform pick over joint actions would put in this slot.
+            # Recomputed per slot rather than reusing `available`, because a
+            # random policy chooses a joint action and the slot marginal that
+            # induces is uneven.
+            marginal = [
+                action_signature(joint_action.slot_actions[choice.slot], observation,
+                                 choice.slot, move_data)
+                if choice.slot < len(joint_action.slot_actions)
+                else None
+                for joint_action in joint
+            ]
+
             if hidden_target and wanted is not None:
                 # Compare the move alone: the target the human chose is simply
                 # not in the log, which is a gap in the record rather than in
                 # their decision.
                 wanted = wanted[:2]
                 available = [None if a is None else a[:2] for a in available]
+                marginal = [None if a is None else a[:2] for a in marginal]
             if wanted is None or wanted not in available:
                 unscorable += 1
                 if len(examples) < 10:
@@ -316,7 +339,7 @@ def measure_agreement(
                         agent_action, observation, choice.slot, move_data
                     ),
                     legal_count=len(options),
-                    random_chance=available.count(wanted) / len(available),
+                    random_chance=marginal.count(wanted) / len(marginal),
                     target_unknown=hidden_target,
                 )
             )

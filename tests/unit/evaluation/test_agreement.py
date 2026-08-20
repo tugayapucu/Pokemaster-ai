@@ -146,14 +146,38 @@ def test_a_perfect_imitator_agrees_completely(battle):
     assert result.unscorable == 0
 
 
-def test_the_random_baseline_is_the_exact_chance_not_a_sample(battle):
+def test_the_random_baseline_is_a_probability(battle):
     decisions, move_data = _setup(battle)
     result = measure_agreement(decisions, _FirstAction(), move_data)
-    # Each comparison's chance is 1/(size of its action set), so the mean must
-    # sit strictly inside (0, 1) and never exceed any individual chance of 1.
     assert 0.0 < result.random_baseline < 1.0
     for comparison in result.comparisons:
-        assert comparison.random_chance == 1 / comparison.legal_count or comparison.legal_count == 1
+        assert 0.0 < comparison.random_chance <= 1.0
+
+
+def test_the_baseline_predicts_what_a_random_agent_actually_scores(battle):
+    """The check that makes the baseline trustworthy, rather than merely tidy.
+
+    It models a uniform pick over *joint* actions, because that is what a random
+    policy does. Modelling it per-slot instead was subtly optimistic: the
+    marginal a uniform joint pick induces on one slot is uneven, since
+    `JointAction` validation filters some combinations. That error was invisible
+    at 1,091 labels and significant at 11,133.
+
+    Averaged over seeds because a single random agent on a handful of labels is
+    mostly noise.
+    """
+    from champions_ai.agents import RandomAgent
+
+    decisions, move_data = _setup(battle)
+    rates = []
+    for seed in range(40):
+        result = measure_agreement(decisions, RandomAgent(seed=seed), move_data)
+        rates.append(result.rate)
+        predicted = result.random_baseline
+    observed = sum(rates) / len(rates)
+    assert abs(observed - predicted) < 0.08, (
+        f"random scored {observed:.1%} against a predicted {predicted:.1%}"
+    )
 
 
 def test_agreement_beating_random_requires_the_interval_to_clear_it(battle):
