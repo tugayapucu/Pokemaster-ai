@@ -256,14 +256,22 @@ class DamageCollector:
                     if spread_note
                     else 1
                 )
-            elif tag == "-damage" and pending is not None:
-                if any(part.startswith(RESIDUAL_MARKER) for part in args):
-                    continue
+            elif tag == "-damage":
                 target = args[0]
-                attacker_ident, move_id = pending
                 before = self._hp.get(target)
                 after = _current_hp(args[1])
+                # Recorded whatever caused it. Residual damage -- recoil, a
+                # burn tick, hazards -- is not a sample, but it moves the HP
+                # the *next* hit has to be measured from. Skipping the line
+                # outright left a stale, higher figure behind, so the next
+                # real hit was credited with the residual as well: a Knock Off
+                # that dealt 23 was recorded as 71.
                 self._hp[target] = after
+                if pending is None:
+                    continue
+                if any(part.startswith(RESIDUAL_MARKER) for part in args):
+                    continue
+                attacker_ident, move_id = pending
                 if before is None:
                     self.unknown_hp += 1
                     continue

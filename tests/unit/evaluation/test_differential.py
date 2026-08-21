@@ -338,3 +338,44 @@ def test_weather_set_in_one_chunk_still_applies_in_the_next():
         "|-damage|p2a: Garchomp|150/194",
     ], LOOKUP)
     assert samples[0].weather == "sunnyday"
+
+
+def test_residual_damage_moves_the_hp_the_next_hit_is_measured_from():
+    """Recoil is not a sample, but it lowers the bar the next hit starts from.
+
+    Taken from a real run: Leafeon at 83 took 48 recoil to 35, then a Knock Off
+    took it to 12. The Knock Off dealt 23 -- inside the predicted 22-27 -- and
+    was recorded as 71, because the recoil line was skipped without recording
+    the HP it left behind. Every Pokemon carrying a burn or hazard damage read
+    the same way, which is most of them, and it skewed the whole report toward
+    under-prediction.
+    """
+    collector = DamageCollector()
+    samples = collector.feed([
+        "|switch|p2a: Garchomp|Garchomp, L50|83/194",
+        "|move|p2a: Garchomp|Double-Edge|p1a: Charizard",
+        "|-damage|p1a: Charizard|40/180",
+        "|-damage|p2a: Garchomp|35/194|[from] Recoil",
+        "|move|p1a: Charizard|Knock Off|p2a: Garchomp",
+        "|-damage|p2a: Garchomp|12/194",
+    ], LOOKUP)
+    knock_off = [s for s in samples if s.move_id == "knockoff"]
+    assert [s.actual for s in knock_off] == [23]
+    assert knock_off[0].defender_hp_before == 35
+
+
+def test_status_damage_between_turns_is_recorded_too():
+    """A burn tick arrives with no move pending at all, so the branch has to
+    run whether or not there is one."""
+    collector = DamageCollector()
+    collector.feed([
+        "|switch|p2a: Garchomp|Garchomp, L50|194/194",
+        "|-damage|p2a: Garchomp|170/194 brn|[from] brn",
+        "|turn|2",
+    ], LOOKUP)
+    samples = collector.feed([
+        "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
+        "|-damage|p2a: Garchomp|126/194 brn",
+    ], LOOKUP)
+    assert [s.actual for s in samples] == [44]
+    assert collector.unknown_hp == 0
