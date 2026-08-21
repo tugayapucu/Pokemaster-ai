@@ -1,7 +1,7 @@
 # Pokémon Champions AI — Long-Term Project Plan
 
 > **Status:** Living project roadmap  
-> **Last updated:** 2026-08-18  
+> **Last updated:** 2026-08-21  
 > **Primary game:** Pokémon Champions  
 > **Primary competitive format:** Double Battles / VGC-style play  
 > **Primary objective:** Build a strong battle recommendation system and, over time, an autonomous Pokémon Champions agent using classical algorithms, supervised learning, reinforcement learning, search, opponent modelling, and self-play.
@@ -349,7 +349,9 @@ long. Each line links to where the detail lives.
 | **Damage model** (M1) | Verified exactly against engine output across 38 non-crit hits. |
 | **Replay pipeline** (M5) | Fetch, filter, choice labels, observation reconstruction, provenance manifests. Usage-terms gate resolved. |
 | **Human-agreement benchmark** (M5) | 1,061 labels from 50 rated games. The first external metric this project has. |
-| **Team Preview** (M13) | Implemented and explainable. **Not yet validated** — see below. |
+| **Team Preview** (M13) | Implemented and explainable. Lead ordering measured at 48.4% against a 50% baseline — no signal. |
+| **Damage calibration** | Against 5,054 real attacks *and* against the engine directly. Predicted/actual 0.89× → 0.97×. |
+| **Engine differential harness** | `evaluation/differential.py`. The only instrument here whose disagreements have exactly one possible cause. |
 
 ### Measured results worth remembering
 
@@ -419,7 +421,18 @@ The rule that survives is narrower and about power, not arbitration:
    excluded from agreement rather than scored.
 8. **Nature** is stored as a name with no table mapping it to a stat, so
    matchup maths treats every Pokemon as neutral-natured.
-9. **The random baseline is very slightly optimistic.** It is computed as
+9. **The damage formula is calibrated but not yet *verified*.** It predicts
+   within ten points 40.7% of the time against replays and lands 67.4% of hits
+   inside its range against the engine, but the residual is still attributed by
+   inference. A no-item, vanilla-ability control team would settle whether the
+   arithmetic itself is right.
+10. **Items and abilities are tracked and unused.** `revealed_item` and
+   `revealed_ability` are recorded by the tracker and reach no scoring path.
+   Life Orb is now measured at 1.3× and Focus Sash explains part of the
+   knockout miscalibration.
+11. **Critical hits are unmodelled**, and excluded from every calibration
+   rather than predicted.
+12. **The random baseline is very slightly optimistic.** It is computed as
    uniform over *slot* actions, while `RandomAgent` picks uniformly over
    *joint* actions, and `JointAction` validation filters some combinations —
    so the marginals differ. Invisible at 1,091 labels (20.3% against a
@@ -542,6 +555,47 @@ Three findings, and two of them corrected a guess of mine:
 The model is deliberately asymmetric — the attacking stat gets investment credit, defensive stats stay uniform — which is not a legal single-Pokémon spread and is not meant to be. It is a predictor over two populations: whoever is attacking is likely built to attack, whoever is being attacked is a mixed bag. A legal concentrated spread on both sides fitted worse (1.14–1.18×). There is a test pinning the asymmetry so it does not get "fixed" into consistency.
 
 **Play strength is unchanged**, at 97.3% against Random and a +2.12 Pokémon margin, and that was the stated expectation before the work rather than after. The justification is prediction accuracy and truthful recommendations, which is a product requirement independent of win rate.
+
+### Checking the game logic against the engine (2026-08-21)
+
+**The project's first goal is a correct model of the game, not a higher win rate.** That is now the stated rule, and it retroactively explains every keep/revert decision so far: drain and recoil, Protect scoring, stat stages and weather were all kept while strength-neutral because they are *correct*; matchup switching and the learned policy were dropped because they were *speculative*. Correct first, strong later.
+
+Two instruments now exist, and they answer different questions. Using the wrong one for a question cost a whole session and two wrong hypotheses.
+
+| Instrument | Answers | Confound |
+|---|---|---|
+| **Replay calibration** | what spreads and items people actually run — a fact about the *metagame* | inputs unknown, so a mismatch could be formula, spread, item or ability |
+| **Engine differential** (`evaluation/differential.py`) | whether our arithmetic is right — a fact about the *rules* | none: we run the battle, so both sides' stats come from the engine's own requests |
+
+#### What the differential harness found
+
+```
+first run                    28.2% of hits inside the predicted range
+after excluding Mega         67.4%
+```
+
+That jump measures **the harness improving, not the model.** Mega Evolution changes species, base stats and ability mid-turn — after the state snapshot — so every hit afterwards was scored against the wrong Pokémon. It is excluded rather than modelled, to isolate the formula.
+
+Every bug found while building it was in the **parsing**, and each made our damage model look wrong when it was not:
+
+- a knockout records the HP the target could *absorb*, not the damage dealt, so an overkill read as a wild over-prediction;
+- stat stages are absent from `computed_stats`, and with Intimidate about, one matchup produced actuals of 16, 23, 24, 33 and 63 against a single fixed prediction;
+- the spread reduction only applies **above one target**, so a Heat Wave into a single remaining opponent does full damage.
+
+The residual is now *attributable*, which is the whole point: Garchomp's Rock Slide and Earthquake come in at 1.3–1.4× our prediction and Garchomp holds a **Life Orb** — exactly 1.3×. Charizard's Fire moves fit **Blaze**. The replay calibration could never have said that.
+
+#### A fourth silent bug, found while preparing to build it
+
+`own_side()` never set boosts. `_change_boost` only updated the opponent accumulator, so **in live play our own Pokémon always carried zero stat stages** — our Swords Dance raised nothing, an Intimidate against us lowered nothing. That made the preceding commit half-wired, and it explains why applying stages measured strength-neutral in self-play: both agents were missing their own boosts and stayed symmetric.
+
+**All four silent bugs so far share one shape: data tracked but never read.** `apply_boost` written and never called; `|-singleturn|` recorded and never expired; `revealed_item` tracked and never used; own-side boosts collected and never applied. None crashed. A name-level audit of public symbols against the test suite catches exactly this class, and it is a two-minute check worth running whenever a chunk of new code lands — it found four untested functions in one session's own work.
+
+#### Next, in order
+
+- [ ] **Isolate the formula.** A control team with no items and vanilla abilities. If accuracy does not reach ~95% on that, the damage formula itself has a bug — floor ordering, the STAB constant, the 0.75 spread factor — and we would know for certain rather than by inference. This must come before modelling items, or the item work builds on unverified arithmetic.
+- [ ] **Then items**, now provable rather than hypothesised: Life Orb at 1.3×, and Focus Sash, which is the likeliest cause of the 17% of "guaranteed" knockouts that do not happen.
+- [ ] **Extend the harness to move order.** `_moves_first` drives flinch scoring and ignores opposing priority entirely, and the engine's actual move order is readable straight from the protocol — so this is checkable the same way damage was.
+- [ ] Critical hits are unmodelled and currently excluded from every comparison rather than predicted.
 
 ### Deliberately not done
 
