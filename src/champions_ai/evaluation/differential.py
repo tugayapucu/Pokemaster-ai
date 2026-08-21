@@ -141,26 +141,26 @@ class DamageCollector:
     loud rather than silent.
     """
 
-    def __init__(
-        self,
-        active_lookup: Callable[[str], BattlePokemon | None],
-        *,
-        weather: str | None = None,
-    ) -> None:
-        self._active = active_lookup
+    def __init__(self, *, weather: str | None = None) -> None:
         self.weather = weather
         self._hp: dict[str, int] = {}
         self._screens: dict[str, set[str]] = {"p1": set(), "p2": set()}
         self.unknown_hp = 0
         """Hits dropped because the target's HP before them was not known."""
 
-    def feed(self, protocol: Sequence[str]) -> list[DamageSample]:
+    def feed(
+        self,
+        protocol: Sequence[str],
+        active_lookup: Callable[[str], BattlePokemon | None],
+    ) -> list[DamageSample]:
         """Consume the next chunk of protocol and return what it yielded.
 
         `active_lookup` maps a protocol ident (`p1a: Chomper`) to that Pokemon
         as its *own* player sees it, which is where the engine's computed stats
-        live. Pass a fresh lookup per turn by rebuilding the collector's
-        `_active`, or keep one if the snapshot does not change.
+        live. It is a per-chunk argument rather than collector state because it
+        is a snapshot: who is active and what stages they carry both change
+        from turn to turn, and a stale snapshot would score a hit against the
+        Pokemon that used to be in that slot.
 
         A damage line is only attributed to the move before it when nothing
         intervenes: no `[from]` marker (that is residual damage), and never the
@@ -233,8 +233,8 @@ class DamageCollector:
                 if target == attacker_ident or after >= before:
                     continue
 
-                attacker = self._active(attacker_ident)
-                defender = self._active(target)
+                attacker = active_lookup(attacker_ident)
+                defender = active_lookup(target)
                 if attacker is not None and defender is not None and not multi_hit:
                     samples.append(
                         DamageSample(
@@ -271,7 +271,7 @@ def collect_samples(
     For a whole battle log. A caller reading the protocol as it arrives wants
     `DamageCollector`, which carries HP between chunks.
     """
-    return DamageCollector(active_lookup, weather=weather).feed(protocol)
+    return DamageCollector(weather=weather).feed(protocol, active_lookup)
 
 
 def _current_hp(condition: str) -> int:

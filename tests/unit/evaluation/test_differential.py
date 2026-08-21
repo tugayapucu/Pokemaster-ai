@@ -298,8 +298,8 @@ def test_a_collector_keeps_hp_across_chunks():
     and is dropped. It left about one sample per battle, and the survivors
     were second hits -- spread moves and focus-fire onto weakened targets.
     """
-    collector = DamageCollector(LOOKUP)
-    streamed = collector.feed(TURN_ONE) + collector.feed(TURN_TWO)
+    collector = DamageCollector()
+    streamed = collector.feed(TURN_ONE, LOOKUP) + collector.feed(TURN_TWO, LOOKUP)
     at_once = collect_samples(TURN_ONE + TURN_TWO, LOOKUP)
 
     assert len(streamed) == len(at_once) == 3
@@ -308,33 +308,33 @@ def test_a_collector_keeps_hp_across_chunks():
 
 
 def test_a_hit_with_no_known_starting_hp_is_counted_not_silently_dropped():
-    collector = DamageCollector(LOOKUP)
+    collector = DamageCollector()
     dropped = collector.feed([
         "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
         "|-damage|p2a: Garchomp|150/194",
-    ])
+    ], LOOKUP)
     assert dropped == []
     assert collector.unknown_hp == 1
 
 
 def test_healing_moves_the_hp_the_next_hit_is_measured_from():
     """Without this, a hit after a Roost reads as far more damage than it was."""
-    collector = DamageCollector(LOOKUP)
-    collector.feed(["|switch|p2a: Garchomp|Garchomp, L50|100/194"])
+    collector = DamageCollector()
+    collector.feed(["|switch|p2a: Garchomp|Garchomp, L50|100/194"], LOOKUP)
     samples = collector.feed([
         "|-heal|p2a: Garchomp|194/194",
         "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
         "|-damage|p2a: Garchomp|150/194",
-    ])
+    ], LOOKUP)
     assert [s.actual for s in samples] == [44]
 
 
 def test_weather_set_in_one_chunk_still_applies_in_the_next():
-    collector = DamageCollector(LOOKUP)
-    collector.feed(["|-weather|SunnyDay"])
+    collector = DamageCollector()
+    collector.feed(["|-weather|SunnyDay"], LOOKUP)
     samples = collector.feed([
         "|switch|p2a: Garchomp|Garchomp, L50|194/194",
         "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
         "|-damage|p2a: Garchomp|150/194",
-    ])
+    ], LOOKUP)
     assert samples[0].weather == "sunnyday"
