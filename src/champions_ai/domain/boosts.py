@@ -35,6 +35,15 @@ class Boosts(BaseModel, frozen=True):
                 )
         return self
 
+    @property
+    def positive_total(self) -> int:
+        """Sum of the positive stages, accuracy and evasion included.
+
+        Showdown's `positiveBoosts()`, which is what Stored Power and Power
+        Trip add 20 base power per point of.
+        """
+        return sum(value for value in self.model_dump().values() if value > 0)
+
     def stage(self, stat: str) -> int:
         """The stage on `stat`, named by Showdown's id.
 

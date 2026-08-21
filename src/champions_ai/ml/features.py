@@ -172,6 +172,13 @@ class FeatureExtractor:
                 defender=species,
                 attacker_hp_fraction=active.hp_fraction,
                 attacker_speed=(active.computed_stats or {}).get("spe"),
+                attacker_holds_item=active.current_item is not None,
+                attacker_positive_boosts=active.boosts.positive_total,
+                defender_status=target.status,
+                fainted_allies=sum(
+                    1 for mon in observation.own_side.team if mon.fainted
+                ),
+                terrain=observation.terrain,
             ),
         )
         values["damage_fraction"] = estimate.average_fraction

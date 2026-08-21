@@ -51,3 +51,15 @@ def test_stage_of_a_stat_with_no_stage_is_zero():
     """HP has no stage, and an unknown id must not raise mid-damage-estimate."""
     assert Boosts(attack=6).stage("hp") == 0
     assert Boosts(attack=6).stage("nonsense") == 0
+
+
+def test_positive_total_sums_only_the_positive_stages():
+    """Stored Power adds 20 base power per point of this."""
+    assert Boosts(attack=2, special_attack=2).positive_total == 4
+    assert Boosts(attack=2, defense=-2).positive_total == 2, "drops do not subtract"
+    assert Boosts().positive_total == 0
+
+
+def test_positive_total_counts_accuracy_and_evasion():
+    """Showdown's `positiveBoosts()` iterates every boost id, not just stats."""
+    assert Boosts(evasion=1, accuracy=2).positive_total == 3

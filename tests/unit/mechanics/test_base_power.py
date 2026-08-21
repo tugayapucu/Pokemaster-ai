@@ -116,3 +116,107 @@ def test_missing_context_never_produces_zero_power():
 def test_a_dynamic_move_counts_as_damaging():
     assert _move("lowkick").is_damaging
     assert not _move("protect", category="Status").is_damaging
+
+
+# ------------------- moves whose static power is a floor the engine scales up
+#
+# These were skipped entirely: the function returned early for any move with a
+# non-zero static power, so the eighteen commoner cases -- Acrobatics, Hex,
+# Stored Power -- all took their unscaled value.
+
+
+@pytest.mark.parametrize("holds_item, expected", [
+    (False, 110),  # doubles only with an empty item slot
+    (True, 55),
+    (None, 55),    # an opponent's item is hidden, and most Pokemon hold one
+])
+def test_acrobatics_doubles_without_an_item(holds_item, expected):
+    move = _move("acrobatics", base_power=55)
+    assert dynamic_base_power(move, attacker_holds_item=holds_item) == expected
+
+
+@pytest.mark.parametrize("move_id, static", [("hex", 65), ("infernalparade", 65)])
+@pytest.mark.parametrize("status, doubled", [
+    ("brn", True), ("par", True), ("psn", True), ("slp", True),
+    (None, False), ("", False),
+])
+def test_hex_doubles_against_a_status(move_id, static, status, doubled):
+    move = _move(move_id, base_power=static, category="Special")
+    got = dynamic_base_power(move, defender_status=status)
+    assert got == (static * 2 if doubled else static)
+
+
+@pytest.mark.parametrize("positive, expected", [
+    (0, 20),    # unboosted, the move is nearly worthless
+    (1, 40),
+    (4, 100),   # one Calm Mind on each stat, plus two more
+    (12, 260),
+])
+def test_stored_power_adds_twenty_per_positive_stage(positive, expected):
+    for move_id in ("storedpower", "powertrip"):
+        move = _move(move_id, base_power=20, category="Special")
+        assert dynamic_base_power(move, attacker_positive_boosts=positive) == expected
+
+
+def test_stored_power_ignores_negative_stages():
+    """`positiveBoosts()` sums only the positive ones -- an Intimidated user
+    does not lose base power for it."""
+    move = _move("storedpower", base_power=20, category="Special")
+    assert dynamic_base_power(move, attacker_positive_boosts=-3) == 20
+
+
+@pytest.mark.parametrize("fraction, expected", [
+    (1.0, 150),
+    (0.5, 75),
+    (0.25, 37),
+    (0.001, 1),  # the engine clamps base power to at least 1
+])
+def test_eruption_scales_with_remaining_hp(fraction, expected):
+    for move_id in ("eruption", "waterspout"):
+        move = _move(move_id, base_power=150, category="Special")
+        assert dynamic_base_power(move, attacker_hp_fraction=fraction) == expected
+
+
+@pytest.mark.parametrize("fallen, expected", [(0, 50), (1, 100), (3, 200)])
+def test_last_respects_grows_with_fallen_teammates(fallen, expected):
+    move = _move("lastrespects", base_power=50)
+    assert dynamic_base_power(move, fainted_allies=fallen) == expected
+
+
+@pytest.mark.parametrize("terrain, expected", [
+    ("electricterrain", 140),
+    ("grassyterrain", 70),
+    (None, 70),
+])
+def test_rising_voltage_doubles_on_electric_terrain(terrain, expected):
+    move = _move("risingvoltage", base_power=70, category="Special")
+    assert dynamic_base_power(move, terrain=terrain) == expected
+
+
+@pytest.mark.parametrize("move_id, static", [
+    ("ragefist", 50),          # counts how often the user has been hit
+    ("payback", 50),           # depends on the turn order
+    ("avalanche", 60),         # depends on being hit first this turn
+    ("assurance", 60),         # depends on the target already being damaged
+    ("stompingtantrum", 75),   # depends on the last move having failed
+    ("temperflare", 75),
+    ("round", 60),             # depends on an ally having used it first
+])
+def test_a_move_we_cannot_compute_keeps_its_static_power(move_id, static):
+    """The static value is the floor of each of these, so falling back to it
+    under-predicts rather than inventing a number."""
+    assert dynamic_base_power(_move(move_id, base_power=static)) == static
+
+
+def test_an_ordinary_move_is_unaffected_by_any_of_it():
+    """Guards every test above: none of this state may touch a normal move."""
+    move = _move("dragonclaw", base_power=80)
+    assert dynamic_base_power(
+        move,
+        attacker_holds_item=False,
+        attacker_positive_boosts=6,
+        defender_status="brn",
+        fainted_allies=3,
+        terrain="electricterrain",
+        attacker_hp_fraction=0.1,
+    ) == 80

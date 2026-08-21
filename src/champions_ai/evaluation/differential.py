@@ -28,7 +28,12 @@ from dataclasses import dataclass, field
 
 from champions_ai.dex import Dex
 from champions_ai.domain import BattlePokemon
-from champions_ai.mechanics import apply_boost, attacking_side, estimate_damage
+from champions_ai.mechanics import (
+    apply_boost,
+    attacking_side,
+    dynamic_base_power,
+    estimate_damage,
+)
 from champions_ai.simulator.tracker import split_ident, to_id
 
 # Damage lines carrying one of these describe residual damage -- recoil, a
@@ -64,6 +69,11 @@ class DamageSample:
     # damage the move dealt. A hit that overkills by 80 is recorded as the 15
     # the target could absorb, which reads as a wild over-prediction.
     truncated: bool = False
+    # Field state the engine feeds into a base-power callback: Rising Voltage
+    # doubles on Electric Terrain, Last Respects grows with the attacker's
+    # fallen teammates.
+    terrain: str | None = None
+    fainted_allies: int = 0
 
     def predict(self, dex: Dex, *, level: int, doubles: bool) -> tuple[int, int]:
         """Our predicted damage range for this exact hit."""
@@ -97,6 +107,23 @@ class DamageSample:
             doubles=doubles and self.spread_targets > 1,
             attacker_burned=self.attacker.status == "brn",
             weather=self.weather,
+            # Twenty-nine moves have their power computed per hit, and the
+            # harness was comparing against the static value for all of them --
+            # so a Stored Power off two Calm Minds read as a fivefold error in
+            # the formula when the formula was fine.
+            base_power=dynamic_base_power(
+                move,
+                attacker=dex.get_species(self.attacker.pokemon_set.species),
+                defender=dex.get_species(self.defender.pokemon_set.species),
+                attacker_hp_fraction=self.attacker.hp_fraction,
+                attacker_speed=(self.attacker.computed_stats or {}).get("spe"),
+                defender_speed=(self.defender.computed_stats or {}).get("spe"),
+                attacker_holds_item=self.attacker.current_item is not None,
+                attacker_positive_boosts=self.attacker.boosts.positive_total,
+                defender_status=self.defender.status,
+                fainted_allies=self.fainted_allies,
+                terrain=self.terrain,
+            ),
         )
         return estimate.minimum, estimate.maximum
 
@@ -143,6 +170,8 @@ class DamageCollector:
 
     def __init__(self, *, weather: str | None = None) -> None:
         self.weather = weather
+        self.terrain: str | None = None
+        self._fainted: dict[str, int] = {"p1": 0, "p2": 0}
         self._hp: dict[str, int] = {}
         self._screens: dict[str, set[str]] = {"p1": set(), "p2": set()}
         self.unknown_hp = 0
@@ -199,6 +228,14 @@ class DamageCollector:
                         self._screens[side].discard(condition)
             elif tag == "-weather":
                 self.weather = None if args[0] == "none" else to_id(args[0])
+            elif tag == "-fieldstart":
+                self.terrain = to_id(args[0].split(":")[-1])
+            elif tag == "-fieldend":
+                self.terrain = None
+            elif tag == "faint":
+                side = split_ident(args[0])[0]
+                if side in self._fainted:
+                    self._fainted[side] += 1
             elif tag == "-crit":
                 critical = True
             elif tag == "-hitcount":
@@ -250,6 +287,10 @@ class DamageCollector:
                             truncated=after == 0,
                             behind_screen=bool(
                                 self._screens.get(split_ident(target)[0], set())
+                            ),
+                            terrain=self.terrain,
+                            fainted_allies=self._fainted.get(
+                                split_ident(attacker_ident)[0], 0
                             ),
                         )
                     )

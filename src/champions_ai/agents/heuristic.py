@@ -166,6 +166,8 @@ class ResolvedTarget(NamedTuple):
     # than the user's. None means "the user's own stat applies", which is
     # every other move.
     attacking_stat: int | None = None
+    # Hex and Infernal Parade double against a target carrying any status.
+    status: str | None = None
 
 
 class HeuristicAgent(Agent):
@@ -315,17 +317,23 @@ class HeuristicAgent(Agent):
             defender=defender_species,
             defense_stat=target.defending_stat,
             defender_hp=target.remaining_hp,
-            # Eleven moves have their power computed per hit. Low Kick, Grass
-            # Knot, Heavy Slam, Heat Crash, Flail and Reversal are exact here;
-            # Gyro Ball and Electro Ball need the target's Speed, which the
-            # target resolution does not carry, and fall back to a middling
-            # value rather than to zero.
+            # Twenty-nine moves have their power computed per hit. Most are
+            # exact here; Gyro Ball and Electro Ball need the target's Speed,
+            # which the target resolution does not carry, and fall back to a
+            # middling value rather than to zero.
             base_power=dynamic_base_power(
                 move,
                 attacker=attacker_species,
                 defender=defender_species,
                 attacker_hp_fraction=attacker.hp_fraction,
                 attacker_speed=(attacker.computed_stats or {}).get("spe"),
+                attacker_holds_item=attacker.current_item is not None,
+                attacker_positive_boosts=attacker.boosts.positive_total,
+                defender_status=target.status,
+                fainted_allies=sum(
+                    1 for mon in observation.own_side.team if mon.fainted
+                ),
+                terrain=observation.terrain,
             ),
             level=observation.regulation.level,
             doubles=observation.regulation.game_type == "doubles",
@@ -732,6 +740,7 @@ class HeuristicAgent(Agent):
                     stats.get(defending_key, 100), ally.boosts.stage(defending_key)
                 ),
                 is_ally=True,
+                status=ally.status,
                 attacking_stat=None
                 if attacking_key is None
                 else apply_boost(
@@ -768,6 +777,7 @@ class HeuristicAgent(Agent):
                     estimated[defending_key], observed.boosts.stage(defending_key)
                 ),
                 is_ally=False,
+                status=observed.status,
                 # Uniform rather than credited: the calibrated attacking
                 # investment is evidence from *using* a move, and a Foul Play
                 # target is not the one using it.
