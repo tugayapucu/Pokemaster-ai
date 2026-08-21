@@ -6,6 +6,13 @@ from champions_ai.evaluation.agreement import (
     human_signature,
     measure_agreement,
 )
+from champions_ai.evaluation.differential import (
+    DamageSample,
+    DifferentialReport,
+    active_by_ident,
+    collect_samples,
+    compare,
+)
 from champions_ai.evaluation.margin import (
     BattleMargin,
     MarginSummary,
@@ -26,10 +33,15 @@ __all__ = [
     "AgreementResult",
     "BattleMargin",
     "BattleOutcome",
+    "DamageSample",
+    "DifferentialReport",
     "MarginSummary",
     "MatchResult",
     "SlotComparison",
     "action_signature",
+    "active_by_ident",
+    "collect_samples",
+    "compare",
     "compare_agents",
     "evaluate",
     "human_signature",
