@@ -284,7 +284,7 @@ class HeuristicAgent(Agent):
             self.dex,
             move,
             attacker=attacker_species,
-            attack_stat=self._attack_stat(attacker, move.category),
+            attack_stat=self._attack_stat(attacker, move),
             defender=defender_species,
             defense_stat=defender_defense,
             defender_hp=defender_hp,
@@ -595,26 +595,26 @@ class HeuristicAgent(Agent):
             label = "seen" if known else "assumed"
 
             for move in candidates:
-                physical = move.category == "Physical"
+                attacking = move.offensive_stat
+                defending = move.defensive_stat
                 # Credit investment to the stat the move actually uses: an
                 # opponent swinging a physical move is likely built for it.
                 stats = assumed_stats(
                     species.base_stats,
                     self.assumed_opponent_points,
-                    attacking="atk" if physical else "spa",
+                    attacking=attacking,
                 )
                 estimate = estimate_damage(
                     self.dex,
                     move,
                     attacker=species,
                     attack_stat=apply_boost(
-                        stats["atk" if physical else "spa"],
-                        getattr(observed.boosts, "attack" if physical else "special_attack"),
+                        stats[attacking], observed.boosts.stage(attacking)
                     ),
                     defender=defender_species,
                     defense_stat=apply_boost(
-                        (defender.computed_stats or {}).get("def" if physical else "spd", 100),
-                        getattr(defender.boosts, "defense" if physical else "special_defense"),
+                        (defender.computed_stats or {}).get(defending, 100),
+                        defender.boosts.stage(defending),
                     ),
                     defender_hp=max(1, defender.current_hp),
                     level=observation.regulation.level,
@@ -647,8 +647,11 @@ class HeuristicAgent(Agent):
         return None if index is None else observation.own_side.team[index]
 
     @staticmethod
-    def _attack_stat(attacker, category: str) -> int:
+    def _attack_stat(attacker, move: MoveInfo) -> int:
         """The attacking stat as it stands *now*, stat stages included.
+
+        Takes the move rather than its category because the two can disagree:
+        Body Press is Physical and swings with Defense.
 
         Boosts were tracked in the domain model and `apply_boost` was written
         for exactly this, and nothing called either: a Pokemon that had just
@@ -656,13 +659,11 @@ class HeuristicAgent(Agent):
         against 5,123 real attacks, applying them lifts predictions within ten
         points of the true damage from 35.8% to 39.2%.
         """
-        stats = attacker.computed_stats or {}
-        key = "atk" if category == "Physical" else "spa"
+        key = move.offensive_stat
         # Falling back to a mid value keeps a missing stat from reading as a
         # devastating or useless attacker.
-        base = stats.get(key, 100)
-        stage = getattr(attacker.boosts, "attack" if category == "Physical" else "special_attack")
-        return apply_boost(base, stage)
+        base = (attacker.computed_stats or {}).get(key, 100)
+        return apply_boost(base, attacker.boosts.stage(key))
 
     def _resolve_target(
         self, observation: Observation, slot: int, action: MoveAction
@@ -674,7 +675,7 @@ class HeuristicAgent(Agent):
         that would hit both.
         """
         move = self.dex.get_move(attacker_move_id(observation, slot, action))
-        defending_key = "def" if move.category == "Physical" else "spd"
+        defending_key = move.defensive_stat
 
         if action.target is not None and action.target.side == "ally":
             index = observation.own_side.active_slots[action.target.slot]
@@ -686,11 +687,10 @@ class HeuristicAgent(Agent):
             except KeyError:
                 return None
             stats = ally.computed_stats or {}
-            guard = "defense" if defending_key == "def" else "special_defense"
             return (
                 species,
                 max(1, ally.current_hp),
-                apply_boost(stats.get(defending_key, 100), getattr(ally.boosts, guard)),
+                apply_boost(stats.get(defending_key, 100), ally.boosts.stage(defending_key)),
                 True,
             )
 
@@ -716,11 +716,10 @@ class HeuristicAgent(Agent):
                 continue
             estimated = estimate_stats(species.base_stats, self.assumed_opponent_points)
             remaining = max(1, estimated["hp"] * observed.hp_percent // 100)
-            guard = "defense" if defending_key == "def" else "special_defense"
             return (
                 species,
                 remaining,
-                apply_boost(estimated[defending_key], getattr(observed.boosts, guard)),
+                apply_boost(estimated[defending_key], observed.boosts.stage(defending_key)),
                 False,
             )
         return None

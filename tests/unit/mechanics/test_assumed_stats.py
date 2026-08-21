@@ -66,7 +66,21 @@ def test_the_model_is_deliberately_asymmetric_and_not_a_legal_spread():
 
 
 def test_an_unknown_stat_key_is_ignored_rather_than_crashing():
-    assert assumed_stats(BASE, 11, attacking="spe") == estimate_stats(BASE, 11)
+    """HP uses a different formula and no move attacks with it."""
+    assert assumed_stats(BASE, 11, attacking="hp") == estimate_stats(BASE, 11)
+    assert assumed_stats(BASE, 11, attacking="nonsense") == estimate_stats(BASE, 11)
+
+
+def test_defense_can_be_credited_for_a_move_that_attacks_with_it():
+    """Body Press swings with Defense, so that is the stat the user built.
+
+    The constant was fitted against Attack and Special Attack, but the
+    argument behind it -- carrying the move is evidence about the spread --
+    does not care which stat the move happens to draw on.
+    """
+    credited = assumed_stats(BASE, 11, attacking="def")
+    assert credited["def"] > estimate_stats(BASE, 11)["def"]
+    assert credited["atk"] == estimate_stats(BASE, 11)["atk"]
 
 
 def test_more_investment_means_a_higher_stat():

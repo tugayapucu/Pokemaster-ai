@@ -68,18 +68,19 @@ class DamageSample:
     def predict(self, dex: Dex, *, level: int, doubles: bool) -> tuple[int, int]:
         """Our predicted damage range for this exact hit."""
         move = dex.get_move(self.move_id)
-        physical = move.category == "Physical"
         stats = self.attacker.computed_stats or {}
         guard = self.defender.computed_stats or {}
+        # Not every move uses the stat its category implies -- Body Press
+        # swings with Defense, Psyshock lands on it -- so ask the move.
+        attacking = move.offensive_stat
+        defending = move.defensive_stat
         # Stat stages are not in `computed_stats` -- the request reports the
         # stats before them -- and Intimidate alone makes them vary constantly.
         attack = apply_boost(
-            stats.get("atk" if physical else "spa", 100),
-            getattr(self.attacker.boosts, "attack" if physical else "special_attack"),
+            stats.get(attacking, 100), self.attacker.boosts.stage(attacking)
         )
         defence = apply_boost(
-            guard.get("def" if physical else "spd", 100),
-            getattr(self.defender.boosts, "defense" if physical else "special_defense"),
+            guard.get(defending, 100), self.defender.boosts.stage(defending)
         )
         estimate = estimate_damage(
             dex,

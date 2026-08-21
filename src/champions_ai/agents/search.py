@@ -210,14 +210,13 @@ class SearchAgent(Agent):
             return 0.0
 
         attack_stats = estimate_stats(attacker.base_stats, self.assumed_opponent_points)
-        defending = (defender.computed_stats or {}).get(
-            "def" if move.category == "Physical" else "spd", 100
-        )
+        # The move names the stats it uses; the category only usually agrees.
+        defending = (defender.computed_stats or {}).get(move.defensive_stat, 100)
         estimate = estimate_damage(
             self.dex,
             move,
             attacker=attacker,
-            attack_stat=attack_stats["atk" if move.category == "Physical" else "spa"],
+            attack_stat=attack_stats[move.offensive_stat],
             defender=defender_species,
             defense_stat=defending,
             defender_hp=max(1, defender.current_hp),

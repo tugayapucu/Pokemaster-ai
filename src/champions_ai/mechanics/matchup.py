@@ -142,14 +142,15 @@ def _best_fraction(
     for move in moves:
         if not move.is_damaging:
             continue
-        physical = move.category == "Physical"
+        # Body Press swings with Defense and Psyshock lands on it, so the
+        # category is not enough to say which stats are involved.
         estimate = estimate_damage(
             dex,
             move,
             attacker=attacker,
-            attack_stat=attack_stats["atk" if physical else "spa"],
+            attack_stat=attack_stats[move.offensive_stat],
             defender=defender,
-            defense_stat=defence_stats["def" if physical else "spd"],
+            defense_stat=defence_stats[move.defensive_stat],
             defender_hp=defender_hp,
             level=level,
             doubles=doubles,

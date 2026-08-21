@@ -99,13 +99,22 @@ def assumed_stats(
 ) -> dict[str, int]:
     """Like `estimate_stats`, but crediting investment where a move is being used.
 
-    `attacking` is the stat key the move draws on -- "atk" or "spa". Passing
-    None gives the plain uniform estimate, which is what a defender gets.
+    `attacking` is the stat key the move draws on. Usually "atk" or "spa",
+    which is what the constant was fitted against, but Body Press draws on
+    "def" and the evidential argument is the same one: a Pokemon that carries
+    Body Press is likely built around its Defense. Passing None gives the plain
+    uniform estimate, which is what a defender gets.
     """
     stats = estimate_stats(base_stats, points_per_stat)
     if attacking is None:
         return stats
-    raw = {"atk": base_stats.attack, "spa": base_stats.special_attack}.get(attacking)
+    raw = {
+        "atk": base_stats.attack,
+        "def": base_stats.defense,
+        "spa": base_stats.special_attack,
+        "spd": base_stats.special_defense,
+        "spe": base_stats.speed,
+    }.get(attacking)
     if raw is not None:
         stats[attacking] = other_stat(raw, attacking_points)
     return stats

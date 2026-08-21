@@ -154,7 +154,7 @@ class FeatureExtractor:
         estimate = estimate_damage(
             self.dex, move,
             attacker=self.dex.get_species(active.pokemon_set.species),
-            attack_stat=self.heuristic._attack_stat(active, move.category),
+            attack_stat=self.heuristic._attack_stat(active, move),
             defender=species, defense_stat=defence, defender_hp=hp,
             level=observation.regulation.level,
             doubles=observation.regulation.game_type == "doubles",
