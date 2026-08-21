@@ -139,3 +139,133 @@ def test_an_unknown_pokemon_yields_no_sample():
         "|-damage|p2a: Mystery|150/194",
     ), LOOKUP)
     assert samples == []
+
+
+# ------------------------------------------------------------- scoring, not parsing
+
+
+def _sample(actual, **overrides):
+    """A hit our model predicts at roughly 40-47 damage."""
+    from champions_ai.evaluation.differential import DamageSample
+
+    defaults = dict(
+        attacker=_mon("Charizard"), defender=_mon("Garchomp"), move_id="tackle",
+        actual=actual, defender_hp_before=200, weather=None, critical=False,
+        spread=False, spread_targets=1, truncated=False,
+    )
+    return DamageSample(**{**defaults, **overrides})
+
+
+def _dex():
+    from champions_ai.dex import Dex
+
+    types = ["Normal", "Dragon", "Ground", "Fire", "Flying"]
+    def species(name, kinds):
+        return {
+            "name": name, "types": kinds,
+            "baseStats": {"hp": 100, "atk": 100, "def": 100, "spa": 100, "spd": 100, "spe": 100},
+            "abilities": [], "weightkg": 1.0, "baseSpecies": name,
+        }
+    return Dex.from_payload({
+        "species": {"charizard": species("Charizard", ["Fire", "Flying"]),
+                    "garchomp": species("Garchomp", ["Dragon", "Ground"])},
+        "moves": {"tackle": {
+            "name": "Tackle", "type": "Normal", "category": "Physical", "basePower": 80,
+            "accuracy": 100, "priority": 0, "target": "normal", "flags": [], "secondaries": [],
+        }},
+        "types": types, "chart": {a: dict.fromkeys(types, 1.0) for a in types},
+    })
+
+
+def test_a_hit_inside_the_predicted_range_counts_as_agreement():
+    from champions_ai.evaluation.differential import compare
+
+    dex = _dex()
+    low, high = _sample(0).predict(dex, level=50, doubles=False)
+    report = compare([_sample((low + high) // 2)], dex, doubles=False)
+    assert report.samples == 1
+    assert report.inside_range == 1
+    assert report.accuracy == 1.0
+
+
+def test_under_and_over_prediction_are_counted_separately():
+    """Which direction the model is wrong in is the whole diagnostic."""
+    from champions_ai.evaluation.differential import compare
+
+    dex = _dex()
+    low, high = _sample(0).predict(dex, level=50, doubles=False)
+    report = compare([_sample(high + 50), _sample(max(1, low - 5))], dex, doubles=False)
+    assert report.above_range == 1, "engine dealt more than predicted"
+    assert report.below_range == 1
+    assert report.inside_range == 0
+
+
+def test_a_knockout_is_skipped_rather_than_scored():
+    """Its recorded damage is what the target could absorb, not what was dealt,
+    so scoring it would report every overkill as an over-prediction."""
+    from champions_ai.evaluation.differential import compare
+
+    report = compare([_sample(3, truncated=True)], _dex(), doubles=False)
+    assert report.samples == 0
+    assert report.skipped == 1
+
+
+def test_a_critical_hit_is_skipped_by_default_but_can_be_included():
+    """The model estimates the ordinary roll; counting crits as misses would
+    report a known omission as an arithmetic error."""
+    from champions_ai.evaluation.differential import compare
+
+    dex = _dex()
+    crit = _sample(500, critical=True)
+    assert compare([crit], dex, doubles=False).skipped == 1
+    assert compare([crit], dex, doubles=False, include_crits=True).samples == 1
+
+
+def test_a_move_missing_from_the_dex_is_skipped_not_fatal():
+    from champions_ai.evaluation.differential import compare
+
+    report = compare([_sample(40, move_id="nosuchmove")], _dex(), doubles=False)
+    assert report.skipped == 1
+    assert report.samples == 0
+
+
+def test_mismatches_name_the_pokemon_and_the_direction():
+    from champions_ai.evaluation.differential import compare
+
+    dex = _dex()
+    _, high = _sample(0).predict(dex, level=50, doubles=False)
+    report = compare([_sample(high + 40)], dex, doubles=False)
+    assert report.mismatches
+    assert "Charizard" in report.mismatches[0] and "under-predicted" in report.mismatches[0]
+
+
+def test_stat_stages_change_the_prediction():
+    """They are absent from `computed_stats`, and with Intimidate about the same
+    matchup produced actuals from 16 to 63 against one fixed prediction."""
+    from champions_ai.domain import Boosts
+
+    dex = _dex()
+    plain = _sample(0)
+    boosted = _sample(0, attacker=_mon("Charizard").model_copy(
+        update={"boosts": Boosts(attack=2)}
+    ))
+    assert boosted.predict(dex, level=50, doubles=False)[0] > plain.predict(
+        dex, level=50, doubles=False
+    )[0]
+
+
+def test_a_spread_move_reaching_one_target_is_not_reduced():
+    """The engine only applies the 0.75 reduction above one target."""
+    dex = _dex()
+    one = _sample(0, spread=True, spread_targets=1).predict(dex, level=50, doubles=True)
+    two = _sample(0, spread=True, spread_targets=2).predict(dex, level=50, doubles=True)
+    assert one[0] >= two[0]
+
+
+def test_an_empty_run_reports_nothing_rather_than_dividing_by_zero():
+    from champions_ai.evaluation.differential import compare
+
+    report = compare([], _dex())
+    assert report.samples == 0
+    assert report.accuracy == 0.0
+    assert "0/0" in report.summary()
