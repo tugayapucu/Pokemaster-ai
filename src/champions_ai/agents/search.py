@@ -28,7 +28,7 @@ from champions_ai.agents.base import Agent
 from champions_ai.agents.heuristic import HeuristicAgent
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
 from champions_ai.domain import JointAction, MoveAction, Observation
-from champions_ai.mechanics import estimate_damage, estimate_stats
+from champions_ai.mechanics import attacking_side, estimate_damage, estimate_stats
 from champions_ai.mechanics.evaluation import HP_WEIGHT, POKEMON_WEIGHT
 
 # How much to trust the opponent to play well. 1.0 assumes their best reply,
@@ -211,12 +211,17 @@ class SearchAgent(Agent):
 
         attack_stats = estimate_stats(attacker.base_stats, self.assumed_opponent_points)
         # The move names the stats it uses; the category only usually agrees.
+        # `defender` here is ours, so a Foul Play aimed at us swings with our
+        # own Attack -- which is what makes it dangerous into a sweeper.
         defending = (defender.computed_stats or {}).get(move.defensive_stat, 100)
+        swinging = attacking_side(
+            move, user=attack_stats, target=defender.computed_stats or {}
+        )
         estimate = estimate_damage(
             self.dex,
             move,
             attacker=attacker,
-            attack_stat=attack_stats[move.offensive_stat],
+            attack_stat=swinging.get(move.offensive_stat, 100),
             defender=defender_species,
             defense_stat=defending,
             defender_hp=max(1, defender.current_hp),

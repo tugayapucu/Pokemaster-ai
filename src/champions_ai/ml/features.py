@@ -146,16 +146,22 @@ class FeatureExtractor:
         target = self.heuristic._resolve_target(observation, slot, action)
         if target is None or not move.is_damaging:
             return
-        species, hp, defence, is_ally = target
-        if is_ally:
+        species = target.species
+        if target.is_ally:
             return
         from champions_ai.mechanics import dynamic_base_power, estimate_damage
 
         estimate = estimate_damage(
             self.dex, move,
             attacker=self.dex.get_species(active.pokemon_set.species),
-            attack_stat=self.heuristic._attack_stat(active, move),
-            defender=species, defense_stat=defence, defender_hp=hp,
+            attack_stat=(
+                self.heuristic._attack_stat(active, move)
+                if target.attacking_stat is None
+                else target.attacking_stat
+            ),
+            defender=species,
+            defense_stat=target.defending_stat,
+            defender_hp=target.remaining_hp,
             level=observation.regulation.level,
             doubles=observation.regulation.game_type == "doubles",
             attacker_burned=active.status == "brn",

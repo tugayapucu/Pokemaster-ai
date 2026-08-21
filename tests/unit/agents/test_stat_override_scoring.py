@@ -53,27 +53,38 @@ DEX = Dex.from_payload({
             "baseStats": {"hp": 150, "atk": 60, "def": 150, "spa": 60, "spd": 50, "spe": 60},
             "abilities": [], "weightkg": 1.0, "baseSpecies": "Target",
         },
+        # Identical to Target apart from a huge Attack, so a Foul Play into it
+        # differs only by the stat the move is meant to read.
+        "bruiser": {
+            "name": "Bruiser", "types": ["Normal"],
+            "baseStats": {"hp": 150, "atk": 170, "def": 150, "spa": 60, "spd": 50, "spe": 60},
+            "abilities": [], "weightkg": 1.0, "baseSpecies": "Bruiser",
+        },
     },
     "moves": {
         "bonk": _move("Bonk", "Physical"),
         "beam": _move("Beam", "Special"),
         "bodypress": _move("Body Press", "Physical", overrideOffensiveStat="def"),
         "psyshock": _move("Psyshock", "Special", overrideDefensiveStat="def"),
+        "foulplay": _move("Foul Play", "Physical", overrideOffensivePokemon="target"),
     },
     "types": ["Normal"], "chart": {"Normal": {"Normal": 1.0}},
 })
 
 # Attack and Defense are far apart on purpose.
 OUR_STATS = {"atk": 90, "def": 190, "spa": 90, "spd": 130, "spe": 90}
-MOVES = ("bonk", "beam", "bodypress", "psyshock")
+# Two sets, because a Pokemon may hold only four moves and each override
+# needs its plain counterpart alongside it as a control.
+CORE_MOVES = ("bonk", "beam", "bodypress", "psyshock")
+FOUL_MOVES = ("bonk", "foulplay")
 
 
-def _observation(our_boosts=None, their_boosts=None):
+def _observation(our_boosts=None, their_boosts=None, foe="Target", moves=CORE_MOVES):
     mine = BattlePokemon(
-        pokemon_set=PokemonSet(species="Presser", level=50, ability="x", moves=MOVES),
+        pokemon_set=PokemonSet(species="Presser", level=50, ability="x", moves=moves),
         current_hp=195, max_hp=195,
         computed_stats=OUR_STATS,
-        choosable_moves=MOVES,
+        choosable_moves=moves,
         boosts=our_boosts or Boosts(),
     )
     return Observation(
@@ -81,7 +92,7 @@ def _observation(our_boosts=None, their_boosts=None):
         own_side=Side(team=(mine,), active_slots=(0, None)),
         opponent_side=ObservedSide(
             revealed=(ObservedPokemon(
-                species="Target", level=50, hp_percent=100, fainted=False,
+                species=foe, level=50, hp_percent=100, fainted=False,
                 boosts=their_boosts or Boosts(),
             ),),
             active_slots=(0, None),
@@ -94,15 +105,16 @@ def agent():
     return HeuristicAgent(DEX, name="test")
 
 
-def _score(agent, move_index, **boosts):
+def _score(agent, move_index, **kwargs):
     return agent.score_slot_action(
-        _observation(**boosts),
+        _observation(**kwargs),
         0,
         MoveAction(move_index=move_index, target=TargetSlot(side="foe", slot=0)),
     ).score
 
 
-BONK, BEAM, BODY_PRESS, PSYSHOCK = 0, 1, 2, 3
+BONK, BEAM, BODY_PRESS, PSYSHOCK = range(len(CORE_MOVES))
+FOUL_BONK, FOUL_PLAY = range(len(FOUL_MOVES))
 
 
 # ------------------------------------------------- the user's attacking stat
@@ -161,3 +173,39 @@ def test_a_special_defense_boost_on_the_target_does_not(agent):
     # ...but it does blunt an ordinary Special move, or the test above would
     # pass for a version that ignored target boosts entirely.
     assert _score(agent, BEAM, their_boosts=Boosts(special_defense=2)) < _score(agent, BEAM)
+
+
+# ------------------------------------------------ whose attacking stat it is
+
+
+def test_foul_play_swings_with_the_targets_attack(agent):
+    """The same move into two targets that differ only in Attack."""
+    into_bruiser = _score(agent, FOUL_PLAY, foe="Bruiser", moves=FOUL_MOVES)
+    into_target = _score(agent, FOUL_PLAY, foe="Target", moves=FOUL_MOVES)
+    assert into_bruiser > into_target
+
+
+def test_an_ordinary_physical_move_does_not_care_who_it_hits(agent):
+    """Guards the test above: Bruiser and Target share every other stat, so a
+    move that reads its own Attack must score the same into either."""
+    assert _score(agent, FOUL_BONK, foe="Bruiser", moves=FOUL_MOVES) == pytest.approx(
+        _score(agent, FOUL_BONK, foe="Target", moves=FOUL_MOVES)
+    )
+
+
+def test_foul_play_ignores_our_own_attack_boost(agent):
+    plain = _score(agent, FOUL_PLAY, moves=FOUL_MOVES)
+    swords_dance = _score(
+        agent, FOUL_PLAY, our_boosts=Boosts(attack=2), moves=FOUL_MOVES
+    )
+    assert swords_dance == pytest.approx(plain)
+
+
+def test_foul_play_reads_the_targets_attack_boost(agent):
+    """The engine reads `attacker.boosts` off whichever Pokemon it picked, so
+    a Foul Play into a Swords Dance user swings at +2."""
+    plain = _score(agent, FOUL_PLAY, moves=FOUL_MOVES)
+    boosted = _score(
+        agent, FOUL_PLAY, their_boosts=Boosts(attack=2), moves=FOUL_MOVES
+    )
+    assert boosted > plain

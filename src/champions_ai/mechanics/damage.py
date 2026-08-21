@@ -17,8 +17,11 @@ unmodelled 1.5x on Fire.
 """
 
 from dataclasses import dataclass
+from typing import TypeVar
 
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
+
+T = TypeVar("T")
 
 # The engine rolls damage uniformly across these fractions of the max roll.
 MIN_ROLL = 0.85
@@ -91,6 +94,20 @@ class DamageEstimate:
 
 def is_spread_move(move: MoveInfo) -> bool:
     return move.target in SPREAD_TARGETS
+
+
+def attacking_side(move: MoveInfo, *, user: T, target: T) -> T:
+    """Which side of the field the attacking stat is read from.
+
+    Almost always the user. Foul Play is the exception: the engine sets
+    `attacker = target` before reading either the stat or its stages, so a Foul
+    Play says nothing about the Pokemon using it and everything about the one
+    it is aimed at. Aimed at a Swords Dance user it swings at +2.
+
+    Generic over whatever pair the caller has to hand -- a stat dict, a
+    `BattlePokemon` -- so each call site keeps its own shape.
+    """
+    return target if move.uses_target_offense else user
 
 
 def estimate_damage(

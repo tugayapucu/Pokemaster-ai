@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 
 from champions_ai.dex import Dex
 from champions_ai.domain import BattlePokemon
-from champions_ai.mechanics import apply_boost, estimate_damage
+from champions_ai.mechanics import apply_boost, attacking_side, estimate_damage
 from champions_ai.simulator.tracker import split_ident, to_id
 
 # Damage lines carrying one of these describe residual damage -- recoil, a
@@ -68,17 +68,17 @@ class DamageSample:
     def predict(self, dex: Dex, *, level: int, doubles: bool) -> tuple[int, int]:
         """Our predicted damage range for this exact hit."""
         move = dex.get_move(self.move_id)
-        stats = self.attacker.computed_stats or {}
-        guard = self.defender.computed_stats or {}
         # Not every move uses the stat its category implies -- Body Press
-        # swings with Defense, Psyshock lands on it -- so ask the move.
+        # swings with Defense, Psyshock lands on it -- and Foul Play reads its
+        # attacking stat off the target, so ask the move for both.
         attacking = move.offensive_stat
         defending = move.defensive_stat
+        swinger = attacking_side(move, user=self.attacker, target=self.defender)
+        stats = swinger.computed_stats or {}
+        guard = self.defender.computed_stats or {}
         # Stat stages are not in `computed_stats` -- the request reports the
         # stats before them -- and Intimidate alone makes them vary constantly.
-        attack = apply_boost(
-            stats.get(attacking, 100), self.attacker.boosts.stage(attacking)
-        )
+        attack = apply_boost(stats.get(attacking, 100), swinger.boosts.stage(attacking))
         defence = apply_boost(
             guard.get(defending, 100), self.defender.boosts.stage(defending)
         )

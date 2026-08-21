@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
 from champions_ai.domain import PokemonSet
-from champions_ai.mechanics.damage import estimate_damage
+from champions_ai.mechanics.damage import attacking_side, estimate_damage
 from champions_ai.mechanics.stats import (
     assumed_stats,
     estimate_stats,
@@ -148,7 +148,11 @@ def _best_fraction(
             dex,
             move,
             attacker=attacker,
-            attack_stat=attack_stats[move.offensive_stat],
+            # Foul Play swings with the defender's Attack, so the stat can
+            # come off the other side of this pairing entirely.
+            attack_stat=attacking_side(
+                move, user=attack_stats, target=defence_stats
+            )[move.offensive_stat],
             defender=defender,
             defense_stat=defence_stats[move.defensive_stat],
             defender_hp=defender_hp,

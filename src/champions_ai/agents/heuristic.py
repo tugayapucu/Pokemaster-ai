@@ -14,6 +14,7 @@ Milestone 10, not a fact.
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from itertools import combinations
+from typing import NamedTuple
 
 from champions_ai.agents.base import Agent
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
@@ -33,6 +34,7 @@ from champions_ai.mechanics import (
     apply_boost,
     assumed_attacks,
     assumed_stats,
+    attacking_side,
     dynamic_base_power,
     estimate_damage,
     estimate_stats,
@@ -146,6 +148,24 @@ class ScoredAction:
     action: SlotAction
     score: float
     reasons: tuple[str, ...] = field(default=())
+
+
+class ResolvedTarget(NamedTuple):
+    """What a move is aimed at, with the stats that move will read off it.
+
+    Named rather than a bare tuple because the last field is conditional: it
+    holds a value only for a move whose attacking stat comes from this side of
+    the field, and `_, _, _, _, x = target` would say nothing about that.
+    """
+
+    species: SpeciesInfo
+    remaining_hp: int
+    defending_stat: int
+    is_ally: bool
+    # Set only for Foul Play, which swings with the target's Attack rather
+    # than the user's. None means "the user's own stat applies", which is
+    # every other move.
+    attacking_stat: int | None = None
 
 
 class HeuristicAgent(Agent):
@@ -279,15 +299,22 @@ class HeuristicAgent(Agent):
         if target is None:
             return ScoredAction(action, 0.0, (f"{move.name} has no visible target",))
 
-        defender_species, defender_hp, defender_defense, is_ally = target
+        defender_species = target.species
+        is_ally = target.is_ally
         estimate = estimate_damage(
             self.dex,
             move,
             attacker=attacker_species,
-            attack_stat=self._attack_stat(attacker, move),
+            # `attacking_stat` is set only for Foul Play, which swings with
+            # whatever it is aimed at rather than with the user.
+            attack_stat=(
+                self._attack_stat(attacker, move)
+                if target.attacking_stat is None
+                else target.attacking_stat
+            ),
             defender=defender_species,
-            defense_stat=defender_defense,
-            defender_hp=defender_hp,
+            defense_stat=target.defending_stat,
+            defender_hp=target.remaining_hp,
             # Eleven moves have their power computed per hit. Low Kick, Grass
             # Knot, Heavy Slam, Heat Crash, Flail and Reversal are exact here;
             # Gyro Ball and Electro Ball need the target's Speed, which the
@@ -604,12 +631,20 @@ class HeuristicAgent(Agent):
                     self.assumed_opponent_points,
                     attacking=attacking,
                 )
+                # A Foul Play aimed at us swings with *our* Attack, which is
+                # exactly why it is dangerous into our own physical attacker.
+                swinging_stats, swinging_boosts = attacking_side(
+                    move,
+                    user=(stats, observed.boosts),
+                    target=(defender.computed_stats or {}, defender.boosts),
+                )
                 estimate = estimate_damage(
                     self.dex,
                     move,
                     attacker=species,
                     attack_stat=apply_boost(
-                        stats[attacking], observed.boosts.stage(attacking)
+                        swinging_stats.get(attacking, 100),
+                        swinging_boosts.stage(attacking),
                     ),
                     defender=defender_species,
                     defense_stat=apply_boost(
@@ -667,8 +702,8 @@ class HeuristicAgent(Agent):
 
     def _resolve_target(
         self, observation: Observation, slot: int, action: MoveAction
-    ) -> tuple[SpeciesInfo, int, int, bool] | None:
-        """(species, remaining HP, defending stat, is_ally) for the move's target.
+    ) -> "ResolvedTarget | None":
+        """What the move is aimed at, with the stats the move will read off it.
 
         Spread moves carry no explicit target, so the first live opponent
         stands in -- enough to rank the move, though it undercounts a move
@@ -676,6 +711,9 @@ class HeuristicAgent(Agent):
         """
         move = self.dex.get_move(attacker_move_id(observation, slot, action))
         defending_key = move.defensive_stat
+        # Foul Play swings with the target's Attack, so the attacking stat has
+        # to be gathered here, where the target is known.
+        attacking_key = move.offensive_stat if move.uses_target_offense else None
 
         if action.target is not None and action.target.side == "ally":
             index = observation.own_side.active_slots[action.target.slot]
@@ -687,11 +725,18 @@ class HeuristicAgent(Agent):
             except KeyError:
                 return None
             stats = ally.computed_stats or {}
-            return (
-                species,
-                max(1, ally.current_hp),
-                apply_boost(stats.get(defending_key, 100), ally.boosts.stage(defending_key)),
-                True,
+            return ResolvedTarget(
+                species=species,
+                remaining_hp=max(1, ally.current_hp),
+                defending_stat=apply_boost(
+                    stats.get(defending_key, 100), ally.boosts.stage(defending_key)
+                ),
+                is_ally=True,
+                attacking_stat=None
+                if attacking_key is None
+                else apply_boost(
+                    stats.get(attacking_key, 100), ally.boosts.stage(attacking_key)
+                ),
             )
 
         foe_slot = action.target.slot if action.target is not None else None
@@ -716,11 +761,21 @@ class HeuristicAgent(Agent):
                 continue
             estimated = estimate_stats(species.base_stats, self.assumed_opponent_points)
             remaining = max(1, estimated["hp"] * observed.hp_percent // 100)
-            return (
-                species,
-                remaining,
-                apply_boost(estimated[defending_key], observed.boosts.stage(defending_key)),
-                False,
+            return ResolvedTarget(
+                species=species,
+                remaining_hp=remaining,
+                defending_stat=apply_boost(
+                    estimated[defending_key], observed.boosts.stage(defending_key)
+                ),
+                is_ally=False,
+                # Uniform rather than credited: the calibrated attacking
+                # investment is evidence from *using* a move, and a Foul Play
+                # target is not the one using it.
+                attacking_stat=None
+                if attacking_key is None
+                else apply_boost(
+                    estimated[attacking_key], observed.boosts.stage(attacking_key)
+                ),
             )
         return None
 
