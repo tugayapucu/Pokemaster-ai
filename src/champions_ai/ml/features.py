@@ -149,7 +149,7 @@ class FeatureExtractor:
         species, hp, defence, is_ally = target
         if is_ally:
             return
-        from champions_ai.mechanics import estimate_damage
+        from champions_ai.mechanics import dynamic_base_power, estimate_damage
 
         estimate = estimate_damage(
             self.dex, move,
@@ -160,6 +160,13 @@ class FeatureExtractor:
             doubles=observation.regulation.game_type == "doubles",
             attacker_burned=active.status == "brn",
             weather=observation.weather,
+            base_power=dynamic_base_power(
+                move,
+                attacker=self.dex.get_species(active.pokemon_set.species),
+                defender=species,
+                attacker_hp_fraction=active.hp_fraction,
+                attacker_speed=(active.computed_stats or {}).get("spe"),
+            ),
         )
         values["damage_fraction"] = estimate.average_fraction
         values["guaranteed_ko"] = 1.0 if estimate.guaranteed_ko else 0.0

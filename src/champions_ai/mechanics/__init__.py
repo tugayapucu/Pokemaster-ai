@@ -1,3 +1,4 @@
+from champions_ai.mechanics.base_power import dynamic_base_power
 from champions_ai.mechanics.damage import (
     DamageEstimate,
     estimate_damage,
@@ -29,6 +30,7 @@ __all__ = [
     "apply_boost",
     "assumed_attacks",
     "assumed_stats",
+    "dynamic_base_power",
     "estimate_damage",
     "estimate_stats",
     "evaluate_position",

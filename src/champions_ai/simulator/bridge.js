@@ -172,6 +172,11 @@ function moveSecondaries(entry) {
 			// hand-listed on the Python side, because a hand-copied list of
 			// engine facts is exactly what drifts.
 			stallingMove: !!entry.stallingMove,
+			// Eleven moves in this dex carry a zero `basePower` because the
+			// engine computes it per hit -- Low Kick from the target's weight,
+			// Gyro Ball from the speed ratio. Without this flag they read as
+			// status moves.
+			dynamicPower: typeof entry.basePowerCallback === 'function',
 			secondaries: moveSecondaries(entry),
 			// Both are [numerator, denominator] fractions of damage dealt.
 			drain: entry.drain || null,

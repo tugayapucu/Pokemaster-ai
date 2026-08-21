@@ -81,6 +81,9 @@ class MoveInfo(BaseModel, frozen=True):
     # wider set than "blocks damage to the user": Endure shares the counter
     # while letting the hit land.
     stalling: bool = False
+    # The engine computes this move's base power per hit, so a `base_power` of
+    # zero means "not known yet" rather than "does no damage".
+    dynamic_power: bool = False
     # What the move does beyond damage. Empty means "no rider", which is not
     # the same as "unknown" -- the dump is exhaustive.
     secondaries: tuple[SecondaryEffect, ...] = ()
@@ -126,7 +129,13 @@ class MoveInfo(BaseModel, frozen=True):
 
     @property
     def is_damaging(self) -> bool:
-        return self.category != "Status" and self.base_power > 0
+        """Whether this move deals damage at all.
+
+        A zero base power is not the same as no damage: eleven moves in the
+        Champions dex have their power computed per hit, and treating those as
+        status moves priced Low Kick and Grass Knot as support.
+        """
+        return self.category != "Status" and (self.base_power > 0 or self.dynamic_power)
 
     @property
     def always_hits(self) -> bool:
@@ -235,6 +244,7 @@ class Dex(BaseModel, frozen=True):
                 priority=entry["priority"],
                 target=entry["target"],
                 stalling=bool(entry.get("stallingMove", False)),
+                dynamic_power=bool(entry.get("dynamicPower", False)),
                 secondaries=tuple(
                     SecondaryEffect(
                         chance=secondary.get("chance", 100),

@@ -33,6 +33,7 @@ from champions_ai.mechanics import (
     apply_boost,
     assumed_attacks,
     assumed_stats,
+    dynamic_base_power,
     estimate_damage,
     estimate_stats,
     matchup,
@@ -287,6 +288,18 @@ class HeuristicAgent(Agent):
             defender=defender_species,
             defense_stat=defender_defense,
             defender_hp=defender_hp,
+            # Eleven moves have their power computed per hit. Low Kick, Grass
+            # Knot, Heavy Slam, Heat Crash, Flail and Reversal are exact here;
+            # Gyro Ball and Electro Ball need the target's Speed, which the
+            # target resolution does not carry, and fall back to a middling
+            # value rather than to zero.
+            base_power=dynamic_base_power(
+                move,
+                attacker=attacker_species,
+                defender=defender_species,
+                attacker_hp_fraction=attacker.hp_fraction,
+                attacker_speed=(attacker.computed_stats or {}).get("spe"),
+            ),
             level=observation.regulation.level,
             doubles=observation.regulation.game_type == "doubles",
             attacker_burned=attacker.status == "brn",

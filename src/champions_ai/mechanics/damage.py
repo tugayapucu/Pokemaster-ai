@@ -106,6 +106,7 @@ def estimate_damage(
     doubles: bool = True,
     attacker_burned: bool = False,
     weather: str | None = None,
+    base_power: int | None = None,
 ) -> DamageEstimate:
     """Estimate a single hit's damage range.
 
@@ -115,6 +116,9 @@ def estimate_damage(
     `weather` is Showdown's id (`sunnyday`, `raindance`, `sandstorm`,
     `snowscape`). An unknown value is ignored rather than guessed at, so a new
     weather costs accuracy but never correctness.
+
+    `base_power` overrides the move's static value, for the eleven moves whose
+    power the engine computes per hit. See `mechanics.base_power`.
     """
     effectiveness = dex.type_chart.effectiveness(move.type, defender.types)
 
@@ -130,7 +134,8 @@ def estimate_damage(
             defense_stat = int(defense_stat * WEATHER_DEFENCE_MULTIPLIER)
 
     # Engine order: the level/power/ratio term, then +2, then the modifiers.
-    base = (2 * level // 5 + 2) * move.base_power * attack_stat // max(1, defense_stat) // 50 + 2
+    power = move.base_power if base_power is None else base_power
+    base = (2 * level // 5 + 2) * power * attack_stat // max(1, defense_stat) // 50 + 2
 
     multiplier = effectiveness
     if move.type in attacker.types:

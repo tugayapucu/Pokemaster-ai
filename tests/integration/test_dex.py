@@ -137,3 +137,24 @@ def test_a_species_outside_the_regulation_still_raises(bridge):
     dex = Dex.load(bridge)
     with pytest.raises(KeyError):
         dex.get_species("Definitely-Not-A-Pokemon")
+
+
+def test_moves_the_engine_computes_are_flagged_as_dynamic(bridge):
+    """Eleven moves carry a zero static base power because the engine works it
+    out per hit. Without the flag, `is_damaging` classed them as status moves
+    and the heuristic priced Low Kick and Grass Knot as support.
+    """
+    dex = Dex.load(bridge)
+    for move_id in ("lowkick", "grassknot", "gyroball", "heavyslam", "electroball", "flail"):
+        move = dex.get_move(move_id)
+        assert move.base_power == 0, f"{move_id} should carry no static power"
+        assert move.dynamic_power, f"{move_id} must be flagged as computed at run time"
+        assert move.is_damaging, f"{move_id} must not read as a status move"
+
+
+def test_an_ordinary_move_is_not_flagged_as_dynamic(bridge):
+    """Guards the test above against passing because everything is flagged."""
+    dex = Dex.load(bridge)
+    ordinary = dex.get_move("dragonclaw")
+    assert ordinary.base_power > 0
+    assert not ordinary.dynamic_power

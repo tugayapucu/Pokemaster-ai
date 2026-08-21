@@ -35,6 +35,10 @@ from champions_ai.simulator.tracker import split_ident, to_id
 # status, hazards, weather -- rather than the move that preceded them.
 RESIDUAL_MARKER = "[from]"
 
+# Side conditions that halve incoming damage. Unmodelled, so a hit taken behind
+# one cannot be compared against a prediction that ignores it.
+SCREEN_CONDITIONS = frozenset({"reflect", "lightscreen", "auroraveil"})
+
 
 @dataclass(frozen=True)
 class DamageSample:
@@ -48,6 +52,10 @@ class DamageSample:
     weather: str | None
     critical: bool
     spread: bool
+    # A screen was up on the defending side. Reflect, Light Screen and Aurora
+    # Veil halve damage and we do not model them, so these are excluded rather
+    # than scored as arithmetic errors.
+    behind_screen: bool = False
     # How many targets the move actually reached. The engine only applies the
     # spread reduction when a move hits more than one, so a Heat Wave into a
     # single remaining opponent does full damage.
@@ -137,6 +145,7 @@ def collect_samples(
     spread = False
     spread_targets = 1
     multi_hit = False
+    screens: dict[str, set[str]] = {"p1": set(), "p2": set()}
 
     for line in protocol:
         parts = line.split("|")
@@ -148,6 +157,14 @@ def collect_samples(
             if len(args) > 2:
                 hp[args[0]] = _current_hp(args[2])
             pending = None
+        elif tag in ("-sidestart", "-sideend"):
+            side = args[0].split(":")[0]
+            condition = to_id(args[1].split(":")[-1])
+            if condition in SCREEN_CONDITIONS and side in screens:
+                if tag == "-sidestart":
+                    screens[side].add(condition)
+                else:
+                    screens[side].discard(condition)
         elif tag == "-weather":
             weather = None if args[0] == "none" else to_id(args[0])
         elif tag == "-crit":
@@ -196,6 +213,7 @@ def collect_samples(
                         spread=spread,
                         spread_targets=spread_targets,
                         truncated=after == 0,
+                        behind_screen=bool(screens.get(split_ident(target)[0], set())),
                     )
                 )
             pending = None
@@ -235,6 +253,11 @@ def compare(
     report = DifferentialReport()
     for sample in samples:
         if sample.critical and not include_crits:
+            report.skipped += 1
+            continue
+        if sample.behind_screen:
+            # Halved by a screen we do not model. Scoring it would report a
+            # known omission as an arithmetic error.
             report.skipped += 1
             continue
         if sample.truncated:
