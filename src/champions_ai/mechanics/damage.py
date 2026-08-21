@@ -137,7 +137,9 @@ def estimate_damage(
     `base_power` overrides the move's static value, for the eleven moves whose
     power the engine computes per hit. See `mechanics.base_power`.
     """
-    effectiveness = dex.type_chart.effectiveness(move.type, defender.types)
+    # Through the dex rather than the chart: Freeze-Dry and Flying Press do
+    # not follow it, and reading the chart here bypassed both.
+    effectiveness = dex.effectiveness(move, defender)
 
     if not move.is_damaging or effectiveness == 0.0:
         return DamageEstimate(0, 0, effectiveness, defender_hp)

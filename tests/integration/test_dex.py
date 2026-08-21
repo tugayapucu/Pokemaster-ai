@@ -8,6 +8,7 @@ because the missing value was missing from the test data too.
 """
 
 from champions_ai.dex import Dex
+from champions_ai.dex.reference import ADDED_TYPES, EFFECTIVENESS_SUBSTITUTIONS
 from champions_ai.domain.move_data import PROTECT_MOVES, STALL_MOVES, MoveData
 
 
@@ -195,3 +196,58 @@ def test_an_ordinary_move_uses_the_stats_its_category_implies(bridge):
     special = dex.get_move("shadowball")
     assert (special.offensive_stat, special.defensive_stat) == ("spa", "spd")
     assert not special.uses_target_offense
+
+
+def test_every_move_the_engine_adjusts_effectiveness_for_has_a_rule(bridge):
+    """The rules cannot be dumped, only the fact that one exists.
+
+    `onEffectiveness` is a JavaScript callback, so the two moves that use it in
+    this dex are transcribed by hand. This fails the moment a regulation adds a
+    third, rather than letting it silently follow the type chart.
+    """
+    dex = Dex.load(bridge)
+    flagged = {m.move_id for m in dex.moves.values() if m.overrides_effectiveness}
+    implemented = set(EFFECTIVENESS_SUBSTITUTIONS) | set(ADDED_TYPES)
+    assert flagged == {"freezedry", "flyingpress"}
+    assert not flagged - implemented, f"no effectiveness rule for {flagged - implemented}"
+
+
+def test_freeze_dry_is_super_effective_against_water(bridge):
+    """An Ice move the chart resists into Water at 0.5x and the engine sends at
+    2x -- four times out, and it dominated the differential's residual."""
+    dex = Dex.load(bridge)
+    freeze_dry = dex.get_move("freezedry")
+    slowking = dex.get_species("Slowking")  # Water / Psychic
+    assert "Water" in slowking.types
+    assert dex.effectiveness(freeze_dry, slowking) == 2.0
+
+    # The substitution replaces only the Water half; the rest of the chart
+    # still applies, so an Ice-resistant non-Water type is unaffected.
+    charizard = dex.get_species("Charizard")  # Fire / Flying: 0.5x * 2x
+    assert dex.effectiveness(freeze_dry, charizard) == 1.0
+
+
+def test_flying_press_applies_flying_on_top_of_fighting(bridge):
+    dex = Dex.load(bridge)
+    flying_press = dex.get_move("flyingpress")
+    chart = dex.type_chart
+
+    venusaur = dex.get_species("Venusaur")  # Grass / Poison
+    assert dex.effectiveness(flying_press, venusaur) == (
+        chart.effectiveness("Fighting", venusaur.types)
+        * chart.effectiveness("Flying", venusaur.types)
+    )
+
+    # Ghost is immune to the Fighting half, and nothing the Flying half adds
+    # can bring that back above zero.
+    gengar = dex.get_species("Gengar")
+    assert dex.effectiveness(flying_press, gengar) == 0.0
+
+
+def test_an_ordinary_move_still_follows_the_chart(bridge):
+    dex = Dex.load(bridge)
+    move = dex.get_move("icebeam")
+    slowking = dex.get_species("Slowking")
+    assert dex.effectiveness(move, slowking) == dex.type_chart.effectiveness(
+        "Ice", slowking.types
+    )

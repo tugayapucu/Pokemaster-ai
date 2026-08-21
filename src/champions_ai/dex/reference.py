@@ -92,6 +92,9 @@ class MoveInfo(BaseModel, frozen=True):
     override_defensive_stat: str | None = None
     # `"target"` on Foul Play: the attacking stat is read off the *defender*.
     override_offensive_pokemon: str | None = None
+    # The engine adjusts this move's type effectiveness in a way the chart
+    # cannot express. See `EFFECTIVENESS_SUBSTITUTIONS` and `ADDED_TYPES`.
+    overrides_effectiveness: bool = False
     # What the move does beyond damage. Empty means "no rider", which is not
     # the same as "unknown" -- the dump is exhaustive.
     secondaries: tuple[SecondaryEffect, ...] = ()
@@ -204,6 +207,27 @@ class TypeChart(BaseModel, frozen=True):
         return total
 
 
+# A defending type whose multiplier is replaced outright, whatever the chart
+# says. Freeze-Dry is an Ice move and the chart resists Ice into Water at 0.5x;
+# the engine substitutes 2x, so the model was wrong by a factor of four --
+# which is what it looked like against Slowking, 90 damage against a prediction
+# of 20-24.
+#
+# Substituted per defending type rather than applied to the total, because that
+# is what the engine does: Freeze-Dry into Water/Ground is 2x from the
+# substitution and 2x from Ice against Ground.
+EFFECTIVENESS_SUBSTITUTIONS: dict[str, dict[str, float]] = {
+    "freezedry": {"Water": 2.0},
+}
+
+# A second attacking type applied on top of the move's own. Flying Press is
+# Fighting and adds Flying, so it is 4x into Grass and still nothing into a
+# Ghost, which is immune to the Fighting half.
+ADDED_TYPES: dict[str, str] = {
+    "flyingpress": "Flying",
+}
+
+
 class Dex(BaseModel, frozen=True):
     """The reference tables a heuristic or evaluator needs."""
 
@@ -243,7 +267,28 @@ class Dex(BaseModel, frozen=True):
         return found
 
     def effectiveness(self, move: MoveInfo, defender: SpeciesInfo) -> float:
-        return self.type_chart.effectiveness(move.type, defender.types)
+        """This move's type multiplier against this defender.
+
+        Not simply a chart lookup: two moves in this dex adjust the result in
+        ways a chart cannot express. Every damage path must come through here
+        rather than reading `type_chart` directly, or the exceptions apply in
+        some places and not others.
+        """
+        substitutions = EFFECTIVENESS_SUBSTITUTIONS.get(move.move_id)
+        if substitutions:
+            row = self.type_chart.multipliers.get(move.type)
+            if row is None:
+                raise KeyError(f"unknown attacking type {move.type!r}")
+            total = 1.0
+            for defending in defender.types:
+                total *= substitutions.get(defending, row[defending])
+            return total
+
+        total = self.type_chart.effectiveness(move.type, defender.types)
+        added = ADDED_TYPES.get(move.move_id)
+        if added:
+            total *= self.type_chart.effectiveness(added, defender.types)
+        return total
 
     @classmethod
     def from_payload(cls, payload: dict) -> "Dex":
@@ -283,6 +328,7 @@ class Dex(BaseModel, frozen=True):
                 override_offensive_stat=entry.get("overrideOffensiveStat") or None,
                 override_defensive_stat=entry.get("overrideDefensiveStat") or None,
                 override_offensive_pokemon=entry.get("overrideOffensivePokemon") or None,
+                overrides_effectiveness=bool(entry.get("overridesEffectiveness", False)),
                 secondaries=tuple(
                     SecondaryEffect(
                         chance=secondary.get("chance", 100),

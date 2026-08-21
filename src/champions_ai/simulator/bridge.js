@@ -185,6 +185,12 @@ function moveSecondaries(entry) {
 			overrideOffensiveStat: entry.overrideOffensiveStat || null,
 			overrideDefensiveStat: entry.overrideDefensiveStat || null,
 			overrideOffensivePokemon: entry.overrideOffensivePokemon || null,
+			// Freeze-Dry is Ice and hits Water for 2x; Flying Press is
+			// Fighting and applies Flying on top. Neither is expressible in a
+			// type chart, and the callback cannot be dumped -- so flag them,
+			// and let a test fail if this dex ever carries one we have not
+			// written a rule for.
+			overridesEffectiveness: typeof entry.onEffectiveness === 'function',
 			secondaries: moveSecondaries(entry),
 			// Both are [numerator, denominator] fractions of damage dealt.
 			drain: entry.drain || null,
