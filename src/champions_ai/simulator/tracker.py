@@ -182,6 +182,10 @@ class BattleTracker:
         self._opponent_mega_used = False
         # Both sides: our own streak matters as much as theirs when
         # deciding whether protecting again is worth a turn.
+        # Our own stat stages. The request payload reports computed stats but
+        # not the stages applied to them, so these come from the protocol --
+        # without this our own Swords Dance raised nothing.
+        self._own_boosts: dict[str, Boosts] = {}
         self._protect_streak: dict[tuple[str, str], int] = {}
         # The turn each Pokemon arrived, for both sides. Fake Out and
         # First Impression only work on the first turn out, and the engine
@@ -306,6 +310,9 @@ class BattleTracker:
         # our own Pokemon's arrival matters just as much for Fake Out.
         self._switch_turn[(side, name)] = self._turn
         if side != self.opponent_tag:
+            if side == self.own_tag:
+                # A Pokemon leaving the field loses its stages, ours included.
+                self._own_boosts.pop(name, None)
             return
 
         species = species_from_details(details)
@@ -533,10 +540,23 @@ class BattleTracker:
         self._change_boost(args, sign=-1)
 
     def _change_boost(self, args: list[str], sign: int) -> None:
-        mon = self._opponent_at(args[0])
         field = BOOST_FIELDS.get(args[1])
-        if mon and field:
-            mon.boosts = mon.boosts.clamped_add(field, sign * int(args[2]))
+        if not field:
+            return
+        delta = sign * int(args[2])
+
+        mon = self._opponent_at(args[0])
+        if mon is not None:
+            mon.boosts = mon.boosts.clamped_add(field, delta)
+            return
+
+        # Our own side. Tracked separately because `own_side()` is rebuilt from
+        # the request payload every turn, and the request reports computed stats
+        # without the stages applied to them.
+        side, _, name = split_ident(args[0])
+        if side == self.own_tag:
+            current = self._own_boosts.get(name, Boosts())
+            self._own_boosts[name] = current.clamped_add(field, delta)
 
     def _on_move(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
@@ -698,6 +718,9 @@ class BattleTracker:
                     available_specials=specials,
                     # The request says nothing about the stall counter, so this
                     # comes from the protocol stream instead.
+                    boosts=self._own_boosts.get(
+                        split_ident(entry["ident"])[2], Boosts()
+                    ),
                     protect_streak=self.protect_streak(
                         self.own_tag, split_ident(entry["ident"])[2]
                     ),

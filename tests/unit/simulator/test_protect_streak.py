@@ -221,3 +221,57 @@ def test_an_unseen_arrival_reads_as_unknown():
     tracker = _tracker()
     _feed(tracker, "|turn|4")
     assert tracker.turns_on_field("p2", "Ghost") == 0
+
+
+def _request_with(tracker, species, ident):
+    tracker.handle({
+        "type": "request", "player": tracker.own_tag,
+        "request": {"side": {"pokemon": [{
+            "ident": ident, "details": f"{species}, L50, M", "condition": "153/153",
+            "active": True, "moves": ["tackle"], "baseAbility": "blaze",
+            "item": "", "stats": {"atk": 150, "def": 100, "spa": 150, "spd": 100, "spe": 100},
+        }]}, "active": [{"moves": [{"id": "tackle", "target": "normal", "pp": 10}]}]},
+    })
+
+
+def test_our_own_stat_stages_reach_our_own_side():
+    """The request reports computed stats but not the stages applied to them, so
+    without tracking these our own Swords Dance raised nothing."""
+    tracker = _tracker()
+    _feed(
+        tracker,
+        "|turn|1",
+        "|switch|p1a: Charizard|Charizard, L50, M|153/153",
+        "|-boost|p1a: Charizard|atk|2",
+    )
+    _request_with(tracker, "Charizard", "p1: Charizard")
+    assert tracker.own_side().team[0].boosts.attack == 2
+
+
+def test_our_own_stat_drops_are_tracked_too():
+    """Intimidate is on half the format."""
+    tracker = _tracker()
+    _feed(
+        tracker,
+        "|turn|1",
+        "|switch|p1a: Charizard|Charizard, L50, M|153/153",
+        "|-unboost|p1a: Charizard|atk|1",
+    )
+    _request_with(tracker, "Charizard", "p1: Charizard")
+    assert tracker.own_side().team[0].boosts.attack == -1
+
+
+def test_switching_out_clears_our_own_stages():
+    tracker = _tracker()
+    _feed(
+        tracker,
+        "|turn|1",
+        "|switch|p1a: Charizard|Charizard, L50, M|153/153",
+        "|-boost|p1a: Charizard|atk|2",
+        "|turn|2",
+        "|switch|p1a: Garchomp|Garchomp, L50, F|183/183",
+        "|turn|3",
+        "|switch|p1a: Charizard|Charizard, L50, M|153/153",
+    )
+    _request_with(tracker, "Charizard", "p1: Charizard")
+    assert tracker.own_side().team[0].boosts.attack == 0
