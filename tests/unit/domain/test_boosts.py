@@ -36,3 +36,18 @@ def test_clamped_add_is_immutable():
     boosts = Boosts()
     boosts.clamped_add("speed", 2)
     assert boosts.speed == 0
+
+
+def test_stage_reads_by_showdown_stat_id():
+    boosts = Boosts(attack=2, defense=-1, special_defense=3, speed=1)
+    assert boosts.stage("atk") == 2
+    assert boosts.stage("def") == -1
+    assert boosts.stage("spd") == 3
+    assert boosts.stage("spe") == 1
+    assert boosts.stage("spa") == 0
+
+
+def test_stage_of_a_stat_with_no_stage_is_zero():
+    """HP has no stage, and an unknown id must not raise mid-damage-estimate."""
+    assert Boosts(attack=6).stage("hp") == 0
+    assert Boosts(attack=6).stage("nonsense") == 0

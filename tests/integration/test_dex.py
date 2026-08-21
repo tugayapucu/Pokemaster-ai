@@ -158,3 +158,40 @@ def test_an_ordinary_move_is_not_flagged_as_dynamic(bridge):
     ordinary = dex.get_move("dragonclaw")
     assert ordinary.base_power > 0
     assert not ordinary.dynamic_power
+
+
+def test_moves_that_use_a_stat_their_category_does_not_imply(bridge):
+    """Body Press, Psyshock and Foul Play read the stat the engine reads.
+
+    Three moves in this dex override the stat their category implies, and the
+    engine differential reported Psyshock as consistently under-predicted
+    because we defended it with Special Defense.
+    """
+    dex = Dex.load(bridge)
+
+    body_press = dex.get_move("bodypress")
+    assert body_press.category == "Physical"
+    assert body_press.offensive_stat == "def", "Body Press swings with Defense"
+    assert body_press.defensive_stat == "def"
+
+    psyshock = dex.get_move("psyshock")
+    assert psyshock.category == "Special"
+    assert psyshock.offensive_stat == "spa"
+    assert psyshock.defensive_stat == "def", "Psyshock lands on Defense"
+
+    foul_play = dex.get_move("foulplay")
+    assert foul_play.uses_target_offense, "Foul Play swings with the target's Attack"
+    assert foul_play.offensive_stat == "atk"
+
+
+def test_an_ordinary_move_uses_the_stats_its_category_implies(bridge):
+    """Guards the test above against passing because everything is overridden."""
+    dex = Dex.load(bridge)
+
+    physical = dex.get_move("dragonclaw")
+    assert (physical.offensive_stat, physical.defensive_stat) == ("atk", "def")
+    assert not physical.uses_target_offense
+
+    special = dex.get_move("shadowball")
+    assert (special.offensive_stat, special.defensive_stat) == ("spa", "spd")
+    assert not special.uses_target_offense

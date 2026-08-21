@@ -177,6 +177,14 @@ function moveSecondaries(entry) {
 			// Gyro Ball from the speed ratio. Without this flag they read as
 			// status moves.
 			dynamicPower: typeof entry.basePowerCallback === 'function',
+			// Some moves swing with, or land on, a stat their category does
+			// not imply: Body Press is Physical but uses the user's Defense,
+			// Psyshock is Special but hits the target's Defense, Foul Play
+			// swings with the *target's* Attack. Dumped as nulls rather than
+			// omitted, so "no override" is a fact rather than a gap.
+			overrideOffensiveStat: entry.overrideOffensiveStat || null,
+			overrideDefensiveStat: entry.overrideDefensiveStat || null,
+			overrideOffensivePokemon: entry.overrideOffensivePokemon || null,
 			secondaries: moveSecondaries(entry),
 			// Both are [numerator, denominator] fractions of damage dealt.
 			drain: entry.drain || null,

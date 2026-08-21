@@ -84,6 +84,14 @@ class MoveInfo(BaseModel, frozen=True):
     # The engine computes this move's base power per hit, so a `base_power` of
     # zero means "not known yet" rather than "does no damage".
     dynamic_power: bool = False
+    # Showdown stat ids (`atk`, `def`, `spa`, `spd`) naming a stat the move
+    # uses instead of the one its category implies, or None for the ordinary
+    # case. Body Press is Physical but swings with the user's Defense;
+    # Psyshock is Special but lands on the target's Defense.
+    override_offensive_stat: str | None = None
+    override_defensive_stat: str | None = None
+    # `"target"` on Foul Play: the attacking stat is read off the *defender*.
+    override_offensive_pokemon: str | None = None
     # What the move does beyond damage. Empty means "no rider", which is not
     # the same as "unknown" -- the dump is exhaustive.
     secondaries: tuple[SecondaryEffect, ...] = ()
@@ -94,6 +102,33 @@ class MoveInfo(BaseModel, frozen=True):
     # always drops its own defences rather than rolling for it.
     self_boosts: dict[str, int] = Field(default_factory=dict)
     flags: frozenset[str] = frozenset()
+
+    @property
+    def offensive_stat(self) -> str:
+        """Showdown stat id this move attacks with.
+
+        Almost always the one the category implies, but not always: reading
+        the category directly is what priced Body Press off Attack.
+        """
+        return self.override_offensive_stat or (
+            "atk" if self.category == "Physical" else "spa"
+        )
+
+    @property
+    def defensive_stat(self) -> str:
+        """Showdown stat id this move is defended against with."""
+        return self.override_defensive_stat or (
+            "def" if self.category == "Physical" else "spd"
+        )
+
+    @property
+    def uses_target_offense(self) -> bool:
+        """Whether the attacking stat comes off the target instead of the user.
+
+        Foul Play only. A separate flag from `override_offensive_stat` because
+        it changes *whose* stat is read, not which one.
+        """
+        return self.override_offensive_pokemon == "target"
 
     @property
     def drain_fraction(self) -> float:
@@ -245,6 +280,9 @@ class Dex(BaseModel, frozen=True):
                 target=entry["target"],
                 stalling=bool(entry.get("stallingMove", False)),
                 dynamic_power=bool(entry.get("dynamicPower", False)),
+                override_offensive_stat=entry.get("overrideOffensiveStat") or None,
+                override_defensive_stat=entry.get("overrideDefensiveStat") or None,
+                override_offensive_pokemon=entry.get("overrideOffensivePokemon") or None,
                 secondaries=tuple(
                     SecondaryEffect(
                         chance=secondary.get("chance", 100),
