@@ -7,6 +7,7 @@ from champions_ai.evaluation.agreement import (
     measure_agreement,
 )
 from champions_ai.evaluation.differential import (
+    DamageCollector,
     DamageSample,
     DifferentialReport,
     active_by_ident,
@@ -40,6 +41,7 @@ __all__ = [
     "SlotComparison",
     "action_signature",
     "active_by_ident",
+    "DamageCollector",
     "collect_samples",
     "compare",
     "compare_agents",

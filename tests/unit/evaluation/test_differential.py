@@ -12,6 +12,7 @@ each one made our damage model look wrong when it was not:
 
 from champions_ai.domain import BattlePokemon, PokemonSet
 from champions_ai.evaluation.differential import (
+    DamageCollector,
     active_by_ident,
     collect_samples,
 )
@@ -269,3 +270,71 @@ def test_an_empty_run_reports_nothing_rather_than_dividing_by_zero():
     assert report.samples == 0
     assert report.accuracy == 0.0
     assert "0/0" in report.summary()
+
+
+# ---------------------------------------------- reading the protocol as a stream
+
+TURN_ONE = [
+    "|switch|p1a: Charizard|Charizard, L50|180/180",
+    "|switch|p2a: Garchomp|Garchomp, L50|194/194",
+    "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
+    "|-damage|p2a: Garchomp|150/194",
+    "|turn|2",
+]
+TURN_TWO = [
+    "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
+    "|-damage|p2a: Garchomp|106/194",
+    "|move|p2a: Garchomp|Earthquake|p1a: Charizard",
+    "|-damage|p1a: Charizard|120/180",
+    "|turn|3",
+]
+
+
+def test_a_collector_keeps_hp_across_chunks():
+    """The runner reads the protocol a turn at a time.
+
+    Calling the one-shot function per turn starts from an empty HP table, so
+    the first hit on every target every turn has no "before" to subtract from
+    and is dropped. It left about one sample per battle, and the survivors
+    were second hits -- spread moves and focus-fire onto weakened targets.
+    """
+    collector = DamageCollector(LOOKUP)
+    streamed = collector.feed(TURN_ONE) + collector.feed(TURN_TWO)
+    at_once = collect_samples(TURN_ONE + TURN_TWO, LOOKUP)
+
+    assert len(streamed) == len(at_once) == 3
+    assert [s.actual for s in streamed] == [s.actual for s in at_once] == [44, 44, 60]
+    assert collector.unknown_hp == 0
+
+
+def test_a_hit_with_no_known_starting_hp_is_counted_not_silently_dropped():
+    collector = DamageCollector(LOOKUP)
+    dropped = collector.feed([
+        "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
+        "|-damage|p2a: Garchomp|150/194",
+    ])
+    assert dropped == []
+    assert collector.unknown_hp == 1
+
+
+def test_healing_moves_the_hp_the_next_hit_is_measured_from():
+    """Without this, a hit after a Roost reads as far more damage than it was."""
+    collector = DamageCollector(LOOKUP)
+    collector.feed(["|switch|p2a: Garchomp|Garchomp, L50|100/194"])
+    samples = collector.feed([
+        "|-heal|p2a: Garchomp|194/194",
+        "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
+        "|-damage|p2a: Garchomp|150/194",
+    ])
+    assert [s.actual for s in samples] == [44]
+
+
+def test_weather_set_in_one_chunk_still_applies_in_the_next():
+    collector = DamageCollector(LOOKUP)
+    collector.feed(["|-weather|SunnyDay"])
+    samples = collector.feed([
+        "|switch|p2a: Garchomp|Garchomp, L50|194/194",
+        "|move|p1a: Charizard|Flamethrower|p2a: Garchomp",
+        "|-damage|p2a: Garchomp|150/194",
+    ])
+    assert samples[0].weather == "sunnyday"

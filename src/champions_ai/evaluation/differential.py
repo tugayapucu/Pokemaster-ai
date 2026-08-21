@@ -124,104 +124,154 @@ class DifferentialReport:
         )
 
 
+class DamageCollector:
+    """Pairs `|move|` lines with the `|-damage|` they caused, across a stream.
+
+    Stateful on purpose. A `|-damage|` line reports the HP the target has
+    *after* the hit, so the damage dealt is only recoverable as a difference
+    from a value carried in from earlier lines. That state has to outlive one
+    chunk of protocol, because the runner reads the protocol a turn at a time.
+
+    Handing each turn to a function that starts with an empty HP table drops
+    the first hit on every target, every turn -- silently, because a hit with
+    no known starting HP looks exactly like a hit that should be ignored. It
+    left roughly one sample per battle, and the ones it kept were second hits:
+    spread moves and focus-fire onto weakened targets, which is not a fair
+    sample of anything. `unknown_hp` counts them now, so the same mistake is
+    loud rather than silent.
+    """
+
+    def __init__(
+        self,
+        active_lookup: Callable[[str], BattlePokemon | None],
+        *,
+        weather: str | None = None,
+    ) -> None:
+        self._active = active_lookup
+        self.weather = weather
+        self._hp: dict[str, int] = {}
+        self._screens: dict[str, set[str]] = {"p1": set(), "p2": set()}
+        self.unknown_hp = 0
+        """Hits dropped because the target's HP before them was not known."""
+
+    def feed(self, protocol: Sequence[str]) -> list[DamageSample]:
+        """Consume the next chunk of protocol and return what it yielded.
+
+        `active_lookup` maps a protocol ident (`p1a: Chomper`) to that Pokemon
+        as its *own* player sees it, which is where the engine's computed stats
+        live. Pass a fresh lookup per turn by rebuilding the collector's
+        `_active`, or keep one if the snapshot does not change.
+
+        A damage line is only attributed to the move before it when nothing
+        intervenes: no `[from]` marker (that is residual damage), and never the
+        attacker damaging itself (that is recoil).
+        """
+        samples: list[DamageSample] = []
+        pending: tuple[str, str] | None = None
+        critical = False
+        spread = False
+        spread_targets = 1
+        multi_hit = False
+
+        for line in protocol:
+            parts = line.split("|")
+            if len(parts) < 3:
+                continue
+            tag, args = parts[1], parts[2:]
+
+            if tag in ("switch", "drag", "replace"):
+                if len(args) > 2:
+                    self._hp[args[0]] = _current_hp(args[2])
+                pending = None
+            elif tag in ("-heal", "-sethp"):
+                # Not a sample, but it moves the target's HP. Missing these
+                # would make the *next* hit on that Pokemon read as a huge
+                # over-prediction, or as no damage at all.
+                if len(args) > 1:
+                    self._hp[args[0]] = _current_hp(args[1])
+            elif tag in ("-sidestart", "-sideend"):
+                side = args[0].split(":")[0]
+                condition = to_id(args[1].split(":")[-1])
+                if condition in SCREEN_CONDITIONS and side in self._screens:
+                    if tag == "-sidestart":
+                        self._screens[side].add(condition)
+                    else:
+                        self._screens[side].discard(condition)
+            elif tag == "-weather":
+                self.weather = None if args[0] == "none" else to_id(args[0])
+            elif tag == "-crit":
+                critical = True
+            elif tag == "-hitcount":
+                # Multi-hit moves report one damage line per hit, so a single
+                # prediction cannot be compared against any one of them.
+                multi_hit = True
+            elif tag == "move":
+                if any(part.startswith(RESIDUAL_MARKER) for part in args):
+                    pending = None
+                    continue
+                pending = (args[0], to_id(args[1]))
+                critical = False
+                multi_hit = False
+                spread_note = next((p for p in args if p.startswith("[spread]")), None)
+                spread = spread_note is not None
+                spread_targets = (
+                    len([t for t in spread_note[len("[spread]"):].split(",") if t.strip()])
+                    if spread_note
+                    else 1
+                )
+            elif tag == "-damage" and pending is not None:
+                if any(part.startswith(RESIDUAL_MARKER) for part in args):
+                    continue
+                target = args[0]
+                attacker_ident, move_id = pending
+                before = self._hp.get(target)
+                after = _current_hp(args[1])
+                self._hp[target] = after
+                if before is None:
+                    self.unknown_hp += 1
+                    continue
+                if target == attacker_ident or after >= before:
+                    continue
+
+                attacker = self._active(attacker_ident)
+                defender = self._active(target)
+                if attacker is not None and defender is not None and not multi_hit:
+                    samples.append(
+                        DamageSample(
+                            attacker=attacker,
+                            defender=defender,
+                            move_id=move_id,
+                            actual=before - after,
+                            defender_hp_before=before,
+                            weather=self.weather,
+                            critical=critical,
+                            spread=spread,
+                            spread_targets=spread_targets,
+                            truncated=after == 0,
+                            behind_screen=bool(
+                                self._screens.get(split_ident(target)[0], set())
+                            ),
+                        )
+                    )
+                pending = None
+            elif tag == "turn":
+                pending = None
+
+        return samples
+
+
 def collect_samples(
     protocol: Sequence[str],
     active_lookup: Callable[[str], BattlePokemon | None],
     *,
     weather: str | None = None,
 ) -> list[DamageSample]:
-    """Pair `|move|` lines with the `|-damage|` they caused.
+    """Every sample in one complete protocol.
 
-    `active_lookup` maps a protocol ident (`p1a: Chomper`) to that Pokemon as
-    its *own* player sees it, which is where the engine's computed stats live.
-
-    A damage line is only attributed to the move before it when nothing
-    intervenes: no `[from]` marker (that is residual damage), and never the
-    attacker damaging itself (that is recoil).
+    For a whole battle log. A caller reading the protocol as it arrives wants
+    `DamageCollector`, which carries HP between chunks.
     """
-    samples: list[DamageSample] = []
-    hp: dict[str, int] = {}
-    pending: tuple[str, str] | None = None
-    critical = False
-    spread = False
-    spread_targets = 1
-    multi_hit = False
-    screens: dict[str, set[str]] = {"p1": set(), "p2": set()}
-
-    for line in protocol:
-        parts = line.split("|")
-        if len(parts) < 3:
-            continue
-        tag, args = parts[1], parts[2:]
-
-        if tag in ("switch", "drag", "replace"):
-            if len(args) > 2:
-                hp[args[0]] = _current_hp(args[2])
-            pending = None
-        elif tag in ("-sidestart", "-sideend"):
-            side = args[0].split(":")[0]
-            condition = to_id(args[1].split(":")[-1])
-            if condition in SCREEN_CONDITIONS and side in screens:
-                if tag == "-sidestart":
-                    screens[side].add(condition)
-                else:
-                    screens[side].discard(condition)
-        elif tag == "-weather":
-            weather = None if args[0] == "none" else to_id(args[0])
-        elif tag == "-crit":
-            critical = True
-        elif tag == "-hitcount":
-            # Multi-hit moves report one damage line per hit, so a single
-            # prediction cannot be compared against any one of them.
-            multi_hit = True
-        elif tag == "move":
-            if any(part.startswith(RESIDUAL_MARKER) for part in args):
-                pending = None
-                continue
-            pending = (args[0], to_id(args[1]))
-            critical = False
-            multi_hit = False
-            spread_note = next((p for p in args if p.startswith("[spread]")), None)
-            spread = spread_note is not None
-            spread_targets = (
-                len([t for t in spread_note[len("[spread]"):].split(",") if t.strip()])
-                if spread_note
-                else 1
-            )
-        elif tag == "-damage" and pending is not None:
-            if any(part.startswith(RESIDUAL_MARKER) for part in args):
-                continue
-            target = args[0]
-            attacker_ident, move_id = pending
-            before = hp.get(target)
-            after = _current_hp(args[1])
-            hp[target] = after
-            if target == attacker_ident or before is None or after >= before:
-                continue
-
-            attacker = active_lookup(attacker_ident)
-            defender = active_lookup(target)
-            if attacker is not None and defender is not None and not multi_hit:
-                samples.append(
-                    DamageSample(
-                        attacker=attacker,
-                        defender=defender,
-                        move_id=move_id,
-                        actual=before - after,
-                        defender_hp_before=before,
-                        weather=weather,
-                        critical=critical,
-                        spread=spread,
-                        spread_targets=spread_targets,
-                        truncated=after == 0,
-                        behind_screen=bool(screens.get(split_ident(target)[0], set())),
-                    )
-                )
-            pending = None
-        elif tag == "turn":
-            pending = None
-
-    return samples
+    return DamageCollector(active_lookup, weather=weather).feed(protocol)
 
 
 def _current_hp(condition: str) -> int:
