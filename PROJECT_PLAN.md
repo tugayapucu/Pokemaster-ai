@@ -421,11 +421,11 @@ The rule that survives is narrower and about power, not arbitration:
    excluded from agreement rather than scored.
 8. **Nature** is stored as a name with no table mapping it to a stat, so
    matchup maths treats every Pokemon as neutral-natured.
-9. **The damage formula is calibrated but not yet *verified*.** It predicts
-   within ten points 40.7% of the time against replays and lands 67.4% of hits
-   inside its range against the engine, but the residual is still attributed by
-   inference. A no-item, vanilla-ability control team would settle whether the
-   arithmetic itself is right.
+9. **The damage formula is verified against the engine** — 94.8% of hits
+   inside the predicted range on a no-item, inert-ability control team, median
+   actual/predicted 0.987 — but only for the terms it models. Items, abilities
+   and critical hits are still outside it, and against *replays* it is within
+   ten points 40.7% of the time, because there the spread is unknown too.
 10. **Items and abilities are tracked and unused.** `revealed_item` and
    `revealed_ability` are recorded by the tracker and reach no scoring path.
    Life Orb is now measured at 1.3× and Focus Sash explains part of the
@@ -590,10 +590,45 @@ The residual is now *attributable*, which is the whole point: Garchomp's Rock Sl
 
 **All four silent bugs so far share one shape: data tracked but never read.** `apply_boost` written and never called; `|-singleturn|` recorded and never expired; `revealed_item` tracked and never used; own-side boosts collected and never applied. None crashed. A name-level audit of public symbols against the test suite catches exactly this class, and it is a two-minute check worth running whenever a chunk of new code lands — it found four untested functions in one session's own work.
 
+#### Running it wide: what the control team settled
+
+The control team was built and the harness run across nine and then twelve randomly generated teams, no items and no damage-affecting abilities. The bar set above was ~95%.
+
+```
+first run, MEGA_TEAM                    28.2%
+excluding Mega                          67.4%
+one control team, 21 scored hits        85.7%   <- biased sample, see below
+nine control teams, 1,279 scored hits   62.8%   <- the honest number, before the fixes
+after the fixes below, 1,137 hits       94.8%   18 under-predicted, 41 over-predicted
+```
+
+Distribution over 1,548 hits: **median actual/predicted 0.987, mean 0.982, 91.9% inside ±10%**. One hit in 1,393 is now wrong by 1.6× or more. There is no uniform bias left, and no move family or ability shows a systematic multiplier — which is what "the arithmetic is right" looks like, and it is what the 85.7% figure could not have told us.
+
+**The 85.7% was not a real number.** The runner reads the protocol a turn at a time and handed each turn to a function that started with an empty HP table. A `|-damage|` line reports the HP the target has *after* the hit, so with no "before" to subtract from, the first hit on every target every turn was silently dropped. It left about one sample per battle, and the survivors were second hits: spread moves and focus-fire onto weakened Pokémon. Fixing it took 80 battles from 64 samples to 40 battles from 863.
+
+#### What running it wide found
+
+Four real defects in the model, all of the same kind — the engine does something the type chart and the move table cannot express:
+
+1. **Moves that use a stat their category does not imply.** Body Press is Physical and swings with the user's *Defense*; Psyshock is Special and lands on the target's *Defense*; Foul Play swings with the *target's* Attack, boosts included. All three were read off the category. Body Press users are built with high Defense and low Attack, so a wall's best move was priced as its weakest.
+2. **Freeze-Dry is super-effective against Water**, which no chart entry can say. We had it at 0.5× against a true 2× — wrong by a factor of four. **Flying Press** applies Flying on top of Fighting. `onEffectiveness` is a JavaScript callback and cannot be dumped, so the bridge dumps the *fact* that a move has one and a test fails if a third ever appears.
+3. **Eighteen more dynamic base powers.** `dynamic_base_power` opened with an early return for any move with a non-zero static power, which covered the eleven moves carrying none and skipped the eighteen that carry one *and scale it* — Acrobatics 55→110 without an item, Hex 65→130 into a status, Stored Power 20→100 off two Calm Minds, Eruption 150→75 at half HP. The harness was not calling it at all, so it compared every one of the twenty-nine against its static value.
+4. **Residual damage never moved the HP table.** Recoil, burn ticks, poison, hazards and weather all change HP and none is a sample, so the collector skipped those lines entirely — including the bookkeeping. The next real hit was measured from a stale, higher figure and credited with the residual too. A Leafeon at 83 took 48 recoil to 35, then a Knock Off took it to 12: the Knock Off dealt 23, inside the predicted 22–27, and was recorded as 71. **This alone accounted for the whole under-prediction skew** — 161 under against 46 over before the fix, 18 under against 41 over after.
+
+The control team itself needed three passes to become a control. **Palafin's Zero to Hero** changes forme mid-battle, the same problem as Mega. **Screens** halve damage and are unmodelled, so a team carrying Reflect spends the measurement behind it — filtered in the harness rather than the team, since it is general. **Ditto's Imposter** becomes the opponent outright and produced 24 of 25 reported mismatches in one run; **Scrappy** lets Normal and Fighting hit Ghost, and **Light Metal** halves the weight Low Kick reads. All are now denied.
+
+#### The pattern, restated
+
+Every one of the four differential defects was **data the engine reports and we did not read**, and every harness bug was **state the stream carries and we did not keep**. Not one crashed. The check that catches this class is cheap: for each new public symbol, name the test that would fail if it stopped working — and for each piece of protocol state, name what happens to the chunk *after* the one that sets it.
+
+`data/dex.json` is an untracked cache with no schema version, so a new `MoveInfo` field silently defaults to "absent" on a stale one. Delete it after any change to the bridge dump.
+
 #### Next, in order
 
-- [ ] **Isolate the formula.** A control team with no items and vanilla abilities. If accuracy does not reach ~95% on that, the damage formula itself has a bug — floor ordering, the STAB constant, the 0.75 spread factor — and we would know for certain rather than by inference. This must come before modelling items, or the item work builds on unverified arithmetic.
-- [ ] **Then items**, now provable rather than hypothesised: Life Orb at 1.3×, and Focus Sash, which is the likeliest cause of the 17% of "guaranteed" knockouts that do not happen.
+- [x] **Isolate the formula.** Done: **94.8%** inside the predicted range on a no-item, inert-ability control team across twelve teams, against the ~95% bar. The formula itself — floor ordering, the STAB constant, the 0.75 spread factor — is now verified rather than assumed.
+- [ ] **Then items**, now genuinely a measurement rather than a guess, because the arithmetic underneath is checked: Life Orb at 1.3×, and Focus Sash, which is the likeliest cause of the 17% of "guaranteed" knockouts that do not happen. Run the same harness on a team that holds items and attribute the difference.
+- [ ] **Abilities**, the same way: the deny-list built for the control team is already an inventory of which ones touch damage.
+- [ ] **The seven remaining conditional base powers** need state we do not track: Rage Fist counts how often its user has been hit, Payback and Avalanche depend on the turn order, Assurance on whether the target was already damaged this turn, Stomping Tantrum and Temper Flare on whether the last move failed, Round on an ally having used it first. Each falls back to its static value, which is the floor, so they under-predict rather than invent. A test names all seven so the list stays a decision.
 - [ ] **Extend the harness to move order.** `_moves_first` drives flinch scoring and ignores opposing priority entirely, and the engine's actual move order is readable straight from the protocol — so this is checkable the same way damage was.
 - [ ] Critical hits are unmodelled and currently excluded from every comparison rather than predicted.
 
