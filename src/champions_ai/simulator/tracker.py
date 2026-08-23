@@ -77,6 +77,17 @@ def _handler_name(line_type: str) -> str:
     return f"_on_{line_type.replace(':', '')}"
 
 
+# Field conditions that are *terrains*. `-fieldstart` also carries Trick Room,
+# Gravity and Wonder Room, which are field-wide but not terrain, so the tag
+# alone does not identify one.
+TERRAINS = frozenset({
+    "electricterrain",
+    "grassyterrain",
+    "mistyterrain",
+    "psychicterrain",
+})
+
+
 def split_ident(ident: str) -> tuple[str, int | None, str]:
     """`p2a: Chomper` -> ("p2", 0, "Chomper"). Slot is None for sideless idents."""
     position, _, name = ident.partition(": ")
@@ -178,6 +189,10 @@ class BattleTracker:
         self._opponent_slots: list[str | None] = [None] * regulation.active_slots_per_side
         self._opponent_team_size = regulation.picked_team_size
         self._opponent_side_conditions: dict[str, int] = {}
+        # Our own, tracked separately and for the same reason as our own stat
+        # stages: only the opponent's were recorded, so our own Tailwind and
+        # our own Reflect were invisible to us.
+        self._own_side_conditions: dict[str, int] = {}
         self._nickname_to_species: dict[str, str] = {}
         self._opponent_mega_used = False
         # Both sides: our own streak matters as much as theirs when
@@ -583,18 +598,39 @@ class BattleTracker:
         self.weather = None if args[0] == "none" else to_id(args[0])
 
     def _on_minor_fieldstart(self, args: list[str]) -> None:
-        self.field_conditions[to_id(args[0].split(": ")[-1])] = 0
+        condition = to_id(args[0].split(": ")[-1])
+        self.field_conditions[condition] = 0
+        # `terrain` was declared, read into every Observation and never once
+        # assigned, so it was permanently None and anything keyed off it --
+        # Rising Voltage's doubled power, the terrain damage bonuses -- could
+        # not fire. It is one of the field conditions, not a separate stream.
+        if condition in TERRAINS:
+            self.terrain = condition
 
     def _on_minor_fieldend(self, args: list[str]) -> None:
-        self.field_conditions.pop(to_id(args[0].split(": ")[-1]), None)
+        condition = to_id(args[0].split(": ")[-1])
+        self.field_conditions.pop(condition, None)
+        if condition == self.terrain:
+            self.terrain = None
 
     def _on_minor_sidestart(self, args: list[str]) -> None:
-        if args[0].split(":")[0] == self.opponent_tag:
-            self._opponent_side_conditions[to_id(args[1].split(": ")[-1])] = 0
+        self._side_conditions_for(args[0])[to_id(args[1].split(": ")[-1])] = 0
 
     def _on_minor_sideend(self, args: list[str]) -> None:
-        if args[0].split(":")[0] == self.opponent_tag:
-            self._opponent_side_conditions.pop(to_id(args[1].split(": ")[-1]), None)
+        self._side_conditions_for(args[0]).pop(to_id(args[1].split(": ")[-1]), None)
+
+    def _side_conditions_for(self, ident: str) -> dict[str, int]:
+        """The accumulator for whichever side this line names.
+
+        A throwaway dict for a third side keeps an unexpected tag from writing
+        into either real one.
+        """
+        side = ident.split(":")[0]
+        if side == self.opponent_tag:
+            return self._opponent_side_conditions
+        if side == self.own_tag:
+            return self._own_side_conditions
+        return {}
 
     # ---------------------------------------------------------------- output
 
@@ -739,6 +775,7 @@ class BattleTracker:
         return Side(
             team=tuple(team),
             active_slots=tuple(active_slots[: self.regulation.active_slots_per_side]),
+            side_conditions=dict(self._own_side_conditions),
         )
 
     def opponent_side(self) -> ObservedSide:

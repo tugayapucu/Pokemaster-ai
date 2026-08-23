@@ -34,7 +34,7 @@ from champions_ai.mechanics import (
     dynamic_base_power,
     estimate_damage,
 )
-from champions_ai.simulator.tracker import split_ident, to_id
+from champions_ai.simulator.tracker import TERRAINS, split_ident, to_id
 
 # Damage lines carrying one of these describe residual damage -- recoil, a
 # status, hazards, weather -- rather than the move that preceded them.
@@ -229,9 +229,14 @@ class DamageCollector:
             elif tag == "-weather":
                 self.weather = None if args[0] == "none" else to_id(args[0])
             elif tag == "-fieldstart":
-                self.terrain = to_id(args[0].split(":")[-1])
+                # `-fieldstart` also carries Trick Room and Gravity, so the tag
+                # alone does not mean a terrain went up.
+                condition = to_id(args[0].split(":")[-1])
+                if condition in TERRAINS:
+                    self.terrain = condition
             elif tag == "-fieldend":
-                self.terrain = None
+                if to_id(args[0].split(":")[-1]) == self.terrain:
+                    self.terrain = None
             elif tag == "faint":
                 side = split_ident(args[0])[0]
                 if side in self._fainted:

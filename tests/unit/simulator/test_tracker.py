@@ -373,3 +373,68 @@ def test_own_side_before_any_request_is_an_error_not_a_guess():
 def test_rejects_invalid_player():
     with pytest.raises(ValueError):
         BattleTracker(REGULATION_M_B, player=2, own_team=_team())
+
+
+# ------------------------------------------------------- field and side state
+
+
+def test_terrain_is_actually_set_from_the_field_lines():
+    """`terrain` was declared, read into every Observation and never assigned.
+
+    It sat permanently None, so anything keyed off it -- Rising Voltage's
+    doubled base power, the terrain damage bonuses -- could not fire.
+    """
+    tracker = _tracker()
+    _sideline(tracker, "|-fieldstart|move: Electric Terrain|[of] p2a: Pincurchin")
+    assert tracker.terrain == "electricterrain"
+
+    _sideline(tracker, "|-fieldend|move: Electric Terrain")
+    assert tracker.terrain is None
+
+
+def test_trick_room_is_a_field_condition_but_not_a_terrain():
+    """`-fieldstart` carries Trick Room and Gravity as well, so the tag alone
+    does not mean a terrain went up."""
+    tracker = _tracker()
+    _sideline(tracker, "|-fieldstart|move: Trick Room|[of] p2a: Hatterene")
+    assert tracker.terrain is None
+    assert "trickroom" in tracker.field_conditions
+
+
+def test_a_terrain_replacing_another_replaces_it():
+    tracker = _tracker()
+    _sideline(tracker, "|-fieldstart|move: Grassy Terrain")
+    _sideline(tracker, "|-fieldstart|move: Psychic Terrain")
+    assert tracker.terrain == "psychicterrain"
+
+
+def test_a_terrain_ending_does_not_clear_a_different_one():
+    """Grassy Terrain expiring after Psychic Terrain replaced it must not
+    clear the one that is actually up."""
+    tracker = _tracker()
+    _sideline(tracker, "|-fieldstart|move: Psychic Terrain")
+    _sideline(tracker, "|-fieldend|move: Grassy Terrain")
+    assert tracker.terrain == "psychicterrain"
+
+
+def test_our_own_side_conditions_are_tracked_too():
+    """Only the opponent's were recorded, so our own Tailwind -- which doubles
+    our Speed and decides the whole turn order -- was invisible to us."""
+    tracker = _tracker()
+    _sideline(tracker, "|-sidestart|p1: Player 1|move: Tailwind")
+    _sideline(tracker, "|-sidestart|p2: Player 2|Reflect")
+
+    assert "tailwind" in tracker._own_side_conditions
+    assert "tailwind" not in tracker._opponent_side_conditions
+    assert "reflect" in tracker._opponent_side_conditions
+    assert "reflect" not in tracker._own_side_conditions
+
+
+def test_our_own_side_conditions_reach_the_observation():
+    tracker = _tracker()
+    _sideline(tracker, "|-sidestart|p1: Player 1|move: Tailwind")
+    _request(tracker, _move_request())
+    assert "tailwind" in tracker.own_side().side_conditions
+
+    _sideline(tracker, "|-sideend|p1: Player 1|move: Tailwind")
+    assert "tailwind" not in tracker.own_side().side_conditions
