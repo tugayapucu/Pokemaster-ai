@@ -14,7 +14,6 @@ import pytest
 
 from champions_ai.mechanics import effective_speed, moves_first
 
-
 # --------------------------------------------------------------- speed itself
 
 
