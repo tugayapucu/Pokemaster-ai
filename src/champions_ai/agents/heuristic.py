@@ -31,14 +31,19 @@ from champions_ai.domain import (
     TeamPreviewAction,
 )
 from champions_ai.mechanics import (
+    PARALYSIS,
+    TAILWIND,
+    TRICK_ROOM,
     apply_boost,
     assumed_attacks,
     assumed_stats,
     attacking_side,
     dynamic_base_power,
+    effective_speed,
     estimate_damage,
     estimate_stats,
     matchup,
+    moves_first,
 )
 
 # Scoring weights. Chosen to be legible rather than optimal: damage is the
@@ -470,22 +475,31 @@ class HeuristicAgent(Agent):
             return 0.0
         return STATUS_VALUE[status]
 
-    def _moves_first(self, move, observation: Observation, slot: int) -> float:
-        """Probability we act before the target: 1, 0.5 on a speed tie, or 0.
+    def _moves_first(self, move: MoveInfo, observation: Observation, slot: int) -> float:
+        """Probability we act before everything on the other side.
 
-        Priority settles it when the move has any -- Fake Out's +3 means its
-        flinch always lands, while Rock Slide's only pays when we outspeed.
-        Opposing priority is not modelled, so this is optimistic for a move
-        that could be beaten to the punch.
+        The worst case over both opponents, which is what the flinch this
+        drives actually needs: a flinch is wasted if *anything* moves before
+        us and knocks the flincher out.
+
+        The rule itself lives in `mechanics.turn_order` and is checked against
+        the engine directly. What is uncertain here, and only here, is the
+        opponent's *move* -- we are choosing before they reveal it.
         """
-        if move.priority > 0:
-            return 1.0
         attacker = self._own_active(observation, slot)
         if attacker is None:
             return 0.0
-        ours = (attacker.computed_stats or {}).get("spe", 0)
 
-        fastest = 0
+        trick_room = TRICK_ROOM in observation.field_conditions
+        ours = effective_speed(
+            (attacker.computed_stats or {}).get("spe", 0),
+            boost_stage=attacker.boosts.speed,
+            tailwind=TAILWIND in observation.own_side.side_conditions,
+            paralysed=attacker.status == PARALYSIS,
+        )
+        their_tailwind = TAILWIND in observation.opponent_side.side_conditions
+
+        chance = 1.0
         opponent = observation.opponent_side
         for index in opponent.active_slots:
             if index is None:
@@ -497,14 +511,34 @@ class HeuristicAgent(Agent):
                 species = self.dex.get_species(observed.species)
             except KeyError:
                 continue
-            theirs = estimate_stats(species.base_stats, self.assumed_opponent_points)["spe"]
-            fastest = max(fastest, theirs)
+            theirs = effective_speed(
+                estimate_stats(species.base_stats, self.assumed_opponent_points)["spe"],
+                boost_stage=observed.boosts.speed,
+                tailwind=their_tailwind,
+                paralysed=observed.status == PARALYSIS,
+            )
+            chance = min(
+                chance,
+                moves_first(
+                    move.priority,
+                    ours,
+                    self._revealed_priority(observed),
+                    theirs,
+                    trick_room=trick_room,
+                ),
+            )
+        return chance
 
-        if not fastest:
-            return 1.0
-        if ours > fastest:
-            return 1.0
-        return 0.5 if ours == fastest else 0.0
+    def _revealed_priority(self, observed) -> int:
+        """The highest priority we have actually seen this Pokemon use.
+
+        Unrevealed moves are assumed ordinary. That is optimistic -- they may
+        be holding an Aqua Jet we have not seen -- but assuming one would be
+        worse: it would make our own priority moves look useless against a
+        Pokemon that has shown nothing at all, which is every Pokemon on the
+        turn it arrives.
+        """
+        return max((m.priority for m in self._revealed_moves(observed)), default=0)
 
     @staticmethod
     def _observed_target(observation: Observation, slot: int):
