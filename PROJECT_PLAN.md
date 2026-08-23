@@ -626,11 +626,39 @@ Every one of the four differential defects was **data the engine reports and we 
 #### Next, in order
 
 - [x] **Isolate the formula.** Done: **94.8%** inside the predicted range on a no-item, inert-ability control team across twelve teams, against the ~95% bar. The formula itself — floor ordering, the STAB constant, the 0.75 spread factor — is now verified rather than assumed.
-- [ ] **Then items**, now genuinely a measurement rather than a guess, because the arithmetic underneath is checked: Life Orb at 1.3×, and Focus Sash, which is the likeliest cause of the 17% of "guaranteed" knockouts that do not happen. Run the same harness on a team that holds items and attribute the difference.
-- [ ] **Abilities**, the same way: the deny-list built for the control team is already an inventory of which ones touch damage.
+- [ ] **Then items**, now genuinely a measurement rather than a guess, because the arithmetic underneath is checked, and now wanted from *two* directions: Life Orb at 1.3× and Focus Sash for damage, **Choice Scarf at 1.5× Speed** for turn order. Focus Sash is still the likeliest cause of the 17% of "guaranteed" knockouts that do not happen. Run both harnesses on a team that holds items and attribute the difference.
+- [ ] **Abilities**, the same way: the deny-list built for the control team is already an inventory of which ones touch damage, and a second one now exists for which touch Speed. Chlorophyll, Swift Swim, Sand Rush and Slush Rush all double Speed under weather we already track; Unburden and Quick Feet need item-consumption and status state.
 - [ ] **The seven remaining conditional base powers** need state we do not track: Rage Fist counts how often its user has been hit, Payback and Avalanche depend on the turn order, Assurance on whether the target was already damaged this turn, Stomping Tantrum and Temper Flare on whether the last move failed, Round on an ally having used it first. Each falls back to its static value, which is the floor, so they under-predict rather than invent. A test names all seven so the list stays a decision.
-- [ ] **Extend the harness to move order.** `_moves_first` drives flinch scoring and ignores opposing priority entirely, and the engine's actual move order is readable straight from the protocol — so this is checkable the same way damage was.
+- [x] **Extend the harness to move order.** Done — see below and experiment 0007.
 - [ ] Critical hits are unmodelled and currently excluded from every comparison rather than predicted.
+
+### Turn order, checked the same way (2026-08-24)
+
+Priority is a static field on every move, dumped from the engine, running **+5 (Helping Hand) to −7 (Trick Room)** in this dex. `_moves_first` asked whether *our* move's priority was above zero and stopped, with a docstring admitting the gap. Everything else it needed was already on the `Observation`.
+
+`evaluation/turn_order.py` is the instrument, and it is more direct than the damage one: the order the engine resolved moves in **is** the order the `|move|` lines appear in, so there is nothing to infer. `mechanics/turn_order.py` holds the rule, transcribed from `comparePriority` and `getActionSpeed`.
+
+```
+random teams, items and abilities        85.0%    baseline
+control teams, no items                  93.6%    the gap is Choice Scarf
+control, no Speed or priority abilities  97.8%    99.6% of committed pairs
+                                                  -- the rule itself is right
+with Prankster/Gale Wings/Stall modelled 99.0%    no Status move left in the errors
+random teams again, end to end           91.0%
+```
+
+Each gap is attributable, which is the whole point of running it three ways:
+
+- **Items.** Choice Scarf, ×1.5 Speed. The errors clustered on Passimian, Toxicroak, Pangoro and Heracross — middling-speed physical attackers, exactly who the generator hands a Scarf.
+- **Abilities.** 74 of 83 remaining errors were a *Status* move going first: Prankster, on seven Pokémon here including Grimmsnarl, Whimsicott, Klefki and Sableye. The rest were Chlorophyll doubling Speed in sun.
+
+**A control team is a control for one measurement, not in general.** The deny-list built for the damage harness deliberately allowed Prankster and Chlorophyll through, because neither touches damage. Both decide turn order outright.
+
+Two more silent-data bugs fell out on the way, the ninth and tenth of the same shape: **`tracker.terrain` was declared, read into every `Observation`, and never once assigned** — so the Rising Voltage base power shipped the same morning could not fire — and **side conditions were recorded for the opponent only**, so our own Tailwind was invisible to us. `revealed_ability` was likewise tracked since it was written and read by nothing until Prankster needed it.
+
+**Strength is unchanged**: 1,600 paired battles across two seeds against a copy carrying the old rule, 51.7% and 47.0%, neither significant, seeds disagreeing in direction. Expected. It feeds flinch scoring and both agents shared the blind spot; what it changes is whether a recommendation that says *"your flinch will land"* is true.
+
+The first attempt at that measurement was discarded: it ran each agent against Random on *independently generated* team pools, so the two numbers were never comparable. Paired on the same teams is both correct and far more sensitive.
 
 ### Deliberately not done
 
