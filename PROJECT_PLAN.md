@@ -626,8 +626,37 @@ Every one of the four differential defects was **data the engine reports and we 
 #### Next, in order
 
 - [x] **Isolate the formula.** Done: **94.8%** inside the predicted range on a no-item, inert-ability control team across twelve teams, against the ~95% bar. The formula itself — floor ordering, the STAB constant, the 0.75 spread factor — is now verified rather than assumed.
-- [ ] **Then items**, now genuinely a measurement rather than a guess, because the arithmetic underneath is checked, and now wanted from *two* directions: Life Orb at 1.3× and Focus Sash for damage, **Choice Scarf at 1.5× Speed** for turn order. Focus Sash is still the likeliest cause of the 17% of "guaranteed" knockouts that do not happen. Run both harnesses on a team that holds items and attribute the difference.
-- [ ] **Abilities**, the same way: the deny-list built for the control team is already an inventory of which ones touch damage, and a second one now exists for which touch Speed. Chlorophyll, Swift Swim, Sand Rush and Slush Rush all double Speed under weather we already track; Unburden and Quick Feet need item-consumption and status state.
+- [x] **Then items.** Done — see below and experiment 0008. Life Orb measured at **1.304**, and it is the only item in this dex that multiplies damage.
+- [ ] **Abilities**, the same way: the deny-list built for the control team is already an inventory of which ones touch damage, and a second one now exists for which touch Speed. Chlorophyll, Swift Swim, Sand Rush and Slush Rush all double Speed under weather we already track; Unburden and Quick Feet need item-consumption and status state. Speed Boost is what is left in the turn-order residual.
+- [ ] **Focus Sash**, which is a *survival* mechanic rather than a damage one — it leaves its holder on 1 HP — and is the likeliest cause of the 17% of "guaranteed" knockouts that do not happen. It measured at 0.985 for damage, i.e. it does nothing there, which is why the damage harness cannot see it and the KO calibration must.
+
+### Items, and the two classes hiding behind them (2026-08-24)
+
+The control team was built for exactly this. With the arithmetic verified and the abilities already inert, the residual on an *item-holding* team is the item effect and nothing else — so the multipliers could be **read off** rather than assumed:
+
+```
+lifeorb          n=144   median 1.304    <- the engine's [5324, 4096]
+21 other items                  ~1.00
+```
+
+Life Orb is the only item in this dex that multiplies damage, and it came out at exactly the 1.3 the plan had hypothesised for two sessions without evidence. Modelled, it reads 0.979.
+
+Champions carries a **restricted item list** — 148 items, with Choice Band, Choice Specs, Assault Vest, Eviolite and the Arceus plates all absent — so the table is far smaller than the full game would need. The eighteen type-boosting items and eighteen resist berries were extracted from the engine programmatically rather than typed from memory, and a test checks every id against the dex.
+
+Two format rules surfaced and are worth keeping: **Item Clause** (one of each item per team, which constrains opponent modelling — they cannot hold two Life Orbs) and the restricted list itself. The bridge had never dumped items at all: `revealed_item` and `PokemonSet.item` were bare strings with no reference data behind them.
+
+Following the residual afterwards found two things that were not about items:
+
+- **The damage roll is applied in the wrong place.** The engine runs `randomizer(baseDamage)` *between* the base term and the modifiers, each modifier is `trunc((trunc(v * m) + 2047) / 4096)` rather than a float multiply, and the type chart is doublings and truncated halvings. We rolled last, which put our minimum a point above the engine's real damage — a run of `predicted 85-100, engine dealt 84`.
+- **Nine moves bypass the formula and all nine read as status moves.** Seismic Toss, Night Shade, Super Fang, Endeavor, Final Gambit and the four reflecting moves carry a zero base power *and* no `basePowerCallback`, so neither existing flag catches them. **The same silent failure as the eleven dynamic-power moves, through a third mechanism.** The heuristic had been pricing Seismic Toss as support.
+
+```
+DAMAGE      no-item control    94.8% -> 94.7%   (unchanged, as it should be)
+            item-holding       87.5% -> 94.8%
+TURN ORDER  random teams       85.0% -> 91.0% (abilities) -> 97.7% (Choice Scarf)
+```
+
+**The recurring lesson has a third instance now.** Zero base power meant three different things — "computed per hit" (`basePowerCallback`), "scaled by the situation" (`onBasePower`), and "bypasses the formula" (`damage` / `damageCallback`) — and each one had to be found by following a residual rather than by reading the data, because in all three cases the data said nothing at all.
 - [ ] **The seven remaining conditional base powers** need state we do not track: Rage Fist counts how often its user has been hit, Payback and Avalanche depend on the turn order, Assurance on whether the target was already damaged this turn, Stomping Tantrum and Temper Flare on whether the last move failed, Round on an ally having used it first. Each falls back to its static value, which is the floor, so they under-predict rather than invent. A test names all seven so the list stays a decision.
 - [x] **Extend the harness to move order.** Done — see below and experiment 0007.
 - [ ] Critical hits are unmodelled and currently excluded from every comparison rather than predicted.
