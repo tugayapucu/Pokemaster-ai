@@ -3,6 +3,7 @@ from champions_ai.mechanics.damage import (
     DamageEstimate,
     attacking_side,
     estimate_damage,
+    fixed_damage,
     is_spread_move,
 )
 from champions_ai.mechanics.evaluation import PositionValue, evaluate_position
@@ -57,6 +58,7 @@ __all__ = [
     "dynamic_base_power",
     "effective_speed",
     "estimate_damage",
+    "fixed_damage",
     "estimate_stats",
     "evaluate_position",
     "hp_stat",

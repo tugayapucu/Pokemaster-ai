@@ -359,6 +359,8 @@ class HeuristicAgent(Agent):
             # tracked from the day it was written and read by nothing.
             attacker_item=attacker.current_item,
             defender_item=target.item,
+            # Endeavor and Final Gambit are priced off our own remaining HP.
+            attacker_hp=attacker.current_hp,
         )
 
         reasons: list[str] = []

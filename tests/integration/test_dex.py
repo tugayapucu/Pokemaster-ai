@@ -303,3 +303,25 @@ def test_the_items_we_rely_on_being_absent_really_are(bridge):
     dex = Dex.load(bridge)
     for absent in ("choiceband", "choicespecs", "assaultvest", "eviolite"):
         assert absent not in dex.items, f"{absent} is now legal and unmodelled"
+
+
+def test_the_fixed_damage_moves_do_not_read_as_status_moves(bridge):
+    """Nine moves here bypass the damage formula, and all nine carry a zero
+    base power with no `basePowerCallback` -- so `is_damaging` classed every
+    one as a status move and the heuristic scored them as support."""
+    dex = Dex.load(bridge)
+    for move_id in (
+        "seismictoss", "nightshade", "superfang", "endeavor", "finalgambit",
+        "counter", "mirrorcoat", "metalburst", "comeuppance",
+    ):
+        move = dex.get_move(move_id)
+        assert move.base_power == 0, f"{move_id} should carry no static power"
+        assert move.deals_fixed_damage, f"{move_id} must be flagged"
+        assert move.is_damaging, f"{move_id} must not read as a status move"
+
+
+def test_an_ordinary_move_deals_no_fixed_damage(bridge):
+    """Guards the test above against passing because everything is flagged."""
+    dex = Dex.load(bridge)
+    assert not dex.get_move("dragonclaw").deals_fixed_damage
+    assert not dex.get_move("protect").deals_fixed_damage

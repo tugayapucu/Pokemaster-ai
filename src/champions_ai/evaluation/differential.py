@@ -109,6 +109,7 @@ class DamageSample:
             weather=self.weather,
             attacker_item=self.attacker.current_item,
             defender_item=self.defender.current_item,
+            attacker_hp=self.attacker.current_hp,
             # Twenty-nine moves have their power computed per hit, and the
             # harness was comparing against the static value for all of them --
             # so a Stored Power off two Calm Minds read as a fivefold error in

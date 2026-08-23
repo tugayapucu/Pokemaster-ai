@@ -84,6 +84,12 @@ class MoveInfo(BaseModel, frozen=True):
     # The engine computes this move's base power per hit, so a `base_power` of
     # zero means "not known yet" rather than "does no damage".
     dynamic_power: bool = False
+    # Damage that bypasses the formula. `"level"` means "as much as the user's
+    # level", a number means exactly that much, and `damage_callback` marks the
+    # ones the engine works out per hit -- Super Fang halving the target,
+    # Endeavor levelling the two, Counter reflecting what it just took.
+    fixed_damage: int | str | None = None
+    damage_callback: bool = False
     # Showdown stat ids (`atk`, `def`, `spa`, `spd`) naming a stat the move
     # uses instead of the one its category implies, or None for the ordinary
     # case. Body Press is Physical but swings with the user's Defense;
@@ -105,6 +111,11 @@ class MoveInfo(BaseModel, frozen=True):
     # always drops its own defences rather than rolling for it.
     self_boosts: dict[str, int] = Field(default_factory=dict)
     flags: frozenset[str] = frozenset()
+
+    @property
+    def deals_fixed_damage(self) -> bool:
+        """Whether this move ignores the damage formula entirely."""
+        return self.fixed_damage is not None or self.damage_callback
 
     @property
     def offensive_stat(self) -> str:
@@ -173,7 +184,9 @@ class MoveInfo(BaseModel, frozen=True):
         Champions dex have their power computed per hit, and treating those as
         status moves priced Low Kick and Grass Knot as support.
         """
-        return self.category != "Status" and (self.base_power > 0 or self.dynamic_power)
+        return self.category != "Status" and (
+            self.base_power > 0 or self.dynamic_power or self.deals_fixed_damage
+        )
 
     @property
     def always_hits(self) -> bool:
@@ -356,6 +369,8 @@ class Dex(BaseModel, frozen=True):
                 target=entry["target"],
                 stalling=bool(entry.get("stallingMove", False)),
                 dynamic_power=bool(entry.get("dynamicPower", False)),
+                fixed_damage=entry.get("fixedDamage"),
+                damage_callback=bool(entry.get("damageCallback", False)),
                 override_offensive_stat=entry.get("overrideOffensiveStat") or None,
                 override_defensive_stat=entry.get("overrideDefensiveStat") or None,
                 override_offensive_pokemon=entry.get("overrideOffensivePokemon") or None,

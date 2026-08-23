@@ -70,6 +70,8 @@ def _observation(
     their_revealed=(),
     their_ability=None,
     our_ability=None,
+    their_item=None,
+    our_item=None,
     foe=THEIR_SPECIES,
     our_speed=OUR_SPEED,
 ):
@@ -80,6 +82,7 @@ def _observation(
         current_hp=200, max_hp=200, status=our_status,
         computed_stats={"atk": 150, "def": 100, "spa": 150, "spd": 100, "spe": our_speed},
         current_ability=our_ability,
+        current_item=our_item,
         choosable_moves=("bonk", "quickbonk", "slowbonk", "hex"),
         boosts=our_boosts or Boosts(),
     )
@@ -95,6 +98,7 @@ def _observation(
                 status=their_status, boosts=their_boosts or Boosts(),
                 revealed_moves=frozenset(their_revealed),
                 revealed_ability=their_ability,
+                revealed_item=their_item,
             ),),
             active_slots=(0, None),
             side_conditions=dict(their_side_conditions or {}),
@@ -236,3 +240,15 @@ def test_our_own_prankster_lifts_our_status_move(agent):
     """Ours is never hidden from us -- it is in our own request payload."""
     assert _first(agent, "hex", our_speed=10) == 0.0
     assert _first(agent, "hex", our_speed=10, our_ability="prankster") == 1.0
+
+
+def test_their_revealed_choice_scarf_is_applied(agent):
+    """An item is hidden until it fires, so this reads `revealed_item` -- the
+    other field the tracker recorded and nothing consulted."""
+    assert _first(agent, "bonk", our_speed=100) == 1.0
+    assert _first(agent, "bonk", our_speed=100, their_item="choicescarf") == 0.0
+
+
+def test_our_own_scarf_is_applied(agent):
+    assert _first(agent, "bonk", our_speed=60) == 0.0
+    assert _first(agent, "bonk", our_speed=60, our_item="choicescarf") == 1.0

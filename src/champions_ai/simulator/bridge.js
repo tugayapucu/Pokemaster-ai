@@ -177,6 +177,12 @@ function moveSecondaries(entry) {
 			// Gyro Ball from the speed ratio. Without this flag they read as
 			// status moves.
 			dynamicPower: typeof entry.basePowerCallback === 'function',
+			// Fixed-damage moves ignore the damage formula outright. Nine of
+			// them here, all with a zero basePower and no basePowerCallback,
+			// so `is_damaging` read every one -- Seismic Toss, Night Shade,
+			// Super Fang -- as a status move.
+			fixedDamage: entry.damage === undefined ? null : entry.damage,
+			damageCallback: typeof entry.damageCallback === 'function',
 			// Some moves swing with, or land on, a stat their category does
 			// not imply: Body Press is Physical but uses the user's Defense,
 			// Psyshock is Special but hits the target's Defense, Foul Play

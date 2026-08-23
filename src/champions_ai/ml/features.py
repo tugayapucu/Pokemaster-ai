@@ -168,6 +168,7 @@ class FeatureExtractor:
             weather=observation.weather,
             attacker_item=active.current_item,
             defender_item=target.item,
+            attacker_hp=active.current_hp,
             base_power=dynamic_base_power(
                 move,
                 attacker=self.dex.get_species(active.pokemon_set.species),
