@@ -21,9 +21,19 @@ from champions_ai.mechanics.stats import (
     hp_stat,
     other_stat,
 )
+from champions_ai.mechanics.turn_order import (
+    PARALYSIS,
+    TAILWIND,
+    TRICK_ROOM,
+    effective_speed,
+    moves_first,
+)
 
 __all__ = [
     "ASSUMED_ATTACKING_POINTS",
+    "PARALYSIS",
+    "TAILWIND",
+    "TRICK_ROOM",
     "ASSUMED_MOVE_POWER",
     "DamageEstimate",
     "Matchup",
@@ -33,11 +43,13 @@ __all__ = [
     "assumed_stats",
     "attacking_side",
     "dynamic_base_power",
+    "effective_speed",
     "estimate_damage",
     "estimate_stats",
     "evaluate_position",
     "hp_stat",
     "is_spread_move",
+    "moves_first",
     "matchup",
     "other_stat",
     "own_stats",

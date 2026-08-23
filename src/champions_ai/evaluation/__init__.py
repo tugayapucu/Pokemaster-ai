@@ -29,6 +29,11 @@ from champions_ai.evaluation.runner import (
     play_battle,
     wilson_interval,
 )
+from champions_ai.evaluation.turn_order import (
+    OrderCollector,
+    OrderReport,
+    OrderSample,
+)
 
 __all__ = [
     "AgreementResult",
@@ -42,6 +47,9 @@ __all__ = [
     "action_signature",
     "active_by_ident",
     "DamageCollector",
+    "OrderCollector",
+    "OrderReport",
+    "OrderSample",
     "collect_samples",
     "compare",
     "compare_agents",
