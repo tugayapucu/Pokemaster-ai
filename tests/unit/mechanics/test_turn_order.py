@@ -12,7 +12,8 @@ by ordering on `10000 - speed`.
 
 import pytest
 
-from champions_ai.mechanics import effective_speed, moves_first
+from champions_ai.dex import MoveInfo
+from champions_ai.mechanics import effective_speed, move_priority, moves_first
 
 # --------------------------------------------------------------- speed itself
 
@@ -99,3 +100,55 @@ def test_trick_room_leaves_the_priority_half_alone():
 
 def test_a_speed_tie_is_still_a_tie_under_trick_room():
     assert moves_first(0, 120, 0, 120, trick_room=True) == 0.5
+
+
+# ------------------------------------------------- abilities that shift priority
+
+
+def _info(move_id, *, priority=0, category="Physical", move_type="Normal"):
+    return MoveInfo(
+        move_id=move_id, name=move_id, type=move_type, category=category,
+        base_power=0 if category == "Status" else 80,
+        accuracy=100, priority=priority, target="normal",
+    )
+
+
+def test_prankster_raises_status_moves_by_one():
+    """Seven Pokemon here have it -- Grimmsnarl, Whimsicott, Klefki, Sableye --
+    and it was 74 of the 83 orderings the harness first got backwards."""
+    assert move_priority(_info("thunderwave", category="Status"), "prankster") == 1
+    assert move_priority(_info("taunt", priority=0, category="Status"), "prankster") == 1
+
+
+def test_prankster_does_not_touch_damaging_moves():
+    assert move_priority(_info("knockoff"), "prankster") == 0
+    assert move_priority(_info("suckerpunch", priority=1), "prankster") == 1
+
+
+def test_gale_wings_needs_full_hp():
+    flying = _info("bravebird", move_type="Flying")
+    assert move_priority(flying, "galewings", at_full_hp=True) == 1
+    assert move_priority(flying, "galewings", at_full_hp=False) == 0
+
+
+def test_gale_wings_only_applies_to_flying_moves():
+    assert move_priority(_info("flareblitz"), "galewings", at_full_hp=True) == 0
+
+
+def test_stall_moves_last_inside_its_own_bracket():
+    """A fractional shift, not a bracket change: it still beats anything a
+    whole bracket below."""
+    assert move_priority(_info("knockoff"), "stall") == pytest.approx(-0.1)
+    assert moves_first(-0.1, 200, 0, 50) == 0.0, "loses to an ordinary move"
+    assert moves_first(-0.1, 50, -1, 200) == 1.0, "still beats a lower bracket"
+
+
+def test_quick_draw_is_left_out_on_purpose():
+    """A 30% chance of +0.1 is not a priority, and reporting it as one would
+    turn a coin flip into a fact."""
+    assert move_priority(_info("knockoff"), "quickdraw") == 0
+
+
+def test_an_ordinary_ability_changes_nothing():
+    assert move_priority(_info("thunderwave", category="Status"), "levitate") == 0
+    assert move_priority(_info("thunderwave", category="Status"), None) == 0

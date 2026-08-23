@@ -26,6 +26,7 @@ from champions_ai.mechanics.turn_order import (
     TAILWIND,
     TRICK_ROOM,
     effective_speed,
+    move_priority,
     moves_first,
 )
 
@@ -49,6 +50,7 @@ __all__ = [
     "evaluate_position",
     "hp_stat",
     "is_spread_move",
+    "move_priority",
     "moves_first",
     "matchup",
     "other_stat",

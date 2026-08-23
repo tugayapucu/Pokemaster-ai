@@ -49,6 +49,7 @@ DEX = Dex.from_payload({
         "bonk": _move("bonk"),
         "quickbonk": _move("quickbonk", priority=1),
         "slowbonk": _move("slowbonk", priority=-3),
+        "hex": dict(_move("hex"), category="Status", basePower=0),
     },
     "types": ["Normal"], "chart": {"Normal": {"Normal": 1.0}},
 })
@@ -67,15 +68,19 @@ def _observation(
     their_side_conditions=None,
     field_conditions=None,
     their_revealed=(),
+    their_ability=None,
+    our_ability=None,
     foe=THEIR_SPECIES,
     our_speed=OUR_SPEED,
 ):
     mine = BattlePokemon(
-        pokemon_set=PokemonSet(species="Swift", level=50, ability="x",
-                               moves=("bonk", "quickbonk", "slowbonk")),
+        pokemon_set=PokemonSet(species="Swift", level=50,
+                               ability=our_ability or "x",
+                               moves=("bonk", "quickbonk", "slowbonk", "hex")),
         current_hp=200, max_hp=200, status=our_status,
         computed_stats={"atk": 150, "def": 100, "spa": 150, "spd": 100, "spe": our_speed},
-        choosable_moves=("bonk", "quickbonk", "slowbonk"),
+        current_ability=our_ability,
+        choosable_moves=("bonk", "quickbonk", "slowbonk", "hex"),
         boosts=our_boosts or Boosts(),
     )
     return Observation(
@@ -89,6 +94,7 @@ def _observation(
                 species=foe, level=50, hp_percent=100, fainted=False,
                 status=their_status, boosts=their_boosts or Boosts(),
                 revealed_moves=frozenset(their_revealed),
+                revealed_ability=their_ability,
             ),),
             active_slots=(0, None),
             side_conditions=dict(their_side_conditions or {}),
@@ -198,3 +204,35 @@ def test_trick_room_does_not_reverse_priority(agent):
     assert _first(
         agent, "quickbonk", our_speed=10, field_conditions={"trickroom": 0}
     ) == 1.0
+
+
+# ------------------------------------------------------ abilities and priority
+
+
+def test_their_revealed_prankster_puts_their_status_moves_above_ours(agent):
+    """`revealed_ability` was tracked by the tracker and read by nothing.
+
+    A Grimmsnarl whose Prankster has shown itself moves before us with any
+    status move, however far ahead our Speed is.
+    """
+    assert _first(agent, "bonk", their_revealed=("hex",)) == 1.0
+    assert _first(
+        agent, "bonk", their_revealed=("hex",), their_ability="prankster"
+    ) == 0.0
+
+
+def test_prankster_does_not_lift_their_damaging_moves(agent):
+    assert _first(
+        agent, "bonk", their_revealed=("bonk",), their_ability="prankster"
+    ) == 1.0
+
+
+def test_an_unrevealed_prankster_is_not_assumed(agent):
+    """We only get to use what they have actually shown us."""
+    assert _first(agent, "bonk", their_revealed=("hex",), their_ability=None) == 1.0
+
+
+def test_our_own_prankster_lifts_our_status_move(agent):
+    """Ours is never hidden from us -- it is in our own request payload."""
+    assert _first(agent, "hex", our_speed=10) == 0.0
+    assert _first(agent, "hex", our_speed=10, our_ability="prankster") == 1.0

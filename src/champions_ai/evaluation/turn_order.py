@@ -22,7 +22,13 @@ from dataclasses import dataclass, field
 
 from champions_ai.dex import Dex
 from champions_ai.domain import BattlePokemon
-from champions_ai.mechanics import PARALYSIS, TAILWIND, effective_speed, moves_first
+from champions_ai.mechanics import (
+    PARALYSIS,
+    TAILWIND,
+    effective_speed,
+    move_priority,
+    moves_first,
+)
 from champions_ai.simulator.tracker import split_ident, to_id
 
 # A `|move|` line carrying one of these was not the action its user chose:
@@ -54,14 +60,22 @@ class OrderSample:
         random, so it is neither right nor wrong.
         """
         return moves_first(
-            dex.get_move(self.first_move).priority,
+            move_priority(
+                dex.get_move(self.first_move),
+                self.first.current_ability,
+                at_full_hp=self.first.hp_fraction >= 1.0,
+            ),
             effective_speed(
                 (self.first.computed_stats or {}).get("spe", 0),
                 boost_stage=self.first.boosts.speed,
                 tailwind=self.first_tailwind,
                 paralysed=self.first.status == PARALYSIS,
             ),
-            dex.get_move(self.second_move).priority,
+            move_priority(
+                dex.get_move(self.second_move),
+                self.second.current_ability,
+                at_full_hp=self.second.hp_fraction >= 1.0,
+            ),
             effective_speed(
                 (self.second.computed_stats or {}).get("spe", 0),
                 boost_stage=self.second.boosts.speed,

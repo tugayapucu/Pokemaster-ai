@@ -19,11 +19,26 @@ leaves the priority half untouched -- a Fake Out still moves before an
 Extreme Speed under Trick Room.
 """
 
+from champions_ai.dex import MoveInfo
 from champions_ai.mechanics.stats import apply_boost
 
 # Field and side conditions that change the ordering rather than the stat.
 TRICK_ROOM = "trickroom"
 TAILWIND = "tailwind"
+
+# Abilities that change a move's priority rather than its Speed. Prankster is
+# the one that matters here: seven Pokemon in this dex have it, including
+# Grimmsnarl, Whimsicott, Klefki and Sableye, and it made up seventy-four of
+# the eighty-three orderings the harness got backwards before it was denied
+# from the control team.
+PRANKSTER = "prankster"
+GALE_WINGS = "galewings"
+STALL_ABILITY = "stall"
+
+# Stall moves last inside its own bracket. The engine spells that as a
+# fractional priority rather than a bracket change, so it loses to an ordinary
+# move of the same priority and still beats anything a whole bracket below.
+STALL_FRACTION = -0.1
 
 TAILWIND_MULTIPLIER = 2
 # Paralysis is halved in this generation, not quartered as it was before gen 7.
@@ -55,10 +70,34 @@ def effective_speed(
     return value
 
 
+def move_priority(
+    move: MoveInfo,
+    ability: str | None = None,
+    *,
+    at_full_hp: bool = True,
+) -> float:
+    """A move's priority once the user's ability has had its say.
+
+    Fractional because the engine's is: Stall shifts a move within its bracket
+    rather than out of it.
+
+    Quick Draw is deliberately absent. It is a 30% chance of +0.1 rather than
+    a certainty, so folding it in here would report a coin flip as a fact --
+    and only Slowbro-Galar carries it in this dex.
+    """
+    if ability == PRANKSTER and move.category == "Status":
+        return move.priority + 1
+    if ability == GALE_WINGS and move.type == "Flying" and at_full_hp:
+        return move.priority + 1
+    if ability == STALL_ABILITY:
+        return move.priority + STALL_FRACTION
+    return float(move.priority)
+
+
 def moves_first(
-    our_priority: int,
+    our_priority: float,
     our_speed: int,
-    their_priority: int,
+    their_priority: float,
     their_speed: int,
     *,
     trick_room: bool = False,

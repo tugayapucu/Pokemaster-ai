@@ -43,6 +43,7 @@ from champions_ai.mechanics import (
     estimate_damage,
     estimate_stats,
     matchup,
+    move_priority,
     moves_first,
 )
 
@@ -520,7 +521,11 @@ class HeuristicAgent(Agent):
             chance = min(
                 chance,
                 moves_first(
-                    move.priority,
+                    move_priority(
+                        move,
+                        attacker.current_ability,
+                        at_full_hp=attacker.hp_fraction >= 1.0,
+                    ),
                     ours,
                     self._revealed_priority(observed),
                     theirs,
@@ -529,8 +534,13 @@ class HeuristicAgent(Agent):
             )
         return chance
 
-    def _revealed_priority(self, observed) -> int:
+    def _revealed_priority(self, observed) -> float:
         """The highest priority we have actually seen this Pokemon use.
+
+        Their ability counts too, once revealed -- a Grimmsnarl whose Prankster
+        has shown itself puts every status move it has a bracket above ours.
+        `revealed_ability` was tracked by the tracker and read by nothing until
+        now, which is the same shape as most of the bugs in this project.
 
         Unrevealed moves are assumed ordinary. That is optimistic -- they may
         be holding an Aqua Jet we have not seen -- but assuming one would be
@@ -538,7 +548,15 @@ class HeuristicAgent(Agent):
         Pokemon that has shown nothing at all, which is every Pokemon on the
         turn it arrives.
         """
-        return max((m.priority for m in self._revealed_moves(observed)), default=0)
+        ability = observed.revealed_ability
+        at_full_hp = observed.hp_percent >= 100
+        return max(
+            (
+                move_priority(m, ability, at_full_hp=at_full_hp)
+                for m in self._revealed_moves(observed)
+            ),
+            default=0.0,
+        )
 
     @staticmethod
     def _observed_target(observation: Observation, slot: int):
