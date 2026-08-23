@@ -202,6 +202,28 @@ function moveSecondaries(entry) {
 		};
 	}
 
+	// Held items. Their effects live in JavaScript callbacks and cannot be
+	// dumped, so what is carried across is *identity*: which items exist, and
+	// the structural facts the engine does expose. The multipliers themselves
+	// are transcribed on the Python side and guarded by a test that every id
+	// in that table appears here.
+	const items = {};
+	for (const entry of dex.items.all()) {
+		if (entry.isNonstandard) continue;
+		items[entry.id] = {
+			name: entry.name,
+			isBerry: !!entry.isBerry,
+			// Locks its holder into one move, and boosts a stat by 1.5x.
+			isChoice: !!entry.isChoice,
+			// A Mega Stone changes species, stats and ability mid-turn.
+			megaStone: entry.megaStone ? Object.keys(entry.megaStone)[0] : null,
+			// Arceus plates carry the type they boost as data rather than code.
+			plateType: entry.onPlate || null,
+			// Thick Club and Light Ball only work for named species.
+			itemUser: entry.itemUser || [],
+		};
+	}
+
 	// Emit resolved multipliers rather than Showdown's damageTaken codes, so
 	// the semantics are computed once here by the engine that owns them
 	// instead of being reimplemented on the Python side.
@@ -216,7 +238,7 @@ function moveSecondaries(entry) {
 		}
 	}
 
-	send({ type: 'dex', species, moves, types, chart });
+	send({ type: 'dex', species, moves, items, types, chart });
 }
 
 const HANDLERS = {

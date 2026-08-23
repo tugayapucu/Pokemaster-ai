@@ -20,6 +20,12 @@ from dataclasses import dataclass
 from typing import TypeVar
 
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
+from champions_ai.mechanics.items import (
+    attack_multiplier,
+    base_power_multiplier,
+    damage_multiplier,
+    defender_multiplier,
+)
 
 T = TypeVar("T")
 
@@ -124,6 +130,8 @@ def estimate_damage(
     attacker_burned: bool = False,
     weather: str | None = None,
     base_power: int | None = None,
+    attacker_item: str | None = None,
+    defender_item: str | None = None,
 ) -> DamageEstimate:
     """Estimate a single hit's damage range.
 
@@ -136,6 +144,11 @@ def estimate_damage(
 
     `base_power` overrides the move's static value, for the eleven moves whose
     power the engine computes per hit. See `mechanics.base_power`.
+
+    The two item arguments are Showdown ids, and each is applied where the
+    engine applies it: a type-boosting item to base power, Light Ball to the
+    attacking stat, Life Orb to the final damage, a resist berry to what the
+    defender takes. See `mechanics.items`.
     """
     # Through the dex rather than the chart: Freeze-Dry and Flying Press do
     # not follow it, and reading the chart here bypassed both.
@@ -153,7 +166,11 @@ def estimate_damage(
             defense_stat = int(defense_stat * WEATHER_DEFENCE_MULTIPLIER)
 
     # Engine order: the level/power/ratio term, then +2, then the modifiers.
+    # A type-boosting item raises base power and Light Ball raises the stat, so
+    # both belong inside this term rather than after it.
     power = move.base_power if base_power is None else base_power
+    power = int(power * base_power_multiplier(attacker_item, move))
+    attack_stat = int(attack_stat * attack_multiplier(attacker_item, attacker))
     base = (2 * level // 5 + 2) * power * attack_stat // max(1, defense_stat) // 50 + 2
 
     multiplier = effectiveness
@@ -164,6 +181,10 @@ def estimate_damage(
     if attacker_burned and move.category == "Physical":
         multiplier *= BURN_MULTIPLIER
     multiplier *= WEATHER_TYPE_MULTIPLIERS.get(weather or "", {}).get(move.type, 1.0)
+    # Life Orb and Expert Belt scale the finished number; a resist berry scales
+    # what the defender takes from it.
+    multiplier *= damage_multiplier(attacker_item, effectiveness=effectiveness)
+    multiplier *= defender_multiplier(defender_item, move, effectiveness=effectiveness)
 
     # A zero multiplier means the move genuinely does nothing -- a primal
     # weather negating the opposing type, say. The floor of 1 below exists so a

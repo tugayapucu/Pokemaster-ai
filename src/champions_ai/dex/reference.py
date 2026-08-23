@@ -228,6 +228,30 @@ ADDED_TYPES: dict[str, str] = {
 }
 
 
+class ItemInfo(BaseModel, frozen=True):
+    """A held item's identity.
+
+    Not its effect: those live in JavaScript callbacks on the engine and
+    cannot be dumped, so the multipliers are transcribed in
+    `mechanics.items` and a test checks every id there against this table.
+    What is here is what the engine exposes as data.
+    """
+
+    item_id: str
+    name: str
+    is_berry: bool = False
+    # Locks its holder into one move and multiplies one stat by 1.5.
+    is_choice: bool = False
+    # The species this stone Mega Evolves, or None. A Mega changes species,
+    # base stats and ability mid-turn, which is why the differential harness
+    # excludes them rather than modelling them.
+    mega_stone: str | None = None
+    # Arceus plates carry the type they boost as data rather than as code.
+    plate_type: str | None = None
+    # Thick Club and Light Ball work only for the species named here.
+    item_user: tuple[str, ...] = ()
+
+
 class Dex(BaseModel, frozen=True):
     """The reference tables a heuristic or evaluator needs."""
 
@@ -236,6 +260,7 @@ class Dex(BaseModel, frozen=True):
     # Stored rather than derived so a cached dex needs no rebuild step.
     species_aliases: dict[str, str] = Field(default_factory=dict)
     moves: dict[str, MoveInfo] = Field(default_factory=dict)
+    items: dict[str, ItemInfo] = Field(default_factory=dict)
     types: tuple[str, ...] = ()
     type_chart: TypeChart = TypeChart()
 
@@ -258,6 +283,12 @@ class Dex(BaseModel, frozen=True):
                 found = self.species.get(base)
         if found is None:
             raise KeyError(f"no species data for {name!r}")
+        return found
+
+    def get_item(self, name: str) -> ItemInfo:
+        found = self.items.get(to_id(name))
+        if found is None:
+            raise KeyError(f"no item data for {name!r}")
         return found
 
     def get_move(self, name: str) -> MoveInfo:
@@ -346,6 +377,18 @@ class Dex(BaseModel, frozen=True):
             )
             for move_id, entry in payload["moves"].items()
         }
+        items = {
+            item_id: ItemInfo(
+                item_id=item_id,
+                name=entry["name"],
+                is_berry=bool(entry.get("isBerry", False)),
+                is_choice=bool(entry.get("isChoice", False)),
+                mega_stone=entry.get("megaStone") or None,
+                plate_type=entry.get("plateType") or None,
+                item_user=tuple(entry.get("itemUser") or ()),
+            )
+            for item_id, entry in (payload.get("items") or {}).items()
+        }
         aliases = {
             to_id(forme): species_id
             for species_id, info in species.items()
@@ -355,6 +398,7 @@ class Dex(BaseModel, frozen=True):
             species=species,
             species_aliases=aliases,
             moves=moves,
+            items=items,
             types=tuple(payload["types"]),
             type_chart=TypeChart(multipliers=payload["chart"]),
         )

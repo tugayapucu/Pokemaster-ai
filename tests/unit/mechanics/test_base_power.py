@@ -220,3 +220,77 @@ def test_an_ordinary_move_is_unaffected_by_any_of_it():
         terrain="electricterrain",
         attacker_hp_fraction=0.1,
     ) == 80
+
+
+# ------------------------- a second family: `onBasePower`, not the callback
+#
+# Seventeen moves here scale through a different engine hook, and the dumped
+# `dynamicPower` flag catches none of them -- Knock Off has no
+# `basePowerCallback` at all. It was the largest term left in the damage
+# residual once items were modelled, at a steady 1.5x across 27 hits.
+
+
+def test_knock_off_hits_harder_when_there_is_something_to_knock_off():
+    move = _move("knockoff", base_power=65)
+    assert dynamic_base_power(move, defender_holds_item=True) == 97
+    assert dynamic_base_power(move, defender_holds_item=False) == 65
+
+
+def test_facade_doubles_off_any_status_but_sleep():
+    move = _move("facade", base_power=70)
+    for status in ("brn", "psn", "tox", "par", "frz"):
+        assert dynamic_base_power(move, attacker_status=status) == 140, status
+    assert dynamic_base_power(move, attacker_status="slp") == 70
+    assert dynamic_base_power(move, attacker_status=None) == 70
+
+
+@pytest.mark.parametrize("move_id, static", [("venoshock", 65), ("barbbarrage", 60)])
+def test_venoshock_doubles_into_poison(move_id, static):
+    move = _move(move_id, base_power=static)
+    assert dynamic_base_power(move, defender_status="psn") == static * 2
+    assert dynamic_base_power(move, defender_status="tox") == static * 2
+    assert dynamic_base_power(move, defender_status="brn") == static
+    assert dynamic_base_power(move, defender_status=None) == static
+
+
+@pytest.mark.parametrize("weather, expected", [
+    ("raindance", 60), ("sandstorm", 60), ("snowscape", 60),
+    ("sunnyday", 120), (None, 120),
+])
+def test_solar_beam_is_halved_by_any_weather_but_sun(weather, expected):
+    assert dynamic_base_power(_move("solarbeam", base_power=120), weather=weather) == expected
+
+
+@pytest.mark.parametrize("terrain, move_type, expected", [
+    ("electricterrain", "Electric", 104),
+    ("grassyterrain", "Grass", 104),
+    ("psychicterrain", "Psychic", 104),
+    ("electricterrain", "Water", 80),
+    ("mistyterrain", "Electric", 80),
+    (None, "Electric", 80),
+])
+def test_a_terrain_raises_moves_of_its_own_type(terrain, move_type, expected):
+    move = MoveInfo(
+        move_id="zap", name="zap", type=move_type, category="Special",
+        base_power=80, accuracy=100, priority=0, target="normal",
+    )
+    assert dynamic_base_power(move, terrain=terrain) == expected
+
+
+def test_expanding_force_keys_off_its_terrain_not_its_type():
+    move = _move("expandingforce", base_power=80, category="Special")
+    assert dynamic_base_power(move, terrain="psychicterrain") == 120
+    assert dynamic_base_power(move, terrain="grassyterrain") == 80
+
+
+def test_an_ordinary_move_on_a_bare_field_is_untouched():
+    """`TERRAIN_SPECIFIC_MOVES.get(id) == terrain` is `None == None` for every
+    ordinary move with no terrain up, which multiplied all of them by 1.5."""
+    assert dynamic_base_power(_move("tackle", base_power=40), terrain=None) == 40
+    assert dynamic_base_power(_move("tackle", base_power=40), terrain="mistyterrain") == 40
+
+
+def test_the_conditionals_we_do_not_model_are_named():
+    """Each for a stated reason, so the list is a decision and not an oversight."""
+    for move_id, static in (("ficklebeam", 80), ("lashout", 75), ("gravapple", 90)):
+        assert dynamic_base_power(_move(move_id, base_power=static)) == static

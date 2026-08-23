@@ -6,6 +6,13 @@ from champions_ai.mechanics.damage import (
     is_spread_move,
 )
 from champions_ai.mechanics.evaluation import PositionValue, evaluate_position
+from champions_ai.mechanics.items import (
+    attack_multiplier,
+    base_power_multiplier,
+    damage_multiplier,
+    defender_multiplier,
+    speed_multiplier,
+)
 from champions_ai.mechanics.matchup import (
     ASSUMED_MOVE_POWER,
     Matchup,
@@ -42,7 +49,11 @@ __all__ = [
     "apply_boost",
     "assumed_attacks",
     "assumed_stats",
+    "attack_multiplier",
     "attacking_side",
+    "base_power_multiplier",
+    "damage_multiplier",
+    "defender_multiplier",
     "dynamic_base_power",
     "effective_speed",
     "estimate_damage",
@@ -52,6 +63,7 @@ __all__ = [
     "is_spread_move",
     "move_priority",
     "moves_first",
+    "speed_multiplier",
     "matchup",
     "other_stat",
     "own_stats",

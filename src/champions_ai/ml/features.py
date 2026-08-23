@@ -166,6 +166,8 @@ class FeatureExtractor:
             doubles=observation.regulation.game_type == "doubles",
             attacker_burned=active.status == "brn",
             weather=observation.weather,
+            attacker_item=active.current_item,
+            defender_item=target.item,
             base_power=dynamic_base_power(
                 move,
                 attacker=self.dex.get_species(active.pokemon_set.species),
@@ -174,11 +176,14 @@ class FeatureExtractor:
                 attacker_speed=(active.computed_stats or {}).get("spe"),
                 attacker_holds_item=active.current_item is not None,
                 attacker_positive_boosts=active.boosts.positive_total,
+                attacker_status=active.status,
                 defender_status=target.status,
+                defender_holds_item=target.item is not None,
                 fainted_allies=sum(
                     1 for mon in observation.own_side.team if mon.fainted
                 ),
                 terrain=observation.terrain,
+                weather=observation.weather,
             ),
         )
         values["damage_fraction"] = estimate.average_fraction

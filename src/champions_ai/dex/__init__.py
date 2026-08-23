@@ -1,6 +1,7 @@
 from champions_ai.dex.reference import (
     BaseStats,
     Dex,
+    ItemInfo,
     MoveCategory,
     MoveInfo,
     SecondaryEffect,
@@ -12,6 +13,7 @@ from champions_ai.dex.reference import (
 __all__ = [
     "BaseStats",
     "Dex",
+    "ItemInfo",
     "MoveCategory",
     "MoveInfo",
     "SecondaryEffect",

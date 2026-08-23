@@ -20,6 +20,7 @@ Extreme Speed under Trick Room.
 """
 
 from champions_ai.dex import MoveInfo
+from champions_ai.mechanics.items import speed_multiplier
 from champions_ai.mechanics.stats import apply_boost
 
 # Field and side conditions that change the ordering rather than the stat.
@@ -52,6 +53,7 @@ def effective_speed(
     boost_stage: int = 0,
     tailwind: bool = False,
     paralysed: bool = False,
+    item: str | None = None,
 ) -> int:
     """Speed as the engine actually orders on it.
 
@@ -61,8 +63,13 @@ def effective_speed(
     Paralysis is applied last on purpose. The engine's own comment says so and
     sets `onModifySpePriority: -101` to guarantee it: it halves the total after
     Tailwind and the stages, not the raw stat.
+
+    `item` is a Showdown id: Choice Scarf multiplies by 1.5 and Iron Ball by
+    0.5. Scarf was the largest single term in the turn-order residual on
+    item-holding teams.
     """
     value = apply_boost(speed, boost_stage)
+    value = int(value * speed_multiplier(item))
     if tailwind:
         value *= TAILWIND_MULTIPLIER
     if paralysed:

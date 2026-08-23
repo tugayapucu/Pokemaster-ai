@@ -70,6 +70,7 @@ class OrderSample:
                 boost_stage=self.first.boosts.speed,
                 tailwind=self.first_tailwind,
                 paralysed=self.first.status == PARALYSIS,
+                item=self.first.current_item,
             ),
             move_priority(
                 dex.get_move(self.second_move),
@@ -81,6 +82,7 @@ class OrderSample:
                 boost_stage=self.second.boosts.speed,
                 tailwind=self.second_tailwind,
                 paralysed=self.second.status == PARALYSIS,
+                item=self.second.current_item,
             ),
             trick_room=self.trick_room,
         )

@@ -174,6 +174,9 @@ class ResolvedTarget(NamedTuple):
     attacking_stat: int | None = None
     # Hex and Infernal Parade double against a target carrying any status.
     status: str | None = None
+    # A resist berry halves the hit it fires on. None means "none that we know
+    # of", which for an opponent is the honest answer until they show it.
+    item: str | None = None
 
 
 class HeuristicAgent(Agent):
@@ -335,16 +338,27 @@ class HeuristicAgent(Agent):
                 attacker_speed=(attacker.computed_stats or {}).get("spe"),
                 attacker_holds_item=attacker.current_item is not None,
                 attacker_positive_boosts=attacker.boosts.positive_total,
+                attacker_status=attacker.status,
                 defender_status=target.status,
+                # Only what they have shown us. An opponent's item is hidden
+                # until it fires, so an unrevealed one reads as "none" and
+                # Knock Off is priced at its floor rather than its ceiling.
+                defender_holds_item=target.item is not None,
                 fainted_allies=sum(
                     1 for mon in observation.own_side.team if mon.fainted
                 ),
                 terrain=observation.terrain,
+                weather=observation.weather,
             ),
             level=observation.regulation.level,
             doubles=observation.regulation.game_type == "doubles",
             attacker_burned=attacker.status == "brn",
             weather=observation.weather,
+            # Ours comes from our own request and is never hidden. Theirs is
+            # None until the engine announces it -- `revealed_item` was
+            # tracked from the day it was written and read by nothing.
+            attacker_item=attacker.current_item,
+            defender_item=target.item,
         )
 
         reasons: list[str] = []
@@ -497,6 +511,7 @@ class HeuristicAgent(Agent):
             boost_stage=attacker.boosts.speed,
             tailwind=TAILWIND in observation.own_side.side_conditions,
             paralysed=attacker.status == PARALYSIS,
+            item=attacker.current_item,
         )
         their_tailwind = TAILWIND in observation.opponent_side.side_conditions
 
@@ -517,6 +532,7 @@ class HeuristicAgent(Agent):
                 boost_stage=observed.boosts.speed,
                 tailwind=their_tailwind,
                 paralysed=observed.status == PARALYSIS,
+                item=observed.revealed_item,
             )
             chance = min(
                 chance,
@@ -793,6 +809,7 @@ class HeuristicAgent(Agent):
                 ),
                 is_ally=True,
                 status=ally.status,
+                item=ally.current_item,
                 attacking_stat=None
                 if attacking_key is None
                 else apply_boost(
@@ -830,6 +847,7 @@ class HeuristicAgent(Agent):
                 ),
                 is_ally=False,
                 status=observed.status,
+                item=observed.revealed_item,
                 # Uniform rather than credited: the calibrated attacking
                 # investment is evidence from *using* a move, and a Foul Play
                 # target is not the one using it.

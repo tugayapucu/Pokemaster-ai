@@ -10,6 +10,15 @@ because the missing value was missing from the test data too.
 from champions_ai.dex import Dex
 from champions_ai.dex.reference import ADDED_TYPES, EFFECTIVENESS_SUBSTITUTIONS
 from champions_ai.domain.move_data import PROTECT_MOVES, STALL_MOVES, MoveData
+from champions_ai.mechanics.items import (
+    CATEGORY_BOOST_ITEMS,
+    EXPERT_BELT,
+    LIFE_ORB,
+    LIGHT_BALL,
+    RESIST_BERRIES,
+    SPEED_MULTIPLIERS,
+    TYPE_BOOST_ITEMS,
+)
 
 
 def test_every_move_target_in_the_dex_is_one_we_accept(bridge):
@@ -251,3 +260,46 @@ def test_an_ordinary_move_still_follows_the_chart(bridge):
     assert dex.effectiveness(move, slowking) == dex.type_chart.effectiveness(
         "Ice", slowking.types
     )
+
+
+def test_every_item_we_model_exists_in_this_dex(bridge):
+    """The multipliers are hand-transcribed from the engine's `items.ts`, so
+    the ids are the part that can silently rot.
+
+    A typo, or a regulation dropping an item, would make the entry simply
+    never match -- no error, just a multiplier that stops applying. This is
+    the same guard as the effectiveness overrides and for the same reason.
+    """
+    dex = Dex.load(bridge)
+    modelled = (
+        set(TYPE_BOOST_ITEMS)
+        | set(CATEGORY_BOOST_ITEMS)
+        | set(RESIST_BERRIES)
+        | set(SPEED_MULTIPLIERS)
+        | {LIFE_ORB, EXPERT_BELT, LIGHT_BALL}
+    )
+    missing = sorted(item for item in modelled if item not in dex.items)
+    assert not missing, f"modelled items absent from this dex: {missing}"
+
+
+def test_the_type_boosting_items_cover_every_type_exactly_once(bridge):
+    """Eighteen items, eighteen types, no duplicates -- which is what makes a
+    missing one detectable at all."""
+    dex = Dex.load(bridge)
+    # Stellar exists only as a Tera type: no move has it, so it has neither a
+    # boosting item nor a berry.
+    real_types = set(dex.types) - {"Stellar"}
+    covered = sorted(TYPE_BOOST_ITEMS.values())
+    assert len(covered) == len(set(covered)), "two items claim the same type"
+    assert set(covered) == real_types
+    assert set(RESIST_BERRIES.values()) == real_types
+
+
+def test_the_items_we_rely_on_being_absent_really_are(bridge):
+    """Choice Band and friends are not in Champions. If a regulation adds one,
+    the table here is silently incomplete rather than wrong, so this fails to
+    say so.
+    """
+    dex = Dex.load(bridge)
+    for absent in ("choiceband", "choicespecs", "assaultvest", "eviolite"):
+        assert absent not in dex.items, f"{absent} is now legal and unmodelled"

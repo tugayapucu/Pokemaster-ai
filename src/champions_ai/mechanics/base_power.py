@@ -86,6 +86,61 @@ LAST_RESPECTS_STEP = 50
 
 ELECTRIC_TERRAIN = "electricterrain"
 
+# --- a second family: moves the engine scales through `onBasePower` rather
+# --- than `basePowerCallback`. Seventeen of them here, and the flag the bridge
+# --- dumps does not catch any: Knock Off has no `basePowerCallback` at all.
+# --- It was the largest single term left in the damage residual once items
+# --- were modelled, at a steady 1.5x across 27 hits.
+
+# Knock Off hits 50% harder when there is an item to knock off.
+KNOCK_OFF = "knockoff"
+KNOCK_OFF_MULTIPLIER = 1.5
+
+# Facade doubles off *any* status but sleep -- burn included, which is the
+# point of it: the burn halves the damage and Facade more than pays it back.
+FACADE = "facade"
+FACADE_MULTIPLIER = 2.0
+FACADE_EXCLUDED_STATUS = "slp"
+
+# Venoshock and Barb Barrage double into a poisoned target.
+POISON_DOUBLED_MOVES = frozenset({"venoshock", "barbbarrage"})
+POISON_STATUSES = frozenset({"psn", "tox"})
+POISON_DOUBLED_MULTIPLIER = 2.0
+
+# The solar moves are halved by any weather that is not sun.
+SOLAR_MOVES = frozenset({"solarbeam", "solarblade"})
+SOLAR_WEAKENING_WEATHER = frozenset(
+    {"raindance", "primordialsea", "sandstorm", "hail", "snowscape", "snow"}
+)
+SOLAR_WEAKENED_MULTIPLIER = 0.5
+
+# A terrain raises moves of its own type by 1.3 -- the engine's [5325, 4096].
+# Only for a grounded user, which we do not model: a Flying-type or Levitate
+# user gets the bonus here and should not.
+TERRAIN_BOOSTED_TYPES: dict[str, str] = {
+    "electricterrain": "Electric",
+    "grassyterrain": "Grass",
+    "psychicterrain": "Psychic",
+}
+TERRAIN_BOOST_MULTIPLIER = 1.3
+
+# Two moves that key off a terrain rather than sharing its type.
+TERRAIN_SPECIFIC_MOVES: dict[str, str] = {
+    "expandingforce": "psychicterrain",
+    "mistyexplosion": "mistyterrain",
+}
+TERRAIN_SPECIFIC_MULTIPLIER = 1.5
+
+# Left alone on purpose, and each for a stated reason:
+#   Fickle Beam  doubles 30% of the time, so it is a coin flip, not a fact
+#   Lash Out     needs "were our stats lowered this turn"
+#   Helping Hand needs an ally's action within the same turn
+#   Charge       needs a volatile we do not track
+#   Grav Apple   needs Gravity, which we record but do not thread through here
+UNMODELLED_CONDITIONALS = frozenset(
+    {"ficklebeam", "lashout", "helpinghand", "charge", "gravapple"}
+)
+
 
 def dynamic_base_power(
     move: MoveInfo,
@@ -97,9 +152,12 @@ def dynamic_base_power(
     defender_speed: int | None = None,
     attacker_holds_item: bool | None = None,
     attacker_positive_boosts: int = 0,
+    attacker_status: str | None = None,
     defender_status: str | None = None,
+    defender_holds_item: bool = False,
     fainted_allies: int = 0,
     terrain: str | None = None,
+    weather: str | None = None,
 ) -> int:
     """The base power this move would actually have, given the situation.
 
@@ -111,7 +169,92 @@ def dynamic_base_power(
     eighteen that carry one *and* scale it. Those are the commoner half:
     Acrobatics doubles without an item, Hex doubles into a status, Stored Power
     reaches 100 off a single Calm Mind.
+
+    A second family scales through `onBasePower` instead, which the dumped
+    `dynamicPower` flag does not catch at all -- Knock Off has no
+    `basePowerCallback`. Those multipliers are applied on top of whatever the
+    first family works out.
     """
+    value = _base_value(
+        move,
+        attacker=attacker,
+        defender=defender,
+        attacker_hp_fraction=attacker_hp_fraction,
+        attacker_speed=attacker_speed,
+        defender_speed=defender_speed,
+        attacker_holds_item=attacker_holds_item,
+        attacker_positive_boosts=attacker_positive_boosts,
+        defender_status=defender_status,
+        fainted_allies=fainted_allies,
+        terrain=terrain,
+    )
+    return max(
+        1,
+        int(
+            value
+            * conditional_multiplier(
+                move,
+                attacker_status=attacker_status,
+                defender_status=defender_status,
+                defender_holds_item=defender_holds_item,
+                terrain=terrain,
+                weather=weather,
+            )
+        ),
+    )
+
+
+def conditional_multiplier(
+    move: MoveInfo,
+    *,
+    attacker_status: str | None = None,
+    defender_status: str | None = None,
+    defender_holds_item: bool = False,
+    terrain: str | None = None,
+    weather: str | None = None,
+) -> float:
+    """What the situation multiplies this move's base power by.
+
+    Separate from the value above because it is a different engine hook and a
+    different question: not "what power does this move have" but "what is
+    happening that changes it".
+    """
+    move_id = move.move_id
+    multiplier = 1.0
+
+    if move_id == KNOCK_OFF and defender_holds_item:
+        multiplier *= KNOCK_OFF_MULTIPLIER
+    if move_id == FACADE and attacker_status and attacker_status != FACADE_EXCLUDED_STATUS:
+        multiplier *= FACADE_MULTIPLIER
+    if move_id in POISON_DOUBLED_MOVES and defender_status in POISON_STATUSES:
+        multiplier *= POISON_DOUBLED_MULTIPLIER
+    if move_id in SOLAR_MOVES and weather in SOLAR_WEAKENING_WEATHER:
+        multiplier *= SOLAR_WEAKENED_MULTIPLIER
+    if TERRAIN_BOOSTED_TYPES.get(terrain or "") == move.type:
+        multiplier *= TERRAIN_BOOST_MULTIPLIER
+    # `terrain is not None` first: without it this is `None == None` for
+    # every ordinary move on a bare field, and multiplies all of them.
+    if terrain is not None and TERRAIN_SPECIFIC_MOVES.get(move_id) == terrain:
+        multiplier *= TERRAIN_SPECIFIC_MULTIPLIER
+
+    return multiplier
+
+
+def _base_value(
+    move: MoveInfo,
+    *,
+    attacker: SpeciesInfo | None,
+    defender: SpeciesInfo | None,
+    attacker_hp_fraction: float,
+    attacker_speed: int | None,
+    defender_speed: int | None,
+    attacker_holds_item: bool | None,
+    attacker_positive_boosts: int,
+    defender_status: str | None,
+    fainted_allies: int,
+    terrain: str | None,
+) -> int:
+    """The move's power before the situation scales it."""
     move_id = move.move_id
     static = move.base_power
 

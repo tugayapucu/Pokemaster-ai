@@ -107,6 +107,8 @@ class DamageSample:
             doubles=doubles and self.spread_targets > 1,
             attacker_burned=self.attacker.status == "brn",
             weather=self.weather,
+            attacker_item=self.attacker.current_item,
+            defender_item=self.defender.current_item,
             # Twenty-nine moves have their power computed per hit, and the
             # harness was comparing against the static value for all of them --
             # so a Stored Power off two Calm Minds read as a fivefold error in
@@ -120,9 +122,12 @@ class DamageSample:
                 defender_speed=(self.defender.computed_stats or {}).get("spe"),
                 attacker_holds_item=self.attacker.current_item is not None,
                 attacker_positive_boosts=self.attacker.boosts.positive_total,
+                attacker_status=self.attacker.status,
                 defender_status=self.defender.status,
+                defender_holds_item=self.defender.current_item is not None,
                 fainted_allies=self.fainted_allies,
                 terrain=self.terrain,
+                weather=self.weather,
             ),
         )
         return estimate.minimum, estimate.maximum
