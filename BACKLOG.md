@@ -218,29 +218,46 @@ Two things follow, both recorded rather than done:
   order (97.7%) and the knockout claim (99.0%) are measured. Replay agreement
   measures something narrower, and now says so.
 
-### 1. Mega: never scored, never measured
+### 1. Mega, continued — the harness is fixed, the measurement is not made
 
-Also from the review, and worse than it looked from outside.
+**Half done 2026-08-24.** The measuring instrument was broken in a way that
+made the item's own claim understate itself: *turning Mega on did not measure
+it either*.
 
-Mega is generated as a legal action (`available_specials` in
-`domain/legal_actions.py`), tracked (`mega_used`), and reaches the agent. And
-then:
+`active_by_ident` resolved a protocol ident to a Pokemon by species name. A
+Pokemon that Mega Evolves keeps its ident — `p1a: Metagross` — while its set
+becomes `Metagross-Mega`, so the names stop agreeing and the lookup returned
+None. A failed lookup does not mis-attribute a hit, it **drops** it. Every hit
+by or against a Mega'd Pokemon was silently excluded. Fixed: resolve by slot,
+which a forme change cannot break.
 
-- **The heuristic never reads `action.special`.** A Mega and a non-Mega of the
-  same move score *identically*, so which one the agent picks is whichever the
-  enumeration happens to hand it first. It has no opinion at all.
-- **No harness ever Megas.** Every measurement agent filters to
-  `special is None`, so the 92-94% damage figure and the 97.7% turn-order
-  figure were both measured with Mega switched off. Mega changes base stats,
-  ability, and sometimes typing — none of that has ever been checked against
-  the engine.
+Tenth instance of data tracked and never read, and the nastiest shape so far —
+a harness that discards exactly the cases it is pointed at.
 
-That is the ninth instance this project has found of *state tracked and never
-read*, and the first where the unread thing is a whole game mechanic.
+**What is still open, in order:**
 
-The job, in that order: let the differential and turn-order harnesses Mega, see
-what the accuracy does, and only then decide what the agent should think about
-it. Measure before building, as usual.
+1. **Measure it properly.** Two runs of 90 battles disagree in *direction* on
+   n≈115 Mega hits (94.8% and 76.1% against an 87–92% baseline). Nothing can
+   be concluded from that. Needs the standing bar — ≥1,500 battles across ≥2
+   seeds — and `TeamPool.generated` needs a **seed parameter** first, because
+   it currently draws a different pool every run and that is most of the swing.
+2. **A Mega's ability is public and we record it as unknown.** After
+   `|detailschange|` the forme is known and its ability is deterministic —
+   Metagross-Mega is always Tough Claws, there is exactly one option — but
+   `revealed_ability` stays None. Cheap, and it feeds damage estimates.
+3. **33 of the 57 abilities on Mega formes are unmodelled.** The
+   damage-relevant ones, from the engine: **Parental Bond** (two hits, the
+   second at half — effectively ×1.5), **Skill Link** (multi-hit always maxes,
+   ~×1.6 on those moves), **Protean** (STAB on everything), **Mold Breaker**
+   (ignores the defender's ability), and the field-setters **Drought**,
+   **Sand Stream**, **Snow Warning**, **Electric Surge**. Four are
+   Champions-specific and re-enabled by the mod rather than redefined
+   (`megasol`, `piercingdrill`, `eelevate`, `spicyspray`), so their definitions
+   are in the standard `abilities.ts` after all.
+4. **The agent still never reads `action.special`.** A Mega and a non-Mega of
+   the same move score identically, so which one it picks falls to enumeration
+   order. Do this *last*: what the agent should think about Mega depends on
+   what steps 1–3 say it is worth.
 
 ### 2. Make the terrain rules consult `is_grounded`
 
@@ -365,6 +382,10 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **A lookup that fails silently deletes your evidence.** `active_by_ident`
+  returned None for any Mega'd Pokemon, so the hits were dropped rather than
+  mis-attributed and the harness looked healthy while measuring nothing. When
+  a harness filters, count what it discarded.
 - **A held-out set is only held out along the axis you split it on.** The
   replay-id hash separated battles and left 74% of test-side teams present in
   training; agreement on genuinely unseen teams is four points lower (0014).
