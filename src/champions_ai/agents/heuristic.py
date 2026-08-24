@@ -59,7 +59,11 @@ POSSIBLE_KO_BONUS = 30.0
 ALLY_DAMAGE_PENALTY = -250.0
 IMMUNE_PENALTY = -60.0
 RESISTED_PENALTY = -15.0
-STATUS_MOVE_VALUE = 12.0
+# The fallback for the 56 status moves whose effects live in an `onHit`
+# callback the engine cannot dump. Fitted from 12 up to 30: humans reach for
+# Belly Drum, Haze, Defog and Baton Pass far more than a token value implied,
+# so "unknown" should not mean "probably not worth it".
+STATUS_MOVE_VALUE = 30.0
 
 # Protect is priced as damage *avoided*, in the same currency as damage dealt,
 # so the two compete on equal terms instead of Protect carrying a flat value
@@ -135,6 +139,11 @@ FLINCH_WEIGHT = 100.0
 # The tables below are judgements in the same sense STATUS_VALUE is, and are
 # priced as a fraction of a health bar for the same reason: so they compete
 # with damage on equal terms rather than sitting on a separate scale.
+#
+# They were then *fitted* by coordinate descent against human agreement on the
+# training half of the corpus, and reported on the test half, which the sweep
+# never saw (experiment 0010). The test gain came out larger than the training
+# gain, which is the sign that they generalise rather than memorise.
 
 # Which targets mean "our side". Boosts land on the move's target, so a Swords
 # Dance and a Growl carry the same field with opposite meanings.
@@ -148,7 +157,7 @@ SELF_TARGETS = frozenset({
 SCREEN_CONDITIONS = frozenset({"reflect", "lightscreen", "auroraveil"})
 SCREEN_TURNS = 3.0
 SCREEN_FRACTION_BLOCKED = 0.5
-SCREEN_WEIGHT = 45.0
+SCREEN_WEIGHT = 30.0
 
 # Everything else a move can put on a side. Hazards are deliberately cheap:
 # this is a four-Pokemon format over about five turns where rated humans
@@ -168,19 +177,19 @@ SIDE_CONDITION_VALUE = {
 # Weather and terrain are worth something to a team built around them and
 # little to one that is not, which this cannot see. A modest flat value is the
 # honest placeholder rather than a confident number.
-WEATHER_VALUE = 14.0
+WEATHER_VALUE = 26.0
 TERRAIN_VALUE = 14.0
-PSEUDO_WEATHER_VALUE = {"trickroom": 35.0, "gravity": 12.0}
+PSEUDO_WEATHER_VALUE = {"trickroom": 55.0, "gravity": 12.0}
 PSEUDO_WEATHER_DEFAULT = 10.0
 
 # Volatiles inflicted on an opponent, ordered by how much of a turn they take
 # away. Taunt and Encore remove a choice outright; Leech Seed is chip damage
 # with a heal attached.
 VOLATILE_VALUE = {
-    "taunt": 32.0,
-    "encore": 30.0,
+    "taunt": 50.0,
+    "encore": 15.0,
     "yawn": 30.0,
-    "leechseed": 26.0,
+    "leechseed": 13.0,
     "confusion": 25.0,
     "disable": 22.0,
     "attract": 18.0,
