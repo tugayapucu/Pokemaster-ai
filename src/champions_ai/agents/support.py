@@ -28,7 +28,7 @@ from champions_ai.agents.currency import (
     SUSTAIN_WEIGHT,
     SWITCH_WHEN_WEAKENED_BONUS,
 )
-from champions_ai.dex import MoveInfo
+from champions_ai.dex import ItemInfo, MoveInfo
 from champions_ai.domain.boosts import BOOST_FIELDS, MAX_STAGE, MIN_STAGE, Boosts
 
 # Weather-dependent recovery. The engine gives 2/3 in sun, 1/4 in any other
@@ -88,6 +88,30 @@ SCREENS = frozenset({"reflect", "lightscreen", "auroraveil"})
 # Force the target out, which undoes whatever it spent turns setting up.
 PHAZING = frozenset({"whirlwind", "roar"})
 
+# --- moves that need to know about held items ---------------------------
+#
+# All six were unpriceable until the tracker learned to tell "we never saw an
+# item" from "we watched it go". They are still only as good as that
+# knowledge: an opponent's item is hidden until it fires, so several of these
+# resolve to "cannot say" against a Pokemon that has shown us nothing.
+
+STUFF_CHEEKS = "stuffcheeks"
+STUFF_CHEEKS_BOOST = 2
+
+# Taking an item away is worth roughly what the item was doing. We only price
+# the ones we model the effect of; anything else is worth *something* but not
+# a number we can defend, so it falls back to this.
+ITEM_DENIAL_VALUE = 18.0
+CORROSIVE_GAS = "corrosivegas"
+
+# Trick and Switcheroo swap items rather than removing one, so they are only
+# good when ours is worse than theirs -- which is the whole point of the
+# move, and needs to know both.
+ITEM_SWAPS = frozenset({"trick", "switcheroo"})
+
+RECYCLE = "recycle"
+TEATIME = "teatime"
+
 # Perish Song is deliberately *not* priced. It cuts both ways -- everything on
 # the field faints, ours included -- so its worth depends on whether we are
 # ahead and on whether the target can be trapped, neither of which is modelled.
@@ -132,6 +156,10 @@ def score_support_move(
     own_side_conditions: Sequence[str] = (),
     opponent_side_conditions: Sequence[str] = (),
     team_statuses: Sequence[str | None] = (),
+    attacker_item: ItemInfo | None = None,
+    defender_item: ItemInfo | None = None,
+    consumed_item: ItemInfo | None = None,
+    observed_may_hold_item: bool = True,
 ) -> tuple[float, list[str]] | None:
     """What this move buys, or None if we genuinely cannot say.
 
@@ -315,6 +343,44 @@ def score_support_move(
         if net > 0:
             reasons.append(f"undoing {net} stage(s) they had set up")
         return value, reasons
+
+    # ------------------------------------------------------------- held items
+
+    if move_id == STUFF_CHEEKS:
+        # The engine refuses the move outright without a Berry, so this is a
+        # legality fact rather than a valuation.
+        if not attacker_item or not attacker_item.is_berry:
+            return 0.0, ["Stuff Cheeks needs a Berry to eat"]
+        gained = _headroom(attacker.boosts, "defense", STUFF_CHEEKS_BOOST)
+        return gained * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT, [
+            f"eats its {attacker_item.name} and raises Defense by {gained}"
+        ]
+
+    if move_id == CORROSIVE_GAS:
+        if observed is not None and not observed_may_hold_item:
+            return 0.0, ["they have nothing left to destroy"]
+        return ITEM_DENIAL_VALUE, ["destroys the item they are holding"]
+
+    if move_id in ITEM_SWAPS:
+        # Worth doing when ours is a liability and theirs is not. With their
+        # item unseen we cannot compare, and guessing here would be guessing
+        # about the more important half.
+        if observed is not None and not observed_may_hold_item and attacker_item:
+            return 0.0, ["they have nothing to swap for"]
+        if defender_item is None:
+            return None
+        return ITEM_DENIAL_VALUE, [f"takes their {defender_item.name}"]
+
+    if move_id == RECYCLE:
+        if consumed_item is None:
+            return 0.0, ["there is no consumed item to bring back"]
+        return ITEM_DENIAL_VALUE, [f"brings back its {consumed_item.name}"]
+
+    if move_id == TEATIME:
+        # Everything on the field eats its Berry, ours included. Whether that
+        # is good depends on who is holding what, which is exactly the half we
+        # cannot see.
+        return None
 
     # Everything else genuinely depends on state we do not track.
     return None

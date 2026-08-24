@@ -226,12 +226,63 @@ def test_phazing_undoes_what_they_set_up():
     assert fresh == 0.0
 
 
+# --------------------------------------------------------------- held items
+
+
+def _item(item_id, is_berry=False, mega_stone=None):
+    from champions_ai.dex import ItemInfo
+    return ItemInfo(item_id=item_id, name=item_id, is_berry=is_berry,
+                    mega_stone=mega_stone)
+
+
+def test_stuff_cheeks_needs_a_berry():
+    """The engine refuses the move outright without one, so this is a
+    legality fact rather than a valuation."""
+    with_berry, _ = _score("stuffcheeks", attacker_item=_item("sitrusberry", is_berry=True))
+    with_orb, _ = _score("stuffcheeks", attacker_item=_item("lifeorb"))
+    empty, _ = _score("stuffcheeks", attacker_item=None)
+    assert with_berry == pytest.approx(2 * STAGE)
+    assert with_orb == 0.0
+    assert empty == 0.0
+
+
+def test_stuff_cheeks_is_worth_less_at_a_high_defence():
+    boosted, _ = _score("stuffcheeks", attacker=_mon(boosts=Boosts(defense=5)),
+                        attacker_item=_item("sitrusberry", is_berry=True))
+    assert boosted == pytest.approx(1 * STAGE)
+
+
+def test_corrosive_gas_is_worth_nothing_once_the_item_is_gone():
+    live, _ = _score("corrosivegas", observed=_foe(), observed_may_hold_item=True)
+    spent, _ = _score("corrosivegas", observed=_foe(), observed_may_hold_item=False)
+    assert live > 0
+    assert spent == 0.0
+
+
+def test_a_swap_needs_to_know_what_they_are_holding():
+    """The whole point of Trick is that theirs is better than ours, and their
+    item is hidden until it fires -- so this is a case where guessing would be
+    guessing about the more important half."""
+    assert _score("trick", observed=_foe(), defender_item=None) is None
+    known, _ = _score("trick", observed=_foe(), defender_item=_item("lifeorb"))
+    assert known > 0
+
+
+def test_recycle_knows_whether_there_is_anything_to_recover():
+    """Not "cannot say": we watched the item go, so this is a definite
+    statement either way."""
+    something, _ = _score("recycle", consumed_item=_item("sitrusberry", is_berry=True))
+    nothing, _ = _score("recycle", consumed_item=None)
+    assert something > 0
+    assert nothing == 0.0
+
+
 # ----------------------------------------------------------- honestly unknown
 
 
 @pytest.mark.parametrize("move_id", [
     "batonpass", "copycat", "sleeptalk", "transform", "instruct", "trick",
-    "skillswap", "soak", "afteryou", "quash", "block", "recycle", "spite",
+    "skillswap", "soak", "afteryou", "quash", "block", "spite",
 ])
 def test_a_move_we_cannot_price_returns_none_rather_than_zero(move_id):
     """None means the effect depends on state nothing tracks, so the caller

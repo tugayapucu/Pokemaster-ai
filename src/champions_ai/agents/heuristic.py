@@ -852,6 +852,21 @@ class HeuristicAgent(Agent):
             team_statuses=tuple(
                 mon.status for mon in observation.own_side.team if not mon.fainted
             ),
+            # Ours is never hidden from us; theirs is, until it fires.
+            attacker_item=self.dex.items.get(attacker.current_item or ""),
+            defender_item=(
+                self.dex.items.get(observed.revealed_item or "")
+                if observed is not None
+                else None
+            ),
+            consumed_item=(
+                self.dex.items.get(observed.consumed_item or "")
+                if observed is not None
+                else None
+            ),
+            observed_may_hold_item=(
+                observed.may_hold_item if observed is not None else True
+            ),
         )
 
     def _boost_value(self, move, attacker, observed, on_us, reasons) -> float:
