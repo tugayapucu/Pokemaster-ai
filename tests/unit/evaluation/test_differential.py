@@ -10,7 +10,7 @@ each one made our damage model look wrong when it was not:
 - the spread reduction only applies when a move reaches more than one target.
 """
 
-from champions_ai.domain import BattlePokemon, PokemonSet
+from champions_ai.domain import BattlePokemon, PokemonSet, Side
 from champions_ai.evaluation.differential import (
     DamageCollector,
     active_by_ident,
@@ -404,3 +404,52 @@ def test_status_damage_between_turns_is_recorded_too():
     ], LOOKUP)
     assert [s.actual for s in samples] == [44]
     assert collector.unknown_hp == 0
+
+
+# ------------------------------------------------- finding a Pokemon that changed
+
+def _side(*species, active=(0, 1)):
+    return Side(
+        team=tuple(_mon(name) for name in species),
+        active_slots=tuple(active),
+    )
+
+
+def test_a_mega_evolved_pokemon_is_still_found():
+    """The bug that made "we have never measured Mega" true even with Mega on.
+
+    A Pokemon that Mega Evolves keeps its protocol ident -- `p1a: Metagross` --
+    while its set becomes `Metagross-Mega`. Matching by species then fails, and
+    a failed lookup does not mis-attribute the hit, it *drops* it. Every Mega'd
+    Pokemon was silently excluded from the damage measurement.
+    """
+    lookup = active_by_ident({"p1": _side("Metagross-Mega", "Kangaskhan")})
+    found = lookup("p1a: Metagross")
+    assert found is not None
+    assert found.pokemon_set.species == "Metagross-Mega"
+
+
+def test_the_second_slot_resolves_too():
+    lookup = active_by_ident({"p1": _side("Metagross", "Kangaskhan-Mega")})
+    found = lookup("p1b: Kangaskhan")
+    assert found is not None
+    assert found.pokemon_set.species == "Kangaskhan-Mega"
+
+
+def test_a_bare_team_still_matches_by_species():
+    """Some callers only have the list. It keeps the old blind spot, which is
+    why passing the Side is preferred."""
+    lookup = active_by_ident({"p1": [_mon("Charizard")]})
+    assert lookup("p1a: Charizard") is not None
+    assert lookup("p1a: Metagross") is None
+
+
+def test_an_empty_slot_falls_back_to_the_species_scan():
+    """An ident naming a slot the side says is empty is a contradiction, and
+    the forgiving reading wins: fall back to matching by name rather than
+    dropping the hit. Dropping is what caused the Mega blind spot, so it is
+    not the failure mode to prefer."""
+    lookup = active_by_ident({"p1": _side("Metagross", "Kangaskhan", active=(0, None))})
+    found = lookup("p1b: Kangaskhan")
+    assert found is not None
+    assert found.pokemon_set.species == "Kangaskhan"

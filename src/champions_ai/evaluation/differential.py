@@ -27,7 +27,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from champions_ai.dex import Dex
-from champions_ai.domain import BattlePokemon
+from champions_ai.domain import BattlePokemon, Side
 from champions_ai.mechanics import (
     apply_boost,
     attacking_side,
@@ -455,17 +455,38 @@ def compare(
     return report
 
 
-def active_by_ident(sides: dict[str, list[BattlePokemon]]) -> Callable[[str], BattlePokemon | None]:
+def active_by_ident(
+    sides: "dict[str, list[BattlePokemon] | Side]",
+) -> Callable[[str], BattlePokemon | None]:
     """Build a lookup from `p1a: Chomper` to that Pokemon on its own side.
 
-    Matching is by species rather than nickname because the request payload
-    identifies Pokemon by species while the protocol may use a nickname, and
-    Species Clause makes species unique within a team.
+    **Resolve by slot when the caller passes a `Side`.** Matching by species
+    alone is not safe: a Pokemon that Mega Evolves keeps its protocol ident
+    (`p1a: Metagross`) while its set becomes `Metagross-Mega`, so the names
+    stop agreeing and the lookup returns None. That does not mis-attribute the
+    hit -- it drops it, silently, which is worse. Every Mega'd Pokemon was
+    being excluded from the damage measurement, so "we have never measured
+    Mega" was true even in the runs that switched it on.
+
+    A plain list of Pokemon is still accepted, and still matched by species,
+    because that is all some callers have. It carries the same blind spot, so
+    prefer passing the `Side`.
     """
 
     def lookup(ident: str) -> BattlePokemon | None:
-        side, _, name = split_ident(ident)
-        for mon in sides.get(side, ()):
+        side, slot, name = split_ident(ident)
+        found = sides.get(side)
+        if found is None:
+            return None
+        if isinstance(found, Side):
+            if slot is not None and slot < len(found.active_slots):
+                index = found.active_slots[slot]
+                if index is not None:
+                    return found.team[index]
+            team: Sequence[BattlePokemon] = found.team
+        else:
+            team = found
+        for mon in team:
             if to_id(mon.pokemon_set.species) == to_id(name):
                 return mon
         return None
