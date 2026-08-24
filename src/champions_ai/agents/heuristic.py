@@ -211,6 +211,10 @@ AVERAGE_WEIGHT = 0.25
 # power. Switching remains an open problem, not a solved one.
 SWITCH_COST = -25.0
 
+# High Jump Kick, Axe Kick and Supercell Slam take half the user's maximum HP
+# when they miss. The engine spells it `baseMaxhp / 2`.
+CRASH_DAMAGE_FRACTION = 0.5
+
 
 @dataclass(frozen=True)
 class ScoredAction:
@@ -740,7 +744,9 @@ class HeuristicAgent(Agent):
         clamped to what is actually available: healing above full is wasted,
         and recoil cannot take more HP than the Pokemon has.
         """
-        if not move.drain and not move.recoil:
+        if not (
+            move.drain or move.recoil or move.has_crash_damage or move.self_switch
+        ):
             return 0.0, []
 
         dealt = estimate.average
@@ -764,6 +770,25 @@ class HeuristicAgent(Agent):
             reasons.append(f"but costs ~{loss:.0%} of its own HP in recoil")
             if taken >= attacker.current_hp:
                 reasons.append("which would knock it out")
+
+        if move.has_crash_damage:
+            # High Jump Kick and friends take half a health bar on a *miss*,
+            # so the cost is the miss chance times that. A 90%-accurate move
+            # is not 90% of a good move here; it is 90% of a good move and 10%
+            # of a disaster.
+            miss = 1.0 - move.hit_chance
+            loss = miss * CRASH_DAMAGE_FRACTION
+            value -= loss * SUSTAIN_WEIGHT
+            reasons.append(
+                f"and costs half its HP on the {miss:.0%} chance it misses"
+            )
+
+        if move.self_switch and attacker.hp_fraction <= LOW_HP_FRACTION:
+            # U-turn, Volt Switch and Flip Turn attack *and* pivot. Getting
+            # something weakened out of danger is worth what it is worth
+            # anywhere else.
+            value += SWITCH_WHEN_WEAKENED_BONUS
+            reasons.append("and pivots something weakened out of danger")
 
         return value, reasons
 
@@ -1183,6 +1208,10 @@ class HeuristicAgent(Agent):
         """
         move = self.dex.get_move(attacker_move_id(observation, slot, action))
         defending_key = move.defensive_stat
+        # Darkest Lariat and Sacred Sword ignore the target's defensive stages
+        # outright, which is the whole reason to bring them into a boosted
+        # matchup.
+        guard_stage = 0 if move.ignore_defensive else None
         # Foul Play swings with the target's Attack, so the attacking stat has
         # to be gathered here, where the target is known.
         attacking_key = move.offensive_stat if move.uses_target_offense else None
@@ -1201,7 +1230,10 @@ class HeuristicAgent(Agent):
                 species=species,
                 remaining_hp=max(1, ally.current_hp),
                 defending_stat=apply_boost(
-                    stats.get(defending_key, 100), ally.boosts.stage(defending_key)
+                    stats.get(defending_key, 100),
+                    guard_stage
+                    if guard_stage is not None
+                    else ally.boosts.stage(defending_key),
                 ),
                 is_ally=True,
                 status=ally.status,
@@ -1241,7 +1273,10 @@ class HeuristicAgent(Agent):
                 species=species,
                 remaining_hp=remaining,
                 defending_stat=apply_boost(
-                    estimated[defending_key], observed.boosts.stage(defending_key)
+                    estimated[defending_key],
+                    guard_stage
+                    if guard_stage is not None
+                    else observed.boosts.stage(defending_key),
                 ),
                 is_ally=False,
                 index=index,

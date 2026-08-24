@@ -71,3 +71,36 @@ def test_a_move_that_always_crits_is_a_certainty_not_a_chance():
     """Frost Breath, Storm Throw and Flower Trick. The calibration excluded
     them as "crits" rather than predicting them as the certainties they are."""
     assert critical_chance(_move("frostbreath", always_crits=True)) == 1.0
+
+
+def test_the_crit_chance_lifts_the_expected_damage_not_the_range():
+    """A crit is a different calculation, not a lucky end of this one -- so it
+    belongs in the mean and not in the min or max. `critical_chance` was
+    exported and called by nothing until now."""
+    from champions_ai.dex import Dex
+    from champions_ai.mechanics import estimate_damage
+
+    dex = Dex.from_payload({
+        "species": {"a": {"name": "A", "types": ["Normal"],
+                          "baseStats": {"hp": 100, "atk": 100, "def": 100,
+                                        "spa": 100, "spd": 100, "spe": 100},
+                          "abilities": [], "weightkg": 1.0, "baseSpecies": "A"}},
+        "moves": {
+            "plain": {"name": "plain", "type": "Normal", "category": "Physical",
+                      "basePower": 100, "accuracy": 100, "priority": 0,
+                      "target": "normal", "flags": [], "secondaries": []},
+            "sharp": {"name": "sharp", "type": "Normal", "category": "Physical",
+                      "basePower": 100, "accuracy": 100, "priority": 0,
+                      "target": "normal", "flags": [], "secondaries": [],
+                      "critRatio": 3},
+        },
+        "types": ["Normal"], "chart": {"Normal": {"Normal": 1.0}},
+    })
+    species = dex.get_species("A")
+    common = dict(attacker=species, attack_stat=150, defender=species,
+                  defense_stat=100, defender_hp=200)
+    plain = estimate_damage(dex, dex.get_move("plain"), **common)
+    sharp = estimate_damage(dex, dex.get_move("sharp"), **common)
+
+    assert (sharp.minimum, sharp.maximum) == (plain.minimum, plain.maximum)
+    assert sharp.average > plain.average, "a wider crit stage is worth more"

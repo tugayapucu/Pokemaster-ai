@@ -434,10 +434,19 @@ def estimate_damage(
     low = rolled(MIN_ROLL_PERCENT)
     high = rolled(MAX_ROLL_PERCENT)
     average_hit = (low + high) / 2
+
+    # A critical hit is a flat 1.5x, and the fourteen high-crit moves here land
+    # one far more often than the ordinary 1 in 24. It belongs in the
+    # *expected* damage but not in the range: the range is the ordinary roll,
+    # and a crit is a different calculation rather than a lucky end of this
+    # one. Already-certain crits are folded into `crit` above and must not be
+    # counted twice.
+    crit_lift = 1.0 if move.always_crits else 1 + (CRIT_MULTIPLIER - 1) * critical_chance(move)
+
     return DamageEstimate(
         minimum=max(1, int(low * low_hits * crit)),
         maximum=max(1, int(high * high_hits * crit)),
         effectiveness=effectiveness,
         defender_hp=defender_hp,
-        expected=average_hit * expected_hits(move) * crit,
+        expected=average_hit * expected_hits(move) * crit * crit_lift,
     )

@@ -91,7 +91,10 @@ class DamageSample:
         # stats before them -- and Intimidate alone makes them vary constantly.
         attack = apply_boost(stats.get(attacking, 100), swinger.boosts.stage(attacking))
         defence = apply_boost(
-            guard.get(defending, 100), self.defender.boosts.stage(defending)
+            guard.get(defending, 100),
+            # Darkest Lariat and Sacred Sword ignore the target's defensive
+            # stages outright.
+            0 if move.ignore_defensive else self.defender.boosts.stage(defending),
         )
         estimate = estimate_damage(
             dex,
