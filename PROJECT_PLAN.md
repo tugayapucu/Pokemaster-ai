@@ -836,7 +836,9 @@ That last refinement matters here more than it would elsewhere: **75 of this dex
 
 Five more support moves became priceable as a result: Stuff Cheeks, Corrosive Gas, Recycle, Trick and Switcheroo. **26 of the 54 are priced now**, up from 21. Trick and Switcheroo deliberately return "cannot say" while the opponent's item is unseen, because the whole point of them is that theirs is better than ours.
 
-Agreement is neutral throughout (p 1 on both halves), which is expected for corrections to hidden-information assumptions about rare moves, and is not the reason for making them.
+Agreement is neutral throughout (p 1 on both halves), and so is **strength**: 1,600 paired battles across two seeds against an agent using the old assumption, **50.62% pooled (95% CI 48.18-53.07%, p 0.617)**, the seeds disagreeing in direction. Both instruments say nothing, which is the expected result for a correction to a hidden-information assumption -- humans and self-play opponents cannot see the item either, so neither can reward getting it right.
+
+The change is kept because the ambiguity was a genuine bug and the assumption is correct about the game, which is the standard this project set for itself. Where that standard has been applied to a *scoring* change rather than a modelling one -- the joint knockout correction in 0011 -- it was flagged as arguable, and this is not that case: `revealed_item is None` meaning two different things was wrong however it scored.
 
 ### Deliberately not done
 
