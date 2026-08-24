@@ -122,21 +122,51 @@ The **five support moves** the item was originally about — Skill Swap, Role
 Play, Entrainment, Worry Seed, Simple Beam — are still unpriced, and sit with
 the rest in item 1 below.
 
-### 1. The rest of the unpriced support moves
+### ~~1. The rest of the unpriced support moves~~ — mostly done 2026-08-24
 
-23 remain of the original 54. They cluster, so each cluster is one job:
+Fourteen of the 23 are now priced, in four clusters, each its own commit:
 
 ```
-last-move tracking     Copycat, Instruct, Sleep Talk, Spite
-type overwriting       Soak, Forest's Curse, Trick-or-Treat, Magic Powder,
-                       Reflect Type
-turn-order tricks      After You, Quash, Ally Switch
-trapping               Block, Mean Look
-one-offs               Baton Pass, Transform, Lock-On, Perish Song,
-                       Guard Split, Power Split, Magnetic Flux, Swallow, Teatime
+borrowing another move   Copycat, Sleep Talk, Instruct           (Spite left)
+rewriting a typing       Soak, Magic Powder, Forest's Curse,
+                         Trick-or-Treat, Reflect Type
+buying an ordering       After You, Quash                  (Ally Switch left)
+denying a retreat        Block, Mean Look
+handing an ability       Skill Swap, Role Play, Entrainment,
+                         Worry Seed, Simple Beam
 ```
 
-### 2. Make the terrain rules consult `is_grounded`
+Not one of them is priced with a new constant. Each reuses a currency that was
+already there — After You is worth the turn our partner would otherwise lose,
+Block is worth exactly what we price our *own* escape at, and the retyping and
+ability moves are worth the difference between two runs of the damage
+estimator. That last trick needed `estimate_damage` to answer "what if they
+were this type instead", which is now an explicit `defender_types` override.
+
+**The corpus cannot judge any of this.** Humans picked one of these fourteen
+**sixteen times in 500 battles** — seven Instructs and nine Soaks, and none of
+the other twelve at all. Agreement moved 45.42% → 45.45% on train and 47.25%
+→ 47.30% on test, 3 up and 0 down, which is neither significant nor meant to
+be. The verification is **29 tests against the engine's own rules** instead:
+`moves.ts` for the failure cases, the move flags already in our dump for what
+refuses to be borrowed, the ability flags for what refuses to be handed
+around, and `trapped: 3` in the type chart for why Ghosts cannot be trapped.
+
+Three things the corpus *did* catch, all in Instruct:
+
+- **It is usually not the last move that gets repeated.** Instruct is priority
+  0 and its users are slow, so the ally has already moved by the time it
+  resolves. Reading `last_move` gave the previous turn's move, and it was
+  wrong in all seven human Instructs — twice reporting "nothing to repeat" for
+  a Torkoal that fired an Eruption in that very turn.
+- **Not everything gains from going twice in one turn.** The repeat is
+  immediate, so a second Protect is refused and a second Trick Room undoes the
+  first. Without that rule the best repeat for one ally came out as its
+  Protect, at 310 points for an effect worth nothing.
+- **Instruct's target is `normal`, not `adjacentAlly`.** The engine offers it
+  across the field, which hands the opponent a free attack.
+
+### 1. Make the terrain rules consult `is_grounded`
 
 `is_grounded` exists now but nothing calls it. Five rules still apply to
 Flying types and Levitate users that should be exempt:
@@ -151,7 +181,7 @@ the terrain damage bonuses (Electric, Grassy, Psychic)   same
 
 Cheap, and it is the last of the terrain work.
 
-### 3. Speed Boost and the weather Speed abilities
+### 2. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -159,6 +189,29 @@ Speed Boost needs a per-turn counter.
 
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
+
+### 3. The support moves that are still unpriced, and why
+
+Put last deliberately: every one of these is blocked on something we do not
+track rather than on effort, so the two items above are worth more per hour.
+Kept as an item rather than closed, because "we cannot say" is a claim that
+should be revisited, not a permanent verdict.
+
+| Move | Why |
+|---|---|
+| **Ally Switch** | Its value is dodging an attack aimed at a slot, and which slot they aimed at is exactly what a player cannot see. |
+| **Perish Song** | Cuts both ways. Depends on being ahead and on trapping, neither modelled. A first attempt at a number cost three labels. |
+| **Teatime** | Everything on the field eats its Berry, ours included — and their Berries are the half we cannot see. |
+| **Baton Pass** | Passes boosts to a chosen bench Pokemon. Needs a model of who benefits, which is a matchup question. |
+| **Transform** | Becomes the target. Priceable in principle, but the value is next turn's whole moveset. |
+| **Spite** | PP is not modelled at all, an opponent's is unknowable, and four PP in a five-turn format is rarely what binds. |
+| **Swallow** | Needs a Stockpile counter that nothing tracks. |
+| **Lock-On** | Guarantees next turn's hit. Worth the accuracy gap on a move we have not chosen yet. |
+| **Wish, Healing Wish, Decorate, Magnetic Flux, Guard/Power Split** | Ally-facing or delayed; the arithmetic is easy and the plumbing to reach the right Pokemon is not there yet. |
+
+Three more — **Trick, Switcheroo, Fling** — are priced already, but only once
+the opponent's item has shown itself, which is the same shape as the five
+ability moves above.
 
 ---
 
@@ -194,6 +247,10 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **When the corpus cannot judge, the engine must.** Fourteen support moves
+  were priced this round and humans picked them sixteen times in 500 battles.
+  Agreement moved 0.03 points, which says nothing either way. Twenty-nine
+  tests against `moves.ts` say something.
 - **Rarity in the corpus is not unimportance.** The corpus is a measuring
   instrument, not the target.
 - **Check the size of a gap before trying to close it.** Target selection was
