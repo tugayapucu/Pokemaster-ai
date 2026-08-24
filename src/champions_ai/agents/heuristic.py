@@ -250,6 +250,48 @@ class ScoredAction:
     action: SlotAction
     score: float
     reasons: tuple[str, ...] = field(default=())
+    # What this action does, and to whom. Needed because the joint score is a
+    # sum of independent slots, and two attacks aimed at the same Pokemon are
+    # not independent: their damage combines, and their knockout bonuses
+    # overlap.
+    target_index: int | None = None
+    damage_fraction: float = 0.0
+    knockout_bonus: float = 0.0
+
+
+def _combined_targets(scored: Sequence[ScoredAction]) -> float:
+    """Correct the knockout bonus for slots aimed at the same Pokemon.
+
+    The joint score is a sum of independently scored slots, which cannot see
+    that two attacks land on one target. That is wrong in both directions:
+
+    - **Overkill.** Two guaranteed knockouts on the same Pokemon each collect
+      the full bonus, so the agent was *rewarded* for wasting an attack.
+    - **Focus fire.** Two attacks that each take half a health bar remove a
+      Pokemon between them and collected nothing for it, because neither is a
+      knockout on its own.
+
+    So the bonus is recomputed once per target from the combined damage, and
+    what the slots already claimed is taken back off.
+    """
+    by_target: dict[int, list[ScoredAction]] = {}
+    for entry in scored:
+        if entry.target_index is None:
+            continue
+        by_target.setdefault(entry.target_index, []).append(entry)
+
+    adjustment = 0.0
+    for entries in by_target.values():
+        if len(entries) < 2:
+            continue
+        claimed = sum(entry.knockout_bonus for entry in entries)
+        combined = sum(entry.damage_fraction for entry in entries)
+        if combined >= 1.0:
+            deserved = GUARANTEED_KO_BONUS
+        else:
+            deserved = max(entry.knockout_bonus for entry in entries)
+        adjustment += deserved - claimed
+    return adjustment
 
 
 class ResolvedTarget(NamedTuple):
@@ -275,6 +317,9 @@ class ResolvedTarget(NamedTuple):
     item: str | None = None
     # Sticky Hold refuses to give the item up, so Knock Off gets no boost.
     ability: str | None = None
+    # Where this Pokemon sits in the opponent's revealed list, so two slots
+    # aiming at the same one can be recognised as doing so.
+    index: int | None = None
 
 
 class HeuristicAgent(Agent):
@@ -311,10 +356,11 @@ class HeuristicAgent(Agent):
         cache: dict[tuple[int, SlotAction], ScoredAction] = {}
 
         for joint in legal_actions:
-            total = sum(
-                self._cached(observation, slot, action, cache).score
+            scored = [
+                self._cached(observation, slot, action, cache)
                 for slot, action in enumerate(joint.slot_actions)
-            )
+            ]
+            total = sum(s.score for s in scored) + _combined_targets(scored)
             if total > best_score:
                 best, best_score = joint, total
 
@@ -487,12 +533,14 @@ class HeuristicAgent(Agent):
             f"{defender_species.name}'s remaining HP"
         )
 
+        knockout_bonus = 0.0
         if estimate.guaranteed_ko:
-            score += GUARANTEED_KO_BONUS
+            knockout_bonus = GUARANTEED_KO_BONUS
             reasons.append("guaranteed knockout")
         elif estimate.possible_ko:
-            score += POSSIBLE_KO_BONUS
+            knockout_bonus = POSSIBLE_KO_BONUS
             reasons.append("knockout on a high roll")
+        score += knockout_bonus
 
         if estimate.effectiveness > 1:
             reasons.append(f"super effective ({estimate.effectiveness:g}x)")
@@ -515,7 +563,14 @@ class HeuristicAgent(Agent):
         score += rider * move.hit_chance
         reasons.extend(rider_reasons)
 
-        return ScoredAction(action, score, tuple(reasons))
+        return ScoredAction(
+            action,
+            score,
+            tuple(reasons),
+            target_index=target.index,
+            damage_fraction=estimate.average_fraction * move.hit_chance,
+            knockout_bonus=knockout_bonus,
+        )
 
     def _rider_value(
         self, move, defender_species, observation: Observation, slot: int
@@ -1124,6 +1179,7 @@ class HeuristicAgent(Agent):
                     estimated[defending_key], observed.boosts.stage(defending_key)
                 ),
                 is_ally=False,
+                index=index,
                 status=observed.status,
                 item=observed.revealed_item,
                 ability=observed.revealed_ability,
