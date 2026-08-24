@@ -689,6 +689,45 @@ Two more silent-data bugs fell out on the way, the ninth and tenth of the same s
 
 The first attempt at that measurement was discarded: it ran each agent against Random on *independently generated* team pools, so the two numbers were never comparable. Paired on the same teams is both correct and far more sensitive.
 
+### Auditing the move data, and what it found (2026-08-24)
+
+Prompted by a question about whether Knock Off was implemented correctly. It was not: the engine asks `singleEvent('TakeItem', ...)` before granting the 1.5x and gives no boost when the item cannot be taken. **Seventy-five items in this dex refuse, and every one is a Mega Stone** — un-removable from the species it evolves, though not from anyone else. Champions teams are full of them, so "holds anything" was wrong more often than right. Measured after the fix: 0.996 against Mega Stone holders, 0.982 against other items.
+
+That led to a full audit of every engine field on all 500 moves against what `MoveInfo` carried. The headline:
+
+> **175 of the 500 moves are Status moves, and every one except Protect scored a flat 12.0.**
+
+The fields that separate them had never been dumped. Worse than sameness was **redundancy**: a flat value cannot say "this does nothing right now", so Recover at full HP, Swords Dance at +6 and a second Tailwind all scored exactly as much as their first use.
+
+Pricing them (experiment 0009) is **the largest agreement gain the project has measured**:
+
+```
+overall agreement                    43.2% -> 43.8%
+on the 3,356 status-move slots       32.2% -> 37.1%
+McNemar  203 newly agree, 128 newly disagree, chi2 16.54, p 4.8e-05
+
+tailwind 25->57%   trickroom 32->42%   shellsmash 13->74%   coil 64->100%
+```
+
+Three of the four prices are **not new judgements**: a stat stage uses `STAT_STAGE_VALUE`, a status uses `STATUS_VALUE`, healing uses `SUSTAIN_WEIGHT`, and screens are priced off the incoming threat the way Protect is. A Swords Dance is worth what a Swords Dance *rider* is worth. Nothing about a move being "a status move" changes what it buys.
+
+**Protect regressed**, 45% -> 44% on 1,430 labels, the largest absolute cost — other status moves now outbid it. Recorded rather than smoothed over.
+
+#### The rest of the audit
+
+Two further families were found and fixed the same way:
+
+- **`multihit`** — fourteen moves land repeatedly and we predicted one hit, so Icicle Spear scored at a third of what it does. The harness was wrong the *same way* and so could not catch it: it took the first `|-damage|` line and cleared the pending move. That clearing also meant **the second target of every spread move was never sampled**. Both are measurable now.
+- **`willCrit`** — Frost Breath, Storm Throw and Flower Trick always crit, and the calibration excluded them as "crits" rather than predicting a certainty.
+
+Still carried but unused: `ohko` (4 moves), `onModifyType` (Weather Ball and friends change their own type, so the chart reads the wrong row), `ignoreDefensive`, `hasCrashDamage`, and the 56 status moves whose effects live in an `onHit` callback that cannot be dumped — Belly Drum, Haze, Heal Bell, Defog, Baton Pass.
+
+#### A third instance of the recurring failure
+
+A zero base power meant **three different things** in this dex — computed per hit (`basePowerCallback`), scaled by the situation (`onBasePower`), and bypasses the formula entirely (`damage`/`damageCallback`) — and each had to be found by following a residual, because in all three cases the data said nothing at all. `BOOST_FIELDS` was likewise missing accuracy and evasion, so the tracker dropped those boosts on the floor; and it existed in **two copies**, domain and simulator, which is the same drift that had `estimate_damage` reading the type chart directly while a move-aware `Dex.effectiveness` sat unused beside it.
+
+**The check that catches this class**: for each new public symbol, name the test that fails if it stops working — and for each table, grep for a second copy of it.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
