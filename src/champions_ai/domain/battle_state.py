@@ -17,6 +17,9 @@ class BattleState(BaseModel, frozen=True):
     weather: str | None = None
     terrain: str | None = None
     field_conditions: dict[str, int] = Field(default_factory=dict)
+    # The last move executed by either side. Not a property of either side, so
+    # it lives here -- and Copycat needs it.
+    last_move_used: str | None = None
 
     @model_validator(mode="after")
     def _check_shape(self) -> "BattleState":

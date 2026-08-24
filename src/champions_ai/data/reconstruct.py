@@ -241,6 +241,9 @@ def _own_side(
                 # PP is not published, and claiming a number would be invented.
                 move_pp=None,
                 revealed_moves=frozenset(entry.moves),
+                # Our own side here is rebuilt from the *opposing* tracker's
+                # view of us, so it already knows what we last used.
+                last_move=seen.last_move if seen is not None else None,
                 has_been_active=seen is not None,
             )
         )
@@ -308,6 +311,7 @@ def reconstruct_decisions(
                         weather=trackers[player].weather,
                         terrain=trackers[player].terrain,
                         field_conditions=dict(trackers[player].field_conditions),
+                        last_move_used=trackers[player].last_move_used,
                     ),
                     choices=tuple(choices),
                     known_move_counts=move_counts,

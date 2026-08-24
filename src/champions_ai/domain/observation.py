@@ -29,6 +29,8 @@ class ObservedPokemon(BaseModel, frozen=True):
     # Turns out, counting this one. Zero means unknown, not new.
     turns_on_field: int = 0
     revealed_moves: frozenset[str] = frozenset()
+    # Which of them was used most recently. Public: everyone watched it happen.
+    last_move: str | None = None
     revealed_ability: str | None = None
     revealed_item: str | None = None
     # We watched an item leave, so they are *known* to be holding nothing.
@@ -61,6 +63,7 @@ class ObservedPokemon(BaseModel, frozen=True):
             protect_streak=mon.protect_streak,
             turns_on_field=mon.turns_on_field,
             revealed_moves=mon.revealed_moves,
+            last_move=mon.last_move,
             revealed_ability=mon.current_ability if mon.ability_revealed else None,
             revealed_item=mon.current_item if mon.item_revealed else None,
             item_consumed=mon.item_revealed and mon.current_item is None,
@@ -104,6 +107,10 @@ class Observation(BaseModel, frozen=True):
     weather: str | None = None
     terrain: str | None = None
     field_conditions: dict[str, int] = Field(default_factory=dict)
+    # The last move executed by *anyone*, which is what Copycat copies. Kept at
+    # the field level rather than per-Pokemon because that is where the engine
+    # keeps it, and because Copycat happily copies the opponent's move.
+    last_move_used: str | None = None
 
     @classmethod
     def from_battle_state(cls, state: BattleState, player: int) -> "Observation":
@@ -118,4 +125,5 @@ class Observation(BaseModel, frozen=True):
             weather=state.weather,
             terrain=state.terrain,
             field_conditions=dict(state.field_conditions),
+            last_move_used=state.last_move_used,
         )

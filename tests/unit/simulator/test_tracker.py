@@ -498,3 +498,54 @@ def test_our_own_single_turn_effects_expire_at_the_turn_boundary():
     _sideline(tracker, "|turn|3")
     _request(tracker, _move_request())
     assert "roost" not in tracker.own_side().team[0].volatile_conditions
+
+
+def test_the_last_move_is_recorded_for_the_opponent():
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Landorus|Landorus-Therian, L50, M|100/100",
+        "|move|p2a: Landorus|Earthquake|p1a: Charizard",
+        "|move|p2a: Landorus|Rock Slide|p1a: Charizard",
+    )
+    seen = tracker.opponent_side().revealed[0]
+    assert seen.revealed_moves == {"earthquake", "rockslide"}
+    assert seen.last_move == "rockslide"
+
+
+def test_the_last_move_is_recorded_for_our_own_side_too():
+    """The fourth piece of state that was tracked on one side only, after
+    boosts, side conditions and single-turn effects. Instruct repeats an
+    *ally's* last move, so ours is not a view concern."""
+    tracker = _tracker()
+    _sideline(tracker, "|move|p1a: Charizard|Tackle|p2a: Landorus")
+    _request(tracker, _move_request())
+    assert tracker.own_side().team[0].last_move == "tackle"
+
+
+def test_the_field_remembers_the_last_move_anyone_used():
+    """What Copycat copies: the engine keeps one battle-wide `lastMove`, and
+    it happily copies the opponent's."""
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|move|p1a: Charizard|Tackle|p2a: Landorus",
+        "|switch|p2a: Landorus|Landorus-Therian, L50, M|100/100",
+        "|move|p2a: Landorus|Earthquake|p1a: Charizard",
+    )
+    _request(tracker, _move_request())
+    assert tracker.observation().last_move_used == "earthquake"
+
+
+def test_switching_out_forgets_the_last_move():
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Landorus|Landorus-Therian, L50, M|100/100",
+        "|move|p2a: Landorus|Earthquake|p1a: Charizard",
+        "|switch|p2a: Landorus|Landorus-Therian, L50, M|100/100",
+    )
+    seen = tracker.opponent_side().revealed[0]
+    assert seen.last_move is None
+    # ...but we still know it has the move.
+    assert "earthquake" in seen.revealed_moves

@@ -126,6 +126,9 @@ class _OpponentPokemon:
         self.protect_streak = 0
         self.turns_on_field = 0
         self.revealed_moves: set[str] = set()
+        # Which of them went last. A set cannot answer that, and Instruct,
+        # Spite and Encore all ask.
+        self.last_move: str | None = None
         self.revealed_item: str | None = None
         # `revealed_item is None` meant two different things -- "we have never
         # seen an item" and "we watched it get used up" -- and the second is
@@ -149,6 +152,7 @@ class _OpponentPokemon:
             protect_streak=self.protect_streak,
             turns_on_field=self.turns_on_field,
             revealed_moves=frozenset(self.revealed_moves),
+            last_move=self.last_move,
             revealed_ability=self.revealed_ability,
             revealed_item=self.revealed_item,
             item_consumed=self.item_consumed,
@@ -206,6 +210,12 @@ class BattleTracker:
         # boosts above, and it matters for the same reason: a Roost strips our
         # own Flying type, so an Earthquake that should miss us connects.
         self._own_single_turn: dict[str, set[str]] = {}
+        # Our own side's last move per Pokemon, kept here for the same reason
+        # `_own_boosts` is: `own_side()` is rebuilt from the request payload
+        # every turn, and the request says nothing about what was used.
+        self._own_last_move: dict[str, str] = {}
+        # ...and the last move used by anyone, which is what Copycat copies.
+        self.last_move_used: str | None = None
         self._protect_streak: dict[tuple[str, str], int] = {}
         # The turn each Pokemon arrived, for both sides. Fake Out and
         # First Impression only work on the first turn out, and the engine
@@ -335,6 +345,7 @@ class BattleTracker:
                 # A Pokemon leaving the field loses its stages, ours included.
                 self._own_boosts.pop(name, None)
                 self._own_single_turn.pop(name, None)
+                self._own_last_move.pop(name, None)
             return
 
         species = species_from_details(details)
@@ -355,6 +366,7 @@ class BattleTracker:
         mon.boosts = Boosts()
         mon.volatiles.clear()
         mon.single_turn.clear()
+        mon.last_move = None
         mon.protect_streak = 0
         mon.turns_on_field = 0
         self._protect_streak.pop((side, name), None)
@@ -583,9 +595,23 @@ class BattleTracker:
             self._own_boosts[name] = current.clamped_add(field, delta)
 
     def _on_move(self, args: list[str]) -> None:
+        """Record what was used -- for both sides, which is new.
+
+        This handler watched only the opponent, which is the fourth time a
+        piece of state has been tracked on one side only (after boosts, side
+        conditions and single-turn effects). Our own last move is not a view
+        concern: Instruct repeats an *ally's*, so we need ours too.
+        """
+        move_id = to_id(args[1])
+        self.last_move_used = move_id
+        side, _, name = split_ident(args[0])
+        if side == self.own_tag:
+            self._own_last_move[name] = move_id
+            return
         mon = self._opponent_at(args[0])
         if mon:
-            mon.revealed_moves.add(to_id(args[1]))
+            mon.revealed_moves.add(move_id)
+            mon.last_move = move_id
 
     def _on_minor_item(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
@@ -782,6 +808,9 @@ class BattleTracker:
                     turns_on_field=self.turns_on_field(
                         self.own_tag, split_ident(entry["ident"])[2]
                     ),
+                    last_move=self._own_last_move.get(
+                        split_ident(entry["ident"])[2]
+                    ),
                     has_been_active=bool(entry.get("active")),
                 )
             )
@@ -861,4 +890,5 @@ class BattleTracker:
             weather=self.weather,
             terrain=self.terrain,
             field_conditions=dict(self.field_conditions),
+            last_move_used=self.last_move_used,
         )

@@ -55,6 +55,12 @@ class BattlePokemon(BaseModel, frozen=True):
     # not a view concern: revelation is symmetric (if a move was used, it was
     # seen), and Observation masking reads these to decide what it may expose.
     revealed_moves: frozenset[str] = frozenset()
+    # The last move this Pokemon actually executed, which several moves read
+    # rather than merely being informed by: Instruct makes an ally repeat it,
+    # Spite takes PP from it, Encore locks it in. `revealed_moves` is a set and
+    # so cannot answer "which one, most recently". Cleared on switching out,
+    # as the engine clears `lastMove`.
+    last_move: str | None = None
     ability_revealed: bool = False
     item_revealed: bool = False
     has_been_active: bool = False
