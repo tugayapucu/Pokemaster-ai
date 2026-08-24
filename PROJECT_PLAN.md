@@ -764,6 +764,25 @@ The real problem was older: Protect's constants had never been fitted, on the mo
 
 1,600 paired battles across two seeds: 53.1% and 52.2%, neither significant alone, **pooled 52.7% (95% CI 50.2-55.1%, p 0.032)**. The first change here to show any positive strength signal. Suggestive rather than established — it is self-play against a weaker copy, the easiest possible test — but Protect timing is one of the few things a self-play opponent can actually punish, which is probably why this one moved when every correctness fix before it did not.
 
+### Choosing the next step from data (2026-08-24)
+
+The planned next item -- the 56 status moves whose effects the bridge cannot dump -- was measured before being built, and is **not worth taking**. Across 500 replays those 54 moves account for **227 uses**, 37 of them never appear, and two thirds of the class is Parting Shot alone. **Belly Drum appears once and Haze twice**, having been named here as the important ones. That is the second time in two sessions that importance was assumed rather than counted.
+
+Mapping the disagreements instead (experiment 0011) found the real distribution:
+
+```
+4,922 disagreements on 9,057 labels
+  attack 2485 (50%)   status 1488 (30%)   switch 949 (19%)
+
+  of 2,485 missed attacks, 861 (35%) are the RIGHT MOVE, WRONG TARGET
+```
+
+That single gap is 9.5% of all labels and nine times the whole `onHit` category.
+
+**A fix aimed at it was built and refuted.** `select_action` sums independently scored slots, so it cannot express focus fire -- and it double-counted the knockout bonus when both slots targeted the same Pokemon, actively rewarding overkill. Correcting both moved the wrong-target count by four labels and neither instrument (agreement p 0.24/0.26 with the halves disagreeing; strength pooled 50.6%, p 0.65). It fires on 2.17% of joint actions, so it is not dead -- just too rare to matter. **Kept on the narrower ground that a Pokemon can only faint once**, which is true regardless of measurement.
+
+Two causes ruled out: not focus fire, and **not a slot bias** (495 "human foe 1, we foe 0" against 432 the other way -- near-symmetric). What is left is that the choice between two opponents is near-arbitrary, because the damage estimates are close and nothing says that removing a *dangerous* opponent is worth more than removing a harmless one. `_incoming_threat` already computes that per opponent and is used only for Protect. Recorded as a hypothesis, not implemented on the strength of a story.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
