@@ -13,27 +13,20 @@ than disappearing.
 
 ## Now
 
-### 1. Read the fields we already dump
+### ~~1. Read the fields we already dump~~ — done 2026-08-24
 
-Six things are carried into the dex or computed and then never consulted. This
-is the project's most persistent bug shape and these are the newest instances,
-from this week's own work.
+All six wired. It found a real bug, as this shape of check keeps doing:
+**the four one-hit knockout moves read as status moves** — the *fourth*
+distinct reason a move in this dex can carry a zero base power, after the
+per-hit callbacks, the situational multipliers and the damage callbacks.
 
-```
-critical_chance()   exported from mechanics, called by nothing
-modifies_type       Weather Ball, Terrain Pulse, Raging Bull, Aura Wheel change
-                    their own type, so the chart is read on the wrong row
-ohko                Fissure, Guillotine, Horn Drill, Sheer Cold
-ignore_defensive    Darkest Lariat, Sacred Sword ignore defence boosts
-has_crash_damage    High Jump Kick and friends hurt the user on a miss
-self_switch         U-turn, Flip Turn, Parting Shot pivot
-```
+`modifies_type` was the other substantial one: Weather Ball, Terrain Pulse,
+Raging Bull and Aura Wheel were all read on the wrong row of the type chart.
 
-**Done when** each is either wired into scoring or has a comment saying why it
-is deliberately unused. Cheapest item on the list and the one with the clearest
-precedent for finding real bugs.
+Agreement train 45.36 → 45.42%, test 47.06 → **47.25%**. Damage prediction
+holds at ~95% on the control team.
 
-### 2. Target selection
+### 1. Target selection
 
 The largest measured gap: **858 of 2,477 missed attacks (35%) are the right
 move aimed at the wrong Pokémon** — 9.5% of all labels.
@@ -50,7 +43,7 @@ for Protect.
 **Done when** the hypothesis is measured on train and reported on test, kept or
 refuted either way.
 
-### 3. Focus Sash and the knockout claim
+### 2. Focus Sash and the knockout claim
 
 "Guaranteed knockout" is wrong about **17%** of the time. Focus Sash is the
 likeliest cause: it measured at 0.985 for *damage*, meaning it does nothing
@@ -60,7 +53,7 @@ mechanic, so it needs the KO calibration rather than the differential.
 **Done when** a "guaranteed" claim is right at least ~90% of the time, or the
 remaining error is attributed to something else.
 
-### 4. Ability tracking
+### 3. Ability tracking
 
 Five support moves need it — Skill Swap, Role Play, Entrainment, Worry Seed,
 Simple Beam — and `revealed_ability` is already tracked, so this is the same
@@ -69,7 +62,7 @@ shape of job as item tracking was.
 Expected to be agreement-neutral, like item tracking. It is on the list for
 the same reason: the model should describe the game, not the sample.
 
-### 5. The rest of the unpriced support moves
+### 4. The rest of the unpriced support moves
 
 23 remain of the original 54. They cluster, so each cluster is one job:
 
@@ -83,7 +76,7 @@ one-offs               Baton Pass, Transform, Lock-On, Perish Song,
                        Guard Split, Power Split, Magnetic Flux, Swallow, Teatime
 ```
 
-### 6. Speed Boost and the weather Speed abilities
+### 5. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -92,11 +85,31 @@ Speed Boost needs a per-turn counter.
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
 
-### 7. Critical hits
+### 6. Grounding
 
-Currently excluded from every calibration rather than predicted. `critRatio`
-and `willCrit` are dumped and the always-crit moves are modelled; what is
-missing is folding the *chance* into expected damage.
+**New, found while wiring `modifies_type`.** Several rules turn on whether a
+Pokémon is *grounded*, and nothing models it — a Flying type or a Levitate
+user is not:
+
+```
+Terrain Pulse       only changes type for a grounded user
+Rising Voltage      only doubles against a grounded target
+Expanding Force     only boosted for a grounded user
+Misty Explosion     same
+the terrain damage bonuses   same
+```
+
+Each of these currently applies to everyone, so a Flying-type gets terrain
+effects it should not. Small individually, and one concept fixes all of them.
+
+**Done when** a `is_grounded` helper exists and every terrain rule consults it.
+
+### ~~7. Critical hits~~ — done 2026-08-24
+
+Folded into expected damage as part of item 1. Deliberately *not* folded into
+the range: a crit is a different calculation, not a lucky end of the ordinary
+roll. They remain excluded from the differential calibration for the same
+reason.
 
 ---
 
