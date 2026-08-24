@@ -783,6 +783,38 @@ That single gap is 9.5% of all labels and nine times the whole `onHit` category.
 
 Two causes ruled out: not focus fire, and **not a slot bias** (495 "human foe 1, we foe 0" against 432 the other way -- near-symmetric). What is left is that the choice between two opponents is near-arbitrary, because the damage estimates are close and nothing says that removing a *dangerous* opponent is worth more than removing a harmless one. `_incoming_threat` already computes that per opponent and is used only for Protect. Recorded as a hypothesis, not implemented on the strength of a story.
 
+### Modelling the moves the engine cannot describe (2026-08-24)
+
+Fifty-four status moves carry their whole effect in an `onHit` callback, so the bridge dumps nothing about them and all fifty-four shared one flat value.
+
+**These were nearly skipped on the grounds that they are rare** -- 227 uses across 500 replays, Belly Drum once, Haze twice. That reasoning was wrong and is worth recording as wrong: **rarity in one corpus is a fact about that sample, not about the game.** A move absent from today's metagame is one shift away from being everywhere, and the project's stated first goal is a correct model rather than a higher score on one instrument. The corpus is a measuring instrument; it is not the target.
+
+**21 of the 54 are now computed** from state we already hold, in the currencies that already existed:
+
+```
+Belly Drum    six stages against half a health bar, failing at either cap
+Haze          the difference between the stages on each side -- correctly
+              NEGATIVE when we are the boosted one
+Pain Split    arithmetic on two HP totals; zero when we are the healthy one
+Topsy-Turvy   double their boosts, because +3 becomes -3
+Moonlight     two thirds in sun, a quarter in other weather, half in clear
+Strength Sap  heals by their Attack stat and drops it
+Rest          a full heal against two turns of about five
+Defog / Heal Bell / Tidy Up / Roar / Whirlwind   worth exactly what they clear
+plus Psych Up, the three stage swaps, Acupressure, Heal Pulse, Parting Shot
+```
+
+The shared currencies moved to `agents/currency.py` so the support scorer can price a Belly Drum with the number a Swords Dance rider uses, without the two modules importing each other. No values changed in that move.
+
+**Agreement is exactly neutral** -- 45.40% -> 45.39% on train, 47.16% -> 47.11% on test, p 1 on both. Expected, for moves that are 227 uses out of 11,133 labels, and not the reason for doing it.
+
+The measurement did catch two real errors, both of the same kind -- pricing *part* of a move and dropping the rest:
+
+- **Parting Shot** was priced as a debuff only, which made it worth less than an *unknown* support move and cost six labels. It is a pivot as well.
+- **Perish Song** got a flat guess that scored below the unknown-support fallback and lost three labels. It now returns "cannot say". **When a computed number is worse than admitting ignorance, admitting ignorance is the better model.**
+
+That last point is now the rule for the remaining 33: returning None means the effect depends on state nothing tracks, and the caller falls back to its unknown-support value rather than to zero. Being unable to price a move is not the same as the move being worthless. The 33 need item tracking (Trick, Recycle, Stuff Cheeks), last-move tracking (Copycat, Instruct, Sleep Talk), ability tracking (Skill Swap, Entrainment, Worry Seed), type overwriting (Soak, Forest's Curse), turn-order manipulation (After You, Quash) or trapping (Block, Mean Look).
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
