@@ -1,0 +1,320 @@
+"""What the moves the engine cannot describe are worth.
+
+Fifty-four status moves in this dex carry their whole effect in an `onHit`
+callback, so the bridge dumps nothing about them and they all shared one flat
+value. Many of them are nonetheless perfectly computable from state we already
+hold -- a Belly Drum is six stages against half a health bar, a Pain Split is
+arithmetic on two HP totals, a Haze is the difference between the stages on
+each side.
+
+They are modelled here **regardless of how often they appear in the corpus**.
+Rarity in 500 games is a fact about that sample, not about the game: a move
+absent today is one metagame shift from being everywhere, and the project's
+first goal is a correct model rather than a higher score on one instrument.
+
+Priced in the same currencies as everything else (`agents.currency`), so a
+Belly Drum is worth what six stages are worth minus what half a health bar is
+worth -- not a number invented for it.
+"""
+
+from collections.abc import Sequence
+
+from champions_ai.agents.currency import (
+    LOW_HP_FRACTION,
+    STAT_STAGE_VALUE,
+    STAT_STAGE_WEIGHT,
+    STATUS_VALUE,
+    STATUS_WEIGHT,
+    SUSTAIN_WEIGHT,
+    SWITCH_WHEN_WEAKENED_BONUS,
+)
+from champions_ai.dex import MoveInfo
+from champions_ai.domain.boosts import BOOST_FIELDS, MAX_STAGE, MIN_STAGE, Boosts
+
+# Weather-dependent recovery. The engine gives 2/3 in sun, 1/4 in any other
+# weather, and 1/2 on a clear field -- so Synthesis is a very different move
+# depending on what is overhead.
+WEATHER_HEALS = frozenset({"moonlight", "morningsun", "synthesis"})
+SUN = frozenset({"sunnyday", "desolateland"})
+WEATHER_HEAL_SUN = 2 / 3
+WEATHER_HEAL_CLEAR = 1 / 2
+WEATHER_HEAL_OTHER = 1 / 4
+
+BELLY_DRUM = "bellydrum"
+BELLY_DRUM_COST = 0.5
+
+REST = "rest"
+# Rest heals everything and costs two turns asleep. Priced as exactly what
+# being asleep is worth elsewhere, because that is what it is -- and in a
+# format lasting about five turns, giving up two of them is most of the price.
+# The consequence is that Rest scores negative almost everywhere, which is the
+# right answer for VGC doubles rather than a bug.
+REST_SLEEP_COST = STATUS_VALUE["slp"] * STATUS_WEIGHT
+
+PAIN_SPLIT = "painsplit"
+STRENGTH_SAP = "strengthsap"
+HEAL_PULSE = "healpulse"
+HEAL_PULSE_FRACTION = 0.5
+
+HAZE = "haze"
+PSYCH_UP = "psychup"
+TOPSY_TURVY = "topsyturvy"
+ACUPRESSURE = "acupressure"
+# Two stages on a stat chosen at random. Which stat is unknown, so this is
+# priced as two stages flat -- an over-estimate when the useful ones are
+# already maxed and an under-estimate when it happens to hit Speed.
+ACUPRESSURE_STAGES = 2
+
+# Swap only the stages of the named stats with the target.
+STAGE_SWAPS = {
+    "powerswap": ("attack", "special_attack"),
+    "guardswap": ("defense", "special_defense"),
+    "speedswap": ("speed",),
+}
+
+PARTING_SHOT = "partingshot"
+PARTING_SHOT_DROPS = {"attack": 1, "special_attack": 1}
+
+HEAL_BELL = "healbell"
+DEFOG = "defog"
+TIDY_UP = "tidyup"
+TIDY_UP_BOOSTS = {"attack": 1, "speed": 1}
+
+# Side conditions Defog and Tidy Up sweep away. Defog clears both sides;
+# Tidy Up clears hazards and substitutes only.
+HAZARDS = frozenset({"stealthrock", "spikes", "toxicspikes", "stickyweb"})
+SCREENS = frozenset({"reflect", "lightscreen", "auroraveil"})
+
+# Force the target out, which undoes whatever it spent turns setting up.
+PHAZING = frozenset({"whirlwind", "roar"})
+
+# Perish Song is deliberately *not* priced. It cuts both ways -- everything on
+# the field faints, ours included -- so its worth depends on whether we are
+# ahead and on whether the target can be trapped, neither of which is modelled.
+# A first attempt gave it a flat value below the unknown-support fallback and
+# lost three labels of agreement for it: when a computed number is worse than
+# admitting ignorance, admitting ignorance is the better model.
+
+
+def _stage(boosts: Boosts, field: str) -> int:
+    return getattr(boosts, field)
+
+
+def _net_stages(boosts: Boosts) -> int:
+    """Sum of every stage, positive and negative."""
+    return sum(getattr(boosts, field) for field in BOOST_FIELDS.values())
+
+
+def _headroom(boosts: Boosts, field: str, delta: int) -> int:
+    """How much of `delta` this Pokemon can actually take, given the cap."""
+    current = _stage(boosts, field)
+    if delta >= 0:
+        return max(0, min(delta, MAX_STAGE - current))
+    return -max(0, min(-delta, current - MIN_STAGE))
+
+
+def _hp_fraction(mon) -> float:
+    return mon.current_hp / max(1, mon.max_hp)
+
+
+def _missing(mon) -> float:
+    return max(0.0, 1.0 - _hp_fraction(mon))
+
+
+def score_support_move(
+    move: MoveInfo,
+    *,
+    attacker,
+    ally=None,
+    observed=None,
+    observed_stats: dict[str, int] | None = None,
+    weather: str | None = None,
+    own_side_conditions: Sequence[str] = (),
+    opponent_side_conditions: Sequence[str] = (),
+    team_statuses: Sequence[str | None] = (),
+) -> tuple[float, list[str]] | None:
+    """What this move buys, or None if we genuinely cannot say.
+
+    Returning None is meaningful: it means the effect depends on state nothing
+    tracks, and the caller should fall back to its "unknown support move"
+    value rather than to zero. Being unable to price a move is not the same as
+    the move being worthless.
+    """
+    move_id = move.move_id
+    reasons: list[str] = []
+
+    # ---------------------------------------------------------------- healing
+
+    if move_id in WEATHER_HEALS:
+        if weather in SUN:
+            fraction, note = WEATHER_HEAL_SUN, "in sun"
+        elif weather:
+            fraction, note = WEATHER_HEAL_OTHER, f"weakened by {weather}"
+        else:
+            fraction, note = WEATHER_HEAL_CLEAR, "on a clear field"
+        restored = min(fraction, _missing(attacker))
+        if restored <= 0:
+            return 0.0, ["already at full HP, so the healing is wasted"]
+        return restored * SUSTAIN_WEIGHT, [f"restores ~{restored:.0%} of its HP ({note})"]
+
+    if move_id == REST:
+        restored = _missing(attacker)
+        if restored <= 0:
+            return 0.0, ["already at full HP, so Rest only costs turns"]
+        value = restored * SUSTAIN_WEIGHT - REST_SLEEP_COST
+        return value, [
+            f"restores ~{restored:.0%} of its HP and cures its status",
+            "but sleeps for two turns of about five",
+        ]
+
+    if move_id == PAIN_SPLIT and observed is not None and observed_stats:
+        theirs = observed_stats.get("hp", attacker.max_hp) * observed.hp_percent / 100
+        shared = (attacker.current_hp + theirs) / 2
+        gained = (shared - attacker.current_hp) / max(1, attacker.max_hp)
+        if gained <= 0:
+            return 0.0, ["we are the healthier one, so Pain Split gives HP away"]
+        return gained * SUSTAIN_WEIGHT, [f"takes ~{gained:.0%} of a health bar off them"]
+
+    if move_id == STRENGTH_SAP and observed is not None and observed_stats:
+        drained = min(observed_stats.get("atk", 0) / max(1, attacker.max_hp), _missing(attacker))
+        dropped = -_headroom(observed.boosts, "attack", -1)
+        value = drained * SUSTAIN_WEIGHT + dropped * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+        reasons.append(f"heals ~{drained:.0%} of its HP from their Attack")
+        if dropped:
+            reasons.append("and drops their Attack")
+        return value, reasons
+
+    if move_id == HEAL_PULSE:
+        if ally is None:
+            return 0.0, ["no ally to heal"]
+        restored = min(HEAL_PULSE_FRACTION, _missing(ally))
+        if restored <= 0:
+            return 0.0, ["our ally is already at full HP"]
+        return restored * SUSTAIN_WEIGHT, [f"heals our ally by ~{restored:.0%}"]
+
+    # ------------------------------------------------------------ stat stages
+
+    if move_id == BELLY_DRUM:
+        gained = _headroom(attacker.boosts, "attack", MAX_STAGE)
+        if not gained or _hp_fraction(attacker) <= BELLY_DRUM_COST:
+            return 0.0, ["Belly Drum would fail here"]
+        value = (
+            gained * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+            - BELLY_DRUM_COST * SUSTAIN_WEIGHT
+        )
+        return value, [
+            f"maximises Attack, {gained} stage(s) up",
+            "at the cost of half a health bar",
+        ]
+
+    if move_id == HAZE:
+        ours, theirs = _net_stages(attacker.boosts), 0
+        if observed is not None:
+            theirs = _net_stages(observed.boosts)
+        gained = theirs - ours
+        if gained == 0:
+            return 0.0, ["there are no stat changes to clear"]
+        return gained * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT, [
+            f"clears every stat change, worth {gained} net stage(s) to us"
+        ]
+
+    if move_id == PSYCH_UP and observed is not None:
+        gained = _net_stages(observed.boosts) - _net_stages(attacker.boosts)
+        if gained <= 0:
+            return 0.0, ["their stat changes are no better than ours"]
+        return gained * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT, [
+            f"copies their stat changes, {gained} stage(s) better than ours"
+        ]
+
+    if move_id == TOPSY_TURVY and observed is not None:
+        net = _net_stages(observed.boosts)
+        if net <= 0:
+            return 0.0, ["inverting their stat changes would help them"]
+        return 2 * net * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT, [
+            f"inverts their {net} net stage(s) of boosts"
+        ]
+
+    if move_id in STAGE_SWAPS and observed is not None:
+        fields = STAGE_SWAPS[move_id]
+        gained = sum(
+            _stage(observed.boosts, field) - _stage(attacker.boosts, field)
+            for field in fields
+        )
+        if gained <= 0:
+            return 0.0, ["swapping those stages would not help us"]
+        return gained * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT, [
+            f"takes {gained} net stage(s) from them"
+        ]
+
+    if move_id == ACUPRESSURE:
+        # It only fails when *every* stat is already at the cap.
+        if all(
+            _stage(attacker.boosts, field) >= MAX_STAGE
+            for field in BOOST_FIELDS.values()
+        ):
+            return 0.0, ["every stat is already maxed out"]
+        gained = ACUPRESSURE_STAGES * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+        return gained, ["raises a random stat by two"]
+
+    if move_id == PARTING_SHOT:
+        value = 0.0
+        if observed is not None:
+            for field, delta in PARTING_SHOT_DROPS.items():
+                dropped = -_headroom(observed.boosts, field, -delta)
+                value += dropped * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+        reasons.append("drops their Attack and Special Attack")
+        # It is a pivot as well as a debuff, and the first version priced only
+        # the debuff -- which made it worth *less* than an unknown support move
+        # and cost six labels of agreement. Getting something weakened out of
+        # danger is worth what it is worth anywhere else.
+        if _hp_fraction(attacker) <= LOW_HP_FRACTION:
+            value += SWITCH_WHEN_WEAKENED_BONUS
+            reasons.append("and pivots something weakened out of danger")
+        else:
+            reasons.append("and pivots out")
+        return value, reasons
+
+    if move_id == TIDY_UP:
+        value = 0.0
+        for field, delta in TIDY_UP_BOOSTS.items():
+            value += (
+                _headroom(attacker.boosts, field, delta)
+                * STAT_STAGE_VALUE
+                * STAT_STAGE_WEIGHT
+            )
+        swept = [c for c in own_side_conditions if c in HAZARDS]
+        value += len(swept) * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+        reasons.append("raises our Attack and Speed")
+        if swept:
+            reasons.append(f"and clears {len(swept)} hazard(s) from our side")
+        return value, reasons
+
+    # ------------------------------------------------------- clearing the field
+
+    if move_id == HEAL_BELL:
+        cured = [s for s in team_statuses if s]
+        if not cured:
+            return 0.0, ["nobody on our team has a status to cure"]
+        value = sum(STATUS_VALUE.get(s, 0.0) for s in cured) * STATUS_WEIGHT
+        return value, [f"cures {len(cured)} status condition(s) on our team"]
+
+    if move_id == DEFOG:
+        ours = [c for c in own_side_conditions if c in HAZARDS]
+        theirs = [c for c in opponent_side_conditions if c in SCREENS]
+        cleared = len(ours) + len(theirs)
+        if not cleared:
+            return 0.0, ["there are no hazards or screens to clear"]
+        return cleared * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT, [
+            f"clears {cleared} hazard(s) and screen(s)"
+        ]
+
+    if move_id in PHAZING and observed is not None:
+        net = _net_stages(observed.boosts)
+        value = max(0, net) * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+        reasons.append("forces them out")
+        if net > 0:
+            reasons.append(f"undoing {net} stage(s) they had set up")
+        return value, reasons
+
+    # Everything else genuinely depends on state we do not track.
+    return None

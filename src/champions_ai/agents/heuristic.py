@@ -17,6 +17,18 @@ from itertools import combinations
 from typing import NamedTuple
 
 from champions_ai.agents.base import Agent
+from champions_ai.agents.currency import (
+    DEFENSIVE_STATS,
+    LOW_HP_FRACTION,
+    STAT_STAGE_VALUE,
+    STAT_STAGE_WEIGHT,
+    STATUS_IMMUNE_TYPES,
+    STATUS_VALUE,
+    STATUS_WEIGHT,
+    SUSTAIN_WEIGHT,
+    SWITCH_WHEN_WEAKENED_BONUS,
+)
+from champions_ai.agents.support import score_support_move
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo, to_id
 from champions_ai.domain import (
     FIRST_TURN_MOVES,
@@ -85,49 +97,7 @@ PROTECT_SAVES_KO_BONUS = 40.0
 # Attacking advances the game and protecting does not, so blocking N% of your
 # HP is worth slightly less than dealing N% of theirs.
 PROTECT_TEMPO_COST = -160.0
-# Drain and recoil are priced in the same currency as damage dealt, because
-# that is exactly what they are: HP moved between the two bars. Weighted a
-# little below offence, since HP on our own bar is worth slightly less than HP
-# removed from theirs -- taking a Pokemon out removes its actions too.
-SUSTAIN_WEIGHT = 70.0
 
-# What a status is worth, as a fraction of a health bar. These are judgements,
-# not measurements, and they are ordered by how much of a Pokemon's
-# contribution the status removes rather than by how much damage it deals:
-# sleep takes turns away outright, paralysis halves Speed *and* skips turns,
-# burn halves physical attack, poison is chip damage and little else.
-STATUS_VALUE = {
-    "slp": 0.60,
-    "frz": 0.55,
-    "par": 0.35,
-    "brn": 0.30,
-    "tox": 0.25,
-    "psn": 0.15,
-}
-STATUS_WEIGHT = 100.0
-
-# Types that cannot receive a given status at all. Ignoring this made Nuzzle
-# look like a fine answer to an Electric-type and Will-O-Wisp to a Fire-type.
-STATUS_IMMUNE_TYPES = {
-    "par": {"Electric"},
-    "brn": {"Fire"},
-    "psn": {"Poison", "Steel"},
-    "tox": {"Poison", "Steel"},
-    "frz": {"Ice"},
-}
-
-# One stat stage, as a fraction of a health bar. Flat across stats on purpose:
-# weighting them separately is a refinement, and an unjustified table of six
-# numbers is harder to argue with than one.
-STAT_STAGE_VALUE = 0.12
-STAT_STAGE_WEIGHT = 100.0
-
-# Stats whose loss only matters if something actually hits us afterwards. An
-# offensive drop reduces our damage whatever happens; a defensive one is a bill
-# that only arrives if we are still there to be hit. Charging Close Combat the
-# full price for its own -1 Def/-1 SpD made the agent avoid one of the format's
-# best attacks.
-DEFENSIVE_STATS = frozenset({"def", "spd", "evasion"})
 
 # A flinch denies the target its whole turn. Priced above a single status
 # because it is immediate and unconditional once it lands -- but it is worth
@@ -239,8 +209,6 @@ AVERAGE_WEIGHT = 0.25
 # 99.0%), and a head-to-head edge that did not survive being re-run at higher
 # power. Switching remains an open problem, not a solved one.
 SWITCH_COST = -25.0
-SWITCH_WHEN_WEAKENED_BONUS = 55.0
-LOW_HP_FRACTION = 0.35
 
 
 @dataclass(frozen=True)
@@ -809,6 +777,14 @@ class HeuristicAgent(Agent):
         value = 0.0
         reasons: list[str] = []
 
+        # Moves whose whole effect lives in an `onHit` callback, so nothing
+        # about them is dumped. Many are still perfectly computable from state
+        # we hold, and are priced in the same currencies as everything else.
+        computed = self._support_value(move, observation, slot, attacker, observed)
+        if computed is not None:
+            gained, why = computed
+            return ScoredAction(action, gained * move.hit_chance, tuple(why))
+
         value += self._boost_value(move, attacker, observed, on_us, reasons)
         value += self._status_move_status(move, observed, reasons)
         value += self._heal_value(move, attacker, reasons)
@@ -820,6 +796,42 @@ class HeuristicAgent(Agent):
                 action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",)
             )
         return ScoredAction(action, value * move.hit_chance, tuple(reasons))
+
+    def _support_value(self, move, observation, slot, attacker, observed):
+        """Gather the state `support.score_support_move` needs, and ask it."""
+        ally = None
+        for index in observation.own_side.active_slots:
+            if index is None:
+                continue
+            candidate = observation.own_side.team[index]
+            if candidate is not attacker and not candidate.fainted:
+                ally = candidate
+                break
+
+        observed_stats = None
+        if observed is not None:
+            try:
+                species = self.dex.get_species(observed.species)
+            except KeyError:
+                species = None
+            if species is not None:
+                observed_stats = estimate_stats(
+                    species.base_stats, self.assumed_opponent_points
+                )
+
+        return score_support_move(
+            move,
+            attacker=attacker,
+            ally=ally,
+            observed=observed,
+            observed_stats=observed_stats,
+            weather=observation.weather,
+            own_side_conditions=tuple(observation.own_side.side_conditions),
+            opponent_side_conditions=tuple(observation.opponent_side.side_conditions),
+            team_statuses=tuple(
+                mon.status for mon in observation.own_side.team if not mon.fainted
+            ),
+        )
 
     def _boost_value(self, move, attacker, observed, on_us, reasons) -> float:
         """Stat stages the move applies, worth only the headroom that is left.
@@ -1081,7 +1093,6 @@ class HeuristicAgent(Agent):
         return found
 
 
-
     # ------------------------------------------------------------- resolution
 
     @staticmethod
@@ -1195,7 +1206,6 @@ class HeuristicAgent(Agent):
         return None
 
 
-
     # --------------------------------------------------------- team preview
 
     def select_team_preview(
@@ -1300,7 +1310,6 @@ class HeuristicAgent(Agent):
                 )
             )
         return tuple(reasons)
-
 
 
 def attacker_move_id(observation: Observation, slot: int, action: MoveAction) -> str:
