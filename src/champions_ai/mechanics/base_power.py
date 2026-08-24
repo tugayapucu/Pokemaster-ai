@@ -86,6 +86,11 @@ LAST_RESPECTS_STEP = 50
 
 ELECTRIC_TERRAIN = "electricterrain"
 
+# Weather Ball doubles in any weather, on top of changing its type. A separate
+# engine hook (`onModifyMove`) from the type change, so a separate rule here.
+WEATHER_BALL = "weatherball"
+WEATHER_BALL_MULTIPLIER = 2.0
+
 # --- a second family: moves the engine scales through `onBasePower` rather
 # --- than `basePowerCallback`. Seventeen of them here, and the flag the bridge
 # --- dumps does not catch any: Knock Off has no `basePowerCallback` at all.
@@ -236,6 +241,9 @@ def conditional_multiplier(
         multiplier *= TERRAIN_BOOST_MULTIPLIER
     # `terrain is not None` first: without it this is `None == None` for
     # every ordinary move on a bare field, and multiplies all of them.
+    # Weather Ball doubles in any weather, on top of changing its type.
+    if move_id == WEATHER_BALL and weather:
+        multiplier *= WEATHER_BALL_MULTIPLIER
     if terrain is not None and TERRAIN_SPECIFIC_MOVES.get(move_id) == terrain:
         multiplier *= TERRAIN_SPECIFIC_MULTIPLIER
 

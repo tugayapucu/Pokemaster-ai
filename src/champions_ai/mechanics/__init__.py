@@ -26,6 +26,7 @@ from champions_ai.mechanics.matchup import (
     matchup,
     own_stats,
 )
+from champions_ai.mechanics.move_type import effective_type
 from champions_ai.mechanics.stats import (
     ASSUMED_ATTACKING_POINTS,
     apply_boost,
@@ -62,6 +63,7 @@ __all__ = [
     "defender_multiplier",
     "dynamic_base_power",
     "effective_speed",
+    "effective_type",
     "critical_chance",
     "estimate_damage",
     "expected_hits",

@@ -343,3 +343,22 @@ def test_sheer_cold_names_the_type_that_is_immune_to_it(bridge):
     dex = Dex.load(bridge)
     assert dex.get_move("sheercold").ohko == "Ice"
     assert dex.get_move("fissure").ohko is True
+
+
+def test_every_move_that_changes_its_own_type_has_a_rule(bridge):
+    """`onModifyType` is a callback and cannot be dumped, so the bridge dumps
+    the fact that one exists. This fails the moment a regulation adds a fifth
+    rather than letting it silently read the wrong row of the chart."""
+    dex = Dex.load(bridge)
+    flagged = {m.move_id for m in dex.moves.values() if m.modifies_type}
+    assert flagged == {"weatherball", "terrainpulse", "ragingbull", "aurawheel"}
+
+
+def test_the_effective_type_reaches_the_type_chart(bridge):
+    """Weather Ball in sun is a Fire move, so it is super effective against a
+    Grass type the chart would otherwise have called neutral."""
+    dex = Dex.load(bridge)
+    ball = dex.get_move("weatherball")
+    grassy = dex.get_species("Venusaur")
+    assert dex.effectiveness(ball, grassy) == 1.0
+    assert dex.effectiveness(ball, grassy, move_type="Fire") == 2.0

@@ -26,6 +26,7 @@ from champions_ai.mechanics.items import (
     damage_multiplier,
     defender_multiplier,
 )
+from champions_ai.mechanics.move_type import effective_type
 
 T = TypeVar("T")
 
@@ -320,6 +321,7 @@ def estimate_damage(
     attacker_item: str | None = None,
     defender_item: str | None = None,
     attacker_hp: int = 0,
+    terrain: str | None = None,
 ) -> DamageEstimate:
     """Estimate a single hit's damage range.
 
@@ -338,9 +340,16 @@ def estimate_damage(
     attacking stat, Life Orb to the final damage, a resist berry to what the
     defender takes. See `mechanics.items`.
     """
+    # Four moves decide their own type when they are used, so the chart has to
+    # be read on the row the move will *actually* have. Weather Ball in sun is
+    # a Fire move, which is super effective against a Grass type the chart
+    # would otherwise have called neutral.
+    actual_type = effective_type(
+        move, attacker=attacker, weather=weather, terrain=terrain
+    )
     # Through the dex rather than the chart: Freeze-Dry and Flying Press do
     # not follow it, and reading the chart here bypassed both.
-    effectiveness = dex.effectiveness(move, defender)
+    effectiveness = dex.effectiveness(move, defender, move_type=actual_type)
 
     if not move.is_damaging or effectiveness == 0.0:
         return DamageEstimate(0, 0, effectiveness, defender_hp)
@@ -366,7 +375,7 @@ def estimate_damage(
     # nothing. Checked before the arithmetic so the floor of 1 further down
     # cannot turn "cannot damage" into "does 1".
     weather_multiplier = WEATHER_TYPE_MULTIPLIERS.get(weather or "", {}).get(
-        move.type, 1.0
+        actual_type, 1.0
     )
     if weather_multiplier == 0.0:
         return DamageEstimate(0, 0, effectiveness, defender_hp)
@@ -387,7 +396,9 @@ def estimate_damage(
         base = modify(base, weather_multiplier)
 
     steps = _effectiveness_steps(effectiveness)
-    stab = move.type in attacker.types
+    # STAB follows the type the move ends up with, not the one it was written
+    # with: a Morpeko-Hangry gets it on a Dark Aura Wheel.
+    stab = actual_type in attacker.types
     burned = attacker_burned and move.category == "Physical"
     final = damage_multiplier(attacker_item, effectiveness=effectiveness)
     final *= defender_multiplier(defender_item, move, effectiveness=effectiveness)

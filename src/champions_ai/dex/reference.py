@@ -374,25 +374,33 @@ class Dex(BaseModel, frozen=True):
             raise KeyError(f"no move data for {name!r}")
         return found
 
-    def effectiveness(self, move: MoveInfo, defender: SpeciesInfo) -> float:
+    def effectiveness(
+        self, move: MoveInfo, defender: SpeciesInfo, *, move_type: str | None = None
+    ) -> float:
         """This move's type multiplier against this defender.
 
         Not simply a chart lookup: two moves in this dex adjust the result in
         ways a chart cannot express. Every damage path must come through here
         rather than reading `type_chart` directly, or the exceptions apply in
         some places and not others.
+
+        `move_type` overrides the move's own, for the four that decide their
+        type when they are used -- Weather Ball, Terrain Pulse, Raging Bull and
+        Aura Wheel. Passing it here rather than looking the chart up separately
+        keeps this the single path it was made to be.
         """
+        typing = move_type or move.type
         substitutions = EFFECTIVENESS_SUBSTITUTIONS.get(move.move_id)
         if substitutions:
-            row = self.type_chart.multipliers.get(move.type)
+            row = self.type_chart.multipliers.get(typing)
             if row is None:
-                raise KeyError(f"unknown attacking type {move.type!r}")
+                raise KeyError(f"unknown attacking type {typing!r}")
             total = 1.0
             for defending in defender.types:
                 total *= substitutions.get(defending, row[defending])
             return total
 
-        total = self.type_chart.effectiveness(move.type, defender.types)
+        total = self.type_chart.effectiveness(typing, defender.types)
         added = ADDED_TYPES.get(move.move_id)
         if added:
             total *= self.type_chart.effectiveness(added, defender.types)

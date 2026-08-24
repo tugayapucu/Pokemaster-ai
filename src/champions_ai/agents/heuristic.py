@@ -483,6 +483,7 @@ class HeuristicAgent(Agent):
             defender_item=target.item,
             # Endeavor and Final Gambit are priced off our own remaining HP.
             attacker_hp=attacker.current_hp,
+            terrain=observation.terrain,
         )
 
         reasons: list[str] = []
