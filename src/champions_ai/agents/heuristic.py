@@ -44,22 +44,33 @@ from champions_ai.domain import (
 )
 from champions_ai.domain.boosts import BOOST_FIELDS, MAX_STAGE, MIN_STAGE
 from champions_ai.mechanics import (
+    BORROWING_MOVES,
+    COPYCAT,
+    INSTRUCT,
+    MAX_BORROW_DEPTH,
     PARALYSIS,
+    SLEEP_TALK,
+    SPITE,
     TAILWIND,
     TRICK_ROOM,
     apply_boost,
     assumed_attacks,
     assumed_stats,
     attacking_side,
+    copycat_borrows,
     dynamic_base_power,
     effective_speed,
     estimate_damage,
     estimate_stats,
+    gains_from_repeating,
+    instruct_repeats,
     is_removable,
     matchup,
     move_priority,
     moves_first,
     ohko_chance,
+    sleep_talk_candidates,
+    spite_removes,
 )
 
 # Scoring weights. Chosen to be legible rather than optimal: damage is the
@@ -417,7 +428,28 @@ class HeuristicAgent(Agent):
             # Unknown data is a gap to fix, not a reason to prefer or avoid the
             # move, so it scores neutrally rather than silently ranking last.
             return ScoredAction(action, 0.0, (f"no data: {error}",))
+        return self._score_chosen_move(
+            observation, slot, action, move, attacker, attacker_species
+        )
 
+    def _score_chosen_move(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        move: MoveInfo,
+        attacker,
+        attacker_species: SpeciesInfo,
+        borrow_depth: int = 0,
+    ) -> ScoredAction:
+        """Score `move` used from `slot`, whatever action nominally chose it.
+
+        Split out of `_score_move` so Copycat, Sleep Talk and Instruct can be
+        priced as the move they stand in for rather than as generic support --
+        they go through this with a substituted `move`, and everything they
+        borrow is therefore scored by exactly the same arithmetic as if it had
+        been picked directly.
+        """
         if move.move_id in FIRST_TURN_MOVES and attacker.turns_on_field > 1:
             # The engine refuses these outright after the first turn out, and
             # it does so at runtime rather than reporting them as disabled, so
@@ -429,9 +461,11 @@ class HeuristicAgent(Agent):
             )
 
         if not move.is_damaging:
-            return self._score_status_move(observation, slot, action, move, attacker)
+            return self._score_status_move(
+                observation, slot, action, move, attacker, borrow_depth
+            )
 
-        target = self._resolve_target(observation, slot, action)
+        target = self._resolve_target(observation, slot, action, move)
         if target is None:
             return ScoredAction(action, 0.0, (f"{move.name} has no visible target",))
 
@@ -830,6 +864,7 @@ class HeuristicAgent(Agent):
         action: MoveAction,
         move: MoveInfo,
         attacker,
+        borrow_depth: int = 0,
     ) -> ScoredAction:
         """What this move actually changes, priced like everything else.
 
@@ -846,6 +881,13 @@ class HeuristicAgent(Agent):
         """
         if move.move_id in PROTECT_MOVES:
             return self._score_protect(observation, slot, action, move, attacker)
+
+        if move.move_id in BORROWING_MOVES:
+            borrowed = self._score_borrowed(
+                observation, slot, action, move, attacker, borrow_depth
+            )
+            if borrowed is not None:
+                return borrowed
 
         observed = self._observed_target(observation, slot)
         on_us = move.target in SELF_TARGETS
@@ -871,6 +913,263 @@ class HeuristicAgent(Agent):
                 action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",)
             )
         return ScoredAction(action, value * move.hit_chance, tuple(reasons))
+
+    def _score_borrowed(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        move: MoveInfo,
+        attacker,
+        depth: int,
+    ) -> "ScoredAction | None":
+        """Price Copycat, Sleep Talk, Instruct and Spite as what they stand in for.
+
+        All four were unscoreable until the tracker learned which move went
+        last, so all four took the flat support value -- a Copycat after an
+        Earthquake was worth the same as a Copycat on turn one, when the first
+        is an Earthquake and the second simply fails.
+
+        Returning None hands the move back to the ordinary path, which is what
+        should happen when we cannot say. Returning a score of zero is a
+        different statement: the engine would refuse the move outright.
+        """
+        if depth >= MAX_BORROW_DEPTH:
+            # Copycat can borrow Sleep Talk, which borrows again. Bounded here
+            # rather than by trusting the refusal flags to close every loop.
+            return None
+        move_id = move.move_id
+
+        if move_id == COPYCAT:
+            borrowed = copycat_borrows(self._move_or_none(observation.last_move_used))
+            if borrowed is None:
+                return ScoredAction(
+                    action, 0.0, ("there is no move for Copycat to copy yet",)
+                )
+            return self._as_borrowed(
+                observation, slot, action, borrowed, attacker, depth, "copies"
+            )
+
+        if move_id == SLEEP_TALK:
+            known = [self._move_or_none(i) for i in attacker.selectable_moves]
+            candidates = sleep_talk_candidates(
+                [m for m in known if m is not None],
+                asleep=attacker.status == "slp",
+            )
+            if not candidates:
+                return ScoredAction(action, 0.0, ("Sleep Talk only works while asleep",))
+            # Which one it picks is uniformly random, so the move is worth the
+            # average of them -- not the best of them, which is the mistake
+            # that would make Sleep Talk look like a free copy of our best hit.
+            scores = [
+                self._as_borrowed(
+                    observation, slot, action, candidate, attacker, depth, "may use"
+                )
+                for candidate in candidates
+            ]
+            mean = sum(scored.score for scored in scores) / len(scores)
+            return ScoredAction(
+                action,
+                mean,
+                (f"picks at random from {len(candidates)} move(s) while asleep",),
+            )
+
+        if move_id == INSTRUCT:
+            return self._score_instruct(observation, slot, action, attacker, depth)
+
+        if move_id == SPITE:
+            observed = self._observed_target(observation, slot)
+            target_last = observed.last_move if observed is not None else None
+            if spite_removes(self._move_or_none(target_last)) is None:
+                return ScoredAction(
+                    action, 0.0, ("they have not used a move for Spite to bite into",)
+                )
+            # PP is not modelled -- an opponent's is unknowable, and in a
+            # format lasting about five turns four PP is rarely the binding
+            # constraint. So this is genuinely unknown rather than zero, and
+            # falls through to the flat support value.
+            return None
+
+        return None
+
+    def _score_instruct(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        attacker,
+        depth: int,
+    ) -> "ScoredAction | None":
+        """What making somebody go again is worth.
+
+        Two things about this move are easy to get wrong, and the corpus caught
+        both:
+
+        **It is usually not the *last* move that gets repeated.** Instruct is
+        priority 0 and its users are slow, so the ally has almost always
+        already moved this turn by the time it resolves. Pricing it off
+        `last_move` read the previous turn's move, and in all seven human
+        Instructs in the corpus that was the wrong move -- twice it read
+        "nothing to repeat" for an ally that went on to fire an Eruption in
+        that very turn. So when the ally acts first, the move repeated is the
+        one we expect them to pick now, which is the best-scoring one they
+        have: the same scorer chooses their action, so this is self-consistent
+        rather than optimistic.
+
+        **It can be aimed at an opponent.** The move's target is `normal`, not
+        `adjacentAlly`, so the engine offers it against the other side too --
+        and doing that hands them a free attack.
+        """
+        target = action.target
+        if target is not None and target.side != "ally":
+            return self._instruct_the_opposition(observation, slot, attacker)
+
+        found = self._ally_of(observation, slot)
+        if found is None:
+            return ScoredAction(action, 0.0, ("no ally to instruct",))
+        index, ally_slot = found
+        partner = observation.own_side.team[index]
+        try:
+            partner_species = self.dex.get_species(partner.pokemon_set.species)
+        except KeyError:
+            return None
+
+        # Everything the ally could be made to repeat, by the engine's rules.
+        repeatable = [
+            info
+            for info in (self._move_or_none(m) for m in partner.selectable_moves)
+            if info is not None
+            and instruct_repeats(info) is not None
+            and gains_from_repeating(info)
+        ]
+        if not repeatable:
+            return ScoredAction(
+                action,
+                0.0,
+                (
+                    f"nothing {partner_species.name} knows is worth "
+                    f"doing twice in one turn",
+                ),
+            )
+
+        def repeat_value(info: MoveInfo) -> ScoredAction:
+            # Scored from the *ally's* slot, because that is who acts.
+            return self._score_chosen_move(
+                observation, ally_slot, action, info, partner, partner_species, depth + 1
+            )
+
+        if self._ally_acts_first(observation, slot, ally_slot):
+            best = max(repeatable, key=lambda info: repeat_value(info).score)
+            scored = repeat_value(best)
+            why = f"our {partner_species.name} goes twice, likely {best.name}"
+        else:
+            repeated = instruct_repeats(self._move_or_none(partner.last_move))
+            if repeated is None:
+                return ScoredAction(
+                    action,
+                    0.0,
+                    (
+                        f"{partner_species.name} moves after us and has "
+                        f"nothing to repeat",
+                    ),
+                )
+            scored = repeat_value(repeated)
+            why = f"our {partner_species.name} uses {repeated.name} again"
+        return ScoredAction(action, scored.score, (why, *scored.reasons[:1]))
+
+    def _instruct_the_opposition(
+        self, observation: Observation, slot: int, attacker
+    ) -> ScoredAction:
+        """Instruct aimed across the field, which gives them a free attack.
+
+        Worth minus what that attack costs us, in the same currency our own
+        damage is worth -- so it lands well below every real option rather
+        than at an invented penalty.
+        """
+        observed = self._observed_target(observation, slot)
+        if observed is None:
+            return ScoredAction(
+                MoveAction(move_index=0), 0.0, ("nobody there to instruct",)
+            )
+        try:
+            species = self.dex.get_species(attacker.pokemon_set.species)
+        except KeyError:
+            return ScoredAction(MoveAction(move_index=0), 0.0, ("no species data",))
+        fraction, _, _ = self._threat_from(observed, attacker, species, observation)
+        return ScoredAction(
+            MoveAction(move_index=0),
+            -fraction * DAMAGE_WEIGHT,
+            (f"lets {observed.species} attack again, at our expense",),
+        )
+
+    def _ally_acts_first(
+        self, observation: Observation, slot: int, ally_slot: int
+    ) -> bool:
+        """Whether our partner moves before us this turn.
+
+        Both are on our side, so tailwind and Trick Room apply to both and this
+        is a plain Speed comparison. Priority is left out deliberately: we are
+        choosing their move at the same time as ours, so there is no priority
+        to read yet.
+        """
+        ours = self._own_active(observation, slot)
+        index = observation.own_side.active_slots[ally_slot]
+        if ours is None or index is None:
+            return False
+        partner = observation.own_side.team[index]
+        tailwind = TAILWIND in observation.own_side.side_conditions
+
+        def speed(mon) -> int:
+            return effective_speed(
+                (mon.computed_stats or {}).get("spe", 0),
+                boost_stage=mon.boosts.speed,
+                tailwind=tailwind,
+                paralysed=mon.status == PARALYSIS,
+                item=mon.current_item,
+            )
+
+        if TRICK_ROOM in observation.field_conditions:
+            return speed(partner) < speed(ours)
+        return speed(partner) > speed(ours)
+
+    def _move_or_none(self, move_id: str | None) -> "MoveInfo | None":
+        if not move_id:
+            return None
+        try:
+            return self.dex.get_move(move_id)
+        except KeyError:
+            return None
+
+    def _ally_of(self, observation: Observation, slot: int) -> "tuple[int, int] | None":
+        """Our other active Pokemon as (team index, slot), if there is one."""
+        for other, index in enumerate(observation.own_side.active_slots):
+            if other == slot or index is None:
+                continue
+            if not observation.own_side.team[index].fainted:
+                return index, other
+        return None
+
+    def _as_borrowed(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        borrowed: MoveInfo,
+        attacker,
+        depth: int,
+        verb: str,
+    ) -> ScoredAction:
+        """Score `borrowed` as though we had picked it, keeping our own action."""
+        try:
+            species = self.dex.get_species(attacker.pokemon_set.species)
+        except KeyError:
+            return ScoredAction(action, STATUS_MOVE_VALUE, ("no species data",))
+        scored = self._score_chosen_move(
+            observation, slot, action, borrowed, attacker, species, depth + 1
+        )
+        return ScoredAction(
+            action, scored.score, (f"{verb} {borrowed.name}", *scored.reasons[:1])
+        )
 
     def _item_can_be_taken(self, target, species) -> bool:
         """Whether Knock Off would find something it can actually remove.
@@ -1246,7 +1545,11 @@ class HeuristicAgent(Agent):
         return apply_boost(base, attacker.boosts.stage(key))
 
     def _resolve_target(
-        self, observation: Observation, slot: int, action: MoveAction
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        move: MoveInfo | None = None,
     ) -> "ResolvedTarget | None":
         """What the move is aimed at, with the stats the move will read off it.
 
@@ -1254,7 +1557,10 @@ class HeuristicAgent(Agent):
         stands in -- enough to rank the move, though it undercounts a move
         that would hit both.
         """
-        move = self.dex.get_move(attacker_move_id(observation, slot, action))
+        # `move` is passed in when something is standing in for the move the
+        # action names -- a Copycat resolves its target as whatever it copied.
+        if move is None:
+            move = self.dex.get_move(attacker_move_id(observation, slot, action))
         defending_key = move.defensive_stat
         # Darkest Lariat and Sacred Sword ignore the target's defensive stages
         # outright, which is the whole reason to bring them into a boosted
