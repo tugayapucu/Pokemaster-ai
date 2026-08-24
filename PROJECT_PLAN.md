@@ -1,7 +1,10 @@
 # Pokémon Champions AI — Long-Term Project Plan
 
 > **Status:** Living project roadmap  
-> **Last updated:** 2026-08-21  
+> **Last updated:** 2026-08-24  
+> **Near-term work lives in [BACKLOG.md](BACKLOG.md)**, which is short, ordered
+> and maintained. This file is the big picture and the record of what was
+> measured; the backlog is what happens next.  
 > **Primary game:** Pokémon Champions  
 > **Primary competitive format:** Double Battles / VGC-style play  
 > **Primary objective:** Build a strong battle recommendation system and, over time, an autonomous Pokémon Champions agent using classical algorithms, supervised learning, reinforcement learning, search, opponent modelling, and self-play.
