@@ -281,12 +281,17 @@ def test_recycle_knows_whether_there_is_anything_to_recover():
 
 
 @pytest.mark.parametrize("move_id", [
-    "batonpass", "copycat", "sleeptalk", "transform", "instruct", "trick",
-    "skillswap", "soak", "afteryou", "quash", "block", "spite",
+    "batonpass", "transform", "trick", "skillswap", "afteryou", "quash",
+    "spite",
 ])
-def test_a_move_we_cannot_price_returns_none_rather_than_zero(move_id):
-    """None means the effect depends on state nothing tracks, so the caller
-    falls back to its unknown-support value. Being unable to price a move is
-    not the same as the move being worthless.
+def test_a_move_this_scorer_cannot_price_returns_none_rather_than_zero(move_id):
+    """None means *this* function cannot say, so the caller falls back to its
+    unknown-support value. Being unable to price a move is not the same as the
+    move being worthless.
+
+    Some moves that once appeared here are now priced by the agent instead,
+    because they need machinery this module deliberately does not have:
+    Copycat, Sleep Talk and Instruct need the damage estimator, and Soak needs
+    the type chart. Those still return None *here* by design.
     """
     assert _score(move_id, observed=_foe()) is None

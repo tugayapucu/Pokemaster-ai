@@ -44,16 +44,19 @@ from champions_ai.domain import (
 )
 from champions_ai.domain.boosts import BOOST_FIELDS, MAX_STAGE, MIN_STAGE
 from champions_ai.mechanics import (
+    AFTER_YOU,
     BORROWING_MOVES,
     COPYCAT,
     INSTRUCT,
     MAX_BORROW_DEPTH,
     PARALYSIS,
+    QUASH,
     REFLECT_TYPE,
     SLEEP_TALK,
     SPITE,
     TAILWIND,
     TRICK_ROOM,
+    TURN_ORDER_MOVES,
     TYPE_CHANGING_MOVES,
     apply_boost,
     assumed_attacks,
@@ -229,6 +232,14 @@ SWITCH_COST = -25.0
 # High Jump Kick, Axe Kick and Supercell Slam take half the user's maximum HP
 # when they miss. The engine spells it `baseMaxhp / 2`.
 CRASH_DAMAGE_FRACTION = 0.5
+
+
+class _BestMove(NamedTuple):
+    """One of our own moves, with what the scorer made of it."""
+
+    move: MoveInfo
+    score: float
+    knocks_out: bool
 
 
 @dataclass(frozen=True)
@@ -886,6 +897,11 @@ class HeuristicAgent(Agent):
         if move.move_id in PROTECT_MOVES:
             return self._score_protect(observation, slot, action, move, attacker)
 
+        if move.move_id in TURN_ORDER_MOVES:
+            ordered = self._score_turn_order(observation, slot, action, move, attacker)
+            if ordered is not None:
+                return ordered
+
         if move.move_id in TYPE_CHANGING_MOVES:
             retyped = self._score_retype(observation, slot, action, move, attacker)
             if retyped is not None:
@@ -1000,6 +1016,157 @@ class HeuristicAgent(Agent):
             return None
 
         return None
+
+    def _score_turn_order(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        move: MoveInfo,
+        attacker,
+    ) -> "ScoredAction | None":
+        """After You and Quash, which buy an ordering rather than an effect.
+
+        Both are worth the same thing seen from opposite sides: somebody on our
+        side gets to act before somebody on theirs. That is only worth
+        anything when the ordering would otherwise have cost us something we
+        can name -- a turn our ally loses to a knockout, or a hit we could have
+        pre-empted -- so both are priced as the damage the swap avoids, in the
+        currency Protect already uses.
+
+        Ally Switch is deliberately absent. Its whole value is dodging an
+        attack aimed at a slot, and which slot they aimed at is precisely what
+        we cannot see; a computed number there would be worse than admitting
+        we do not know, which is the lesson Perish Song already taught.
+        """
+        if move.move_id == AFTER_YOU:
+            return self._score_after_you(observation, slot, action)
+        if move.move_id == QUASH:
+            return self._score_quash(observation, slot, action)
+        return None
+
+    def _score_after_you(
+        self, observation: Observation, slot: int, action: MoveAction
+    ) -> "ScoredAction | None":
+        """Letting our partner go first, worth the turn it would otherwise lose.
+
+        Only nameable when the partner is facing a knockout. Moving earlier is
+        worth something in plenty of other spots -- landing damage before a
+        heal, setting a field before they use it -- and none of that is
+        modelled here, so this is a floor on the move's value rather than an
+        estimate of it.
+        """
+        found = self._ally_of(observation, slot)
+        if found is None:
+            return ScoredAction(action, 0.0, ("no ally to let through",))
+        index, ally_slot = found
+        partner = observation.own_side.team[index]
+
+        best = self._best_own_move(observation, ally_slot, partner)
+        if best is None:
+            return None
+        chance_first = self._moves_first(best.move, observation, ally_slot)
+        if chance_first >= 1.0:
+            return ScoredAction(
+                action,
+                0.0,
+                (f"our {partner.pokemon_set.species} was going first anyway",),
+            )
+
+        _, would_ko, source = self._incoming_threat(observation, ally_slot, partner)
+        if not would_ko:
+            return ScoredAction(
+                action,
+                0.0,
+                (f"our {partner.pokemon_set.species} survives either way",),
+            )
+        # The partner loses its whole turn if it is knocked out before acting,
+        # so what After You buys is that turn -- weighted by how likely it was
+        # to be lost.
+        value = (1.0 - chance_first) * best.score
+        return ScoredAction(
+            action,
+            value,
+            (
+                f"our {partner.pokemon_set.species} would be knocked out by "
+                f"{source} before moving",
+                f"letting its {best.move.name} through first",
+            ),
+        )
+
+    def _score_quash(
+        self, observation: Observation, slot: int, action: MoveAction
+    ) -> "ScoredAction | None":
+        """Pushing an opponent to the back of the turn.
+
+        Worth what their attack costs us, but only when our side can actually
+        remove them in the window it buys -- a Quash on something we cannot
+        knock out just delays the same hit to later in the same turn.
+        """
+        observed = self._observed_target(observation, slot)
+        if observed is None:
+            return ScoredAction(action, 0.0, ("nobody there to quash",))
+        try:
+            species = self.dex.get_species(observed.species)
+        except KeyError:
+            return None
+
+        found = self._ally_of(observation, slot)
+        if found is None:
+            return ScoredAction(action, 0.0, ("nobody left to act in the window",))
+        index, ally_slot = found
+        partner = observation.own_side.team[index]
+
+        best = self._best_own_move(observation, ally_slot, partner)
+        if best is None or not best.knocks_out:
+            return ScoredAction(
+                action,
+                0.0,
+                (f"we cannot remove {species.name} in the window it buys",),
+            )
+        try:
+            partner_species = self.dex.get_species(partner.pokemon_set.species)
+        except KeyError:
+            return None
+        threat, _, _ = self._threat_from(
+            observed, partner, partner_species, observation
+        )
+        chance_they_first = 1.0 - self._moves_first(best.move, observation, ally_slot)
+        return ScoredAction(
+            action,
+            threat * chance_they_first * DAMAGE_WEIGHT,
+            (
+                f"pushes {species.name} to the back of the turn",
+                f"so our {partner_species.name} removes it first",
+            ),
+        )
+
+    def _best_own_move(self, observation: Observation, slot: int, mon):
+        """The best move this Pokemon of ours has right now, and what it does.
+
+        Used by the turn-order moves, which are worth what the move they let
+        through is worth -- so the same scorer has to answer, or the two
+        numbers are in different currencies.
+        """
+        best = None
+        for index, move_id in enumerate(mon.selectable_moves):
+            # Turn-order moves are skipped, and not only to stop this recursing
+            # forever through a partner who also has one: what After You buys
+            # is the partner's *real* move, never another ordering.
+            if move_id in TURN_ORDER_MOVES:
+                continue
+            scored = self._score_move(observation, slot, MoveAction(move_index=index))
+            if best is None or scored.score > best.score:
+                try:
+                    info = self.dex.get_move(move_id)
+                except KeyError:
+                    continue
+                best = _BestMove(
+                    move=info,
+                    score=scored.score,
+                    knocks_out=any("knockout" in reason for reason in scored.reasons),
+                )
+        return best
 
     def _score_retype(
         self,
@@ -1388,7 +1555,19 @@ class HeuristicAgent(Agent):
             observed_may_hold_item=(
                 observed.may_hold_item if observed is not None else True
             ),
+            # Trapping needs to know whether they are a Ghost, which cannot be
+            # trapped at all.
+            observed_types=(
+                self._observed_types(observed) if observed is not None else ()
+            ),
         )
+
+    def _observed_types(self, observed) -> tuple[str, ...]:
+        try:
+            species = self.dex.get_species(observed.species)
+        except KeyError:
+            return ()
+        return effective_types(species.types, tuple(observed.volatile_conditions))
 
     def _boost_value(self, move, attacker, observed, on_us, reasons) -> float:
         """Stat stages the move applies, worth only the headroom that is left.

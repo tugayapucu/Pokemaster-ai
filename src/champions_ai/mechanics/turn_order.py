@@ -122,3 +122,18 @@ def moves_first(
     if trick_room:
         return 1.0 if our_speed < their_speed else 0.0
     return 1.0 if our_speed > their_speed else 0.0
+
+
+# --- moves that buy an ordering rather than an effect ---------------------
+#
+# Both fail outright in singles (`activePerHalf === 1`), and both fail if the
+# target has already moved this turn. Neither matters in this format, where
+# every battle is doubles and both are chosen before anything moves -- but
+# they are the engine's rules, so they are recorded where the rules live.
+AFTER_YOU = "afteryou"
+QUASH = "quash"
+# Ally Switch belongs to this group by mechanism and not by pricing: its value
+# is dodging an attack aimed at a slot, and which slot they aimed at is exactly
+# what a player cannot see.
+ALLY_SWITCH = "allyswitch"
+TURN_ORDER_MOVES = frozenset({AFTER_YOU, QUASH})

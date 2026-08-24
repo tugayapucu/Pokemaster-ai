@@ -112,6 +112,17 @@ ITEM_SWAPS = frozenset({"trick", "switcheroo"})
 RECYCLE = "recycle"
 TEATIME = "teatime"
 
+# --- keeping something on the field --------------------------------------
+#
+# Trapping is worth exactly what the escape we are denying is worth, so it is
+# priced with the constant our *own* switches use rather than a new one: a
+# weakened Pokemon wants out, and Block is the move that says no.
+TRAPPING_MOVES = frozenset({"block", "meanlook"})
+# Ghost types cannot be trapped -- `trapped: 3` in the engine's type chart, the
+# same mechanism that makes them immune to Normal and Fighting.
+UNTRAPPABLE_TYPE = "Ghost"
+TRAPPED = "trapped"
+
 # Perish Song is deliberately *not* priced. It cuts both ways -- everything on
 # the field faints, ours included -- so its worth depends on whether we are
 # ahead and on whether the target can be trapped, neither of which is modelled.
@@ -160,6 +171,7 @@ def score_support_move(
     defender_item: ItemInfo | None = None,
     consumed_item: ItemInfo | None = None,
     observed_may_hold_item: bool = True,
+    observed_types: tuple[str, ...] = (),
 ) -> tuple[float, list[str]] | None:
     """What this move buys, or None if we genuinely cannot say.
 
@@ -375,6 +387,22 @@ def score_support_move(
         if consumed_item is None:
             return 0.0, ["there is no consumed item to bring back"]
         return ITEM_DENIAL_VALUE, [f"brings back its {consumed_item.name}"]
+
+    if move_id in TRAPPING_MOVES:
+        if observed is None:
+            return 0.0, ["nobody there to trap"]
+        if UNTRAPPABLE_TYPE in observed_types:
+            return 0.0, [f"a {UNTRAPPABLE_TYPE} type cannot be trapped"]
+        if TRAPPED in observed.volatile_conditions:
+            return 0.0, ["they are already trapped"]
+        # Priced as the escape it denies, in the currency our own escapes use.
+        # Something at full health was not leaving anyway, so trapping it buys
+        # nothing this turn -- which is why this is not a flat value.
+        if observed.hp_percent / 100 > LOW_HP_FRACTION:
+            return 0.0, ["they are healthy enough that they were not leaving"]
+        return SWITCH_WHEN_WEAKENED_BONUS, [
+            "stops something weakened from escaping"
+        ]
 
     if move_id == TEATIME:
         # Everything on the field eats its Berry, ours included. Whether that
