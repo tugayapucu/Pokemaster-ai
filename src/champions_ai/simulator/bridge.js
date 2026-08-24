@@ -205,6 +205,44 @@ function moveSecondaries(entry) {
 			// Combat always drops its own defences, it does not roll for it.
 			selfBoosts: (entry.self && entry.self.boosts) || {},
 			flags: Object.keys(entry.flags || {}),
+			// --- what a move does besides the damage roll ---
+			// A move's own effects, as distinct from a secondary's rider.
+			// `boosts` is the entire point of Swords Dance and was not dumped
+			// at all, so every one of the 175 status moves here scored the
+			// same flat value as every other.
+			boosts: entry.boosts || null,
+			status: entry.status || null,
+			volatileStatus: entry.volatileStatus || null,
+			// [numerator, denominator] of the user's max HP.
+			heal: entry.heal || null,
+			sideCondition: entry.sideCondition || null,
+			slotCondition: entry.slotCondition || null,
+			weather: entry.weather || null,
+			terrain: entry.terrain || null,
+			pseudoWeather: entry.pseudoWeather || null,
+			// --- what changes the damage itself ---
+			// A number, or [min, max]. A 2-5 hit move lands about 3.1 times,
+			// so predicting one hit understates it threefold.
+			multihit: entry.multihit === undefined ? null : entry.multihit,
+			// Each hit of these rolls accuracy separately.
+			multiaccuracy: !!entry.multiaccuracy,
+			// 1 is the ordinary 1/24. Higher means a wider crit stage.
+			critRatio: entry.critRatio === undefined ? null : entry.critRatio,
+			willCrit: entry.willCrit === undefined ? null : entry.willCrit,
+			ohko: entry.ohko === undefined ? null : entry.ohko,
+			ignoreDefensive: !!entry.ignoreDefensive,
+			ignoreEvasion: !!entry.ignoreEvasion,
+			ignoreImmunity: entry.ignoreImmunity === undefined ? null : !!entry.ignoreImmunity,
+			breaksProtect: !!entry.breaksProtect,
+			// Weather Ball, Terrain Pulse, Raging Bull and Aura Wheel change
+			// their own *type*, so the chart lookup uses the wrong row.
+			modifiesType: typeof entry.onModifyType === 'function',
+			// --- who is left standing afterwards ---
+			forceSwitch: !!entry.forceSwitch,
+			selfSwitch: entry.selfSwitch === undefined ? null : entry.selfSwitch,
+			selfdestruct: entry.selfdestruct || null,
+			hasCrashDamage: !!entry.hasCrashDamage,
+			thawsTarget: !!entry.thawsTarget,
 		};
 	}
 

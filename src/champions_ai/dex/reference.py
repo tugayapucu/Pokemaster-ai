@@ -112,6 +112,45 @@ class MoveInfo(BaseModel, frozen=True):
     self_boosts: dict[str, int] = Field(default_factory=dict)
     flags: frozenset[str] = frozenset()
 
+    # --- what the move does besides the damage roll ---
+    # A move's *own* effects, as distinct from a secondary's rider. These are
+    # what separate Swords Dance from Thunder Wave from Recover, and none of
+    # them was dumped -- so all 175 status moves in this dex scored alike.
+    boosts: dict[str, int] = Field(default_factory=dict)
+    status: str | None = None
+    volatile_status: str | None = None
+    # [numerator, denominator] of the user's maximum HP.
+    heal: tuple[int, int] | None = None
+    side_condition: str | None = None
+    slot_condition: str | None = None
+    sets_weather: str | None = None
+    sets_terrain: str | None = None
+    pseudo_weather: str | None = None
+
+    # --- what changes the damage itself ---
+    # A fixed count, or [min, max]. A 2-5 hit move lands about 3.1 times.
+    multihit: int | tuple[int, int] | None = None
+    # Each hit of these rolls accuracy separately.
+    multiaccuracy: bool = False
+    # 1 is the ordinary 1/24 chance. Higher widens the crit stage.
+    crit_ratio: int | None = None
+    always_crits: bool | None = None
+    ohko: bool | str | None = None
+    ignore_defensive: bool = False
+    ignore_evasion: bool = False
+    ignore_immunity: bool | None = None
+    breaks_protect: bool = False
+    # Weather Ball, Terrain Pulse, Raging Bull and Aura Wheel change their own
+    # type, so a chart lookup on the static type reads the wrong row.
+    modifies_type: bool = False
+
+    # --- who is left standing afterwards ---
+    force_switch: bool = False
+    self_switch: bool | str | None = None
+    selfdestruct: str | None = None
+    has_crash_damage: bool = False
+    thaws_target: bool = False
+
     @property
     def deals_fixed_damage(self) -> bool:
         """Whether this move ignores the damage formula entirely."""
@@ -389,6 +428,34 @@ class Dex(BaseModel, frozen=True):
                 recoil=tuple(entry["recoil"]) if entry.get("recoil") else None,
                 self_boosts=dict(entry.get("selfBoosts") or {}),
                 flags=frozenset(entry.get("flags", ())),
+                boosts=dict(entry.get("boosts") or {}),
+                status=entry.get("status") or None,
+                volatile_status=entry.get("volatileStatus") or None,
+                heal=tuple(entry["heal"]) if entry.get("heal") else None,
+                side_condition=entry.get("sideCondition") or None,
+                slot_condition=entry.get("slotCondition") or None,
+                sets_weather=entry.get("weather") or None,
+                sets_terrain=entry.get("terrain") or None,
+                pseudo_weather=entry.get("pseudoWeather") or None,
+                multihit=(
+                    tuple(entry["multihit"])
+                    if isinstance(entry.get("multihit"), list)
+                    else entry.get("multihit")
+                ),
+                multiaccuracy=bool(entry.get("multiaccuracy", False)),
+                crit_ratio=entry.get("critRatio"),
+                always_crits=entry.get("willCrit"),
+                ohko=entry.get("ohko"),
+                ignore_defensive=bool(entry.get("ignoreDefensive", False)),
+                ignore_evasion=bool(entry.get("ignoreEvasion", False)),
+                ignore_immunity=entry.get("ignoreImmunity"),
+                breaks_protect=bool(entry.get("breaksProtect", False)),
+                modifies_type=bool(entry.get("modifiesType", False)),
+                force_switch=bool(entry.get("forceSwitch", False)),
+                self_switch=entry.get("selfSwitch"),
+                selfdestruct=entry.get("selfdestruct") or None,
+                has_crash_damage=bool(entry.get("hasCrashDamage", False)),
+                thaws_target=bool(entry.get("thawsTarget", False)),
             )
             for move_id, entry in payload["moves"].items()
         }
