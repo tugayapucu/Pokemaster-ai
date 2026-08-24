@@ -26,15 +26,47 @@ Raging Bull and Aura Wheel were all read on the wrong row of the type chart.
 Agreement train 45.36 → 45.42%, test 47.06 → **47.25%**. Damage prediction
 holds at ~95% on the control team.
 
-### 1. Focus Sash and the knockout claim
+### ~~1. Focus Sash and the knockout claim~~ — done 2026-08-24
 
-"Guaranteed knockout" is wrong about **17%** of the time. Focus Sash is the
-likeliest cause: it measured at 0.985 for *damage*, meaning it does nothing
-there, which is exactly why the damage harness cannot see it. It is a survival
-mechanic, so it needs the KO calibration rather than the differential.
+**The gap was five times smaller than this said.** Measured against the engine
+first, per the rule 0013 earned: the "guaranteed knockout" claim was already
+right **98.1%** of the time. The 17% figure came from *replay* calibration,
+where the opponent's spread and item are unknown — it was measuring
+hidden-information uncertainty, not the knockout logic.
 
-**Done when** a "guaranteed" claim is right at least ~90% of the time, or the
-remaining error is attributed to something else.
+Both causes of the remaining 1.9% were real and are fixed:
+
+```
+Focus Sash     leaves the holder on 1 HP, and only from full health.
+               Sturdy is the same as an ability. Focus Band is left out:
+               a 10% chance at any HP is a coin flip, not a certainty.
+Dragon Darts   is multihit 2 *and* smartTarget, so in doubles it fires one
+               dart at each opponent rather than two at one. `smartTarget`
+               was not dumped at all.
+```
+
+Now **99.0%**, with neither cause left among the survivors.
+
+### 1. Roost, and the Flying type
+
+**New, found while measuring the knockout claim.** Roost removes the user's
+Flying type for the turn, and nothing models it. One mechanic explained every
+large mismatch in a control run that read 90.0% instead of the usual ~95%:
+
+```
+Earthquake hitting Altaria        Dragon/Flying -> Dragon, so it is grounded
+Head Smash halved into Altaria    Rock vs Flying 2x -> vs Dragon 1x
+Body Press doubled into Corviknight   Fighting vs Flying/Steel 1x -> vs Steel 2x
+```
+
+The run-to-run swing in the control differential (90.0% against 94–95%) is
+team composition: a team with Roost users exposes it, one without does not.
+
+The tracker already records `|-singleturn|...move: Roost` for Protect's sake,
+so the signal is likely there already.
+
+**Done when** a Roosting Pokémon is typed without Flying for that turn, and the
+control differential stops swinging on whether the team drew one.
 
 ### 2. Ability tracking
 
@@ -87,6 +119,10 @@ effects it should not. Small individually, and one concept fixes all of them.
 
 **Done when** a `is_grounded` helper exists and every terrain rule consults it.
 
+Related to item 1: Roost makes a Flying type grounded for a turn, so the two
+share a notion of "what types does this Pokémon have *right now*" and are
+probably one job rather than two.
+
 ### ~~7. Critical hits~~ — done 2026-08-24
 
 Folded into expected damage as part of item 1. Deliberately *not* folded into
@@ -129,7 +165,15 @@ Kept here so the same ground is not covered twice.
   instrument, not the target.
 - **Check the size of a gap before trying to close it.** Target selection was
   called "the largest gap" and turned out to be 77-80% against a 50% floor,
-  with the rest irreducible. Measure the ceiling first (0013).
+  with the rest irreducible (0013). The knockout claim was carried as 83% and
+  measured 98.1% against the engine, because the 83% came from replays where
+  the opponent's spread and item are unknown. **Twice in a row the stated gap
+  was several times smaller than the backlog said** -- measure the ceiling
+  first, and with the instrument that removes the confound.
+- **A figure is only as good as the instrument behind it.** Replay calibration
+  measures the metagame *and* our arithmetic together; the engine differential
+  measures the arithmetic alone. Carrying a number from one as though it came
+  from the other is how 17% became a headline item.
 - **A weak signal implemented as a strong one does damage.** Humans prefer the
   more threatening target 53.7% of the time; weighting that as though it were
   decisive cost significant agreement on both halves (0013).
