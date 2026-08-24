@@ -3,6 +3,26 @@
 Near-term work, in order. `PROJECT_PLAN.md` is the big picture and the record
 of what was measured; this is the short list of what happens next.
 
+**What counts as right.** Two instruments, and they answer different
+questions, so the order matters:
+
+- **The engine settles anything with a right answer.** Mechanics, damage,
+  turn order, what a move does. This is ground truth and it is exhausted
+  first. Every large durable win in this project came from here — damage
+  28% → 94.8%, turn order 85% → 97.7%, four separate classes of move that
+  read as status moves.
+- **Human agreement is a *ranking* signal for judgement calls only** — what a
+  stat stage is worth, when Protect beats attacking — because the rules have
+  no answer to those. It is never truth. The corpus is 1500–1850 Elo and
+  those players make mistakes, so matching them means matching those too.
+
+Agreement has already lied twice and been caught: Trick Room's fitted value
+climbed without bound because a team that brought it nearly always uses it
+(0010), and target selection looked like the largest gap in the project when
+humans themselves are near-random on it (0013). **A measurement that improves
+agreement is not on its own a reason to keep a change, and one that does not
+is not on its own a reason to drop it.**
+
 **How it is used.** Work starts at the top. If a measurement suggests a
 different order, that gets raised and agreed *before* the order changes —
 not reordered and reported afterwards. Items leave by being done or by being
