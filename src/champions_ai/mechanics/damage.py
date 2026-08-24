@@ -110,9 +110,16 @@ class DamageEstimate:
     maximum: int
     effectiveness: float
     defender_hp: int
+    # Expected damage. Usually the midpoint of the range, but not for a
+    # multi-hit move: the range spans the fewest and most landings, while a
+    # 2-5 hit move averages 3.1 of them rather than 3.5, because the engine
+    # samples 35/35/15/15 rather than uniformly.
+    expected: float | None = None
 
     @property
     def average(self) -> float:
+        if self.expected is not None:
+            return self.expected
         return (self.minimum + self.maximum) / 2
 
     @property
@@ -135,6 +142,70 @@ class DamageEstimate:
     @property
     def is_immune(self) -> bool:
         return self.effectiveness == 0.0
+
+
+# A 2-5 hit move is not uniform: the engine samples 35/35/15/15 for 2/3/4/5,
+# which averages 3.1. Every other count in this dex is fixed.
+TWO_TO_FIVE = (2, 5)
+TWO_TO_FIVE_EXPECTED = 3.1
+
+# The crit stages, as chances. `critRatio` 1 is the ordinary 1 in 24.
+CRIT_CHANCES = {1: 1 / 24, 2: 1 / 8, 3: 1 / 2, 4: 1.0}
+CRIT_MULTIPLIER = 1.5
+
+
+def expected_hits(move: MoveInfo) -> float:
+    """How many times this move is expected to land, counting accuracy.
+
+    One for almost everything. Fourteen moves here hit repeatedly, and
+    predicting a single hit understated Icicle Spear and Bullet Seed
+    threefold.
+    """
+    count = move.multihit
+    if count is None:
+        return 1.0
+    if isinstance(count, tuple):
+        hits = (
+            TWO_TO_FIVE_EXPECTED
+            if count == TWO_TO_FIVE
+            else (count[0] + count[1]) / 2
+        )
+    else:
+        hits = float(count)
+    if move.multiaccuracy and move.accuracy is not None:
+        # Triple Axel and Population Bomb roll for each hit, so the run stops
+        # at the first miss: the expected length is a geometric sum, not the
+        # full count.
+        chance = move.accuracy / 100
+        return sum(chance ** step for step in range(1, int(hits) + 1))
+    return hits
+
+
+def hit_range(move: MoveInfo) -> tuple[int, int]:
+    """Fewest and most times this move can land.
+
+    The ends of the damage range use these rather than the expected count, or
+    a "guaranteed knockout" would be claimed on a run of hits the move is not
+    guaranteed to get: Icicle Spear promises two and can manage five.
+    """
+    count = move.multihit
+    if count is None:
+        return 1, 1
+    if isinstance(count, tuple):
+        return count[0], count[1]
+    return count, count
+
+
+def critical_chance(move: MoveInfo) -> float:
+    """Probability this move lands a critical hit.
+
+    Three moves here always do -- Frost Breath, Storm Throw, Flower Trick --
+    and the calibration excluded them as "crits" rather than predicting them
+    as the certainties they are.
+    """
+    if move.always_crits:
+        return 1.0
+    return CRIT_CHANCES.get(move.crit_ratio or 1, 1.0)
 
 
 # Fixed damage equal to the user's level. The engine spells it as a string.
@@ -292,6 +363,11 @@ def estimate_damage(
     final = damage_multiplier(attacker_item, effectiveness=effectiveness)
     final *= defender_multiplier(defender_item, move, effectiveness=effectiveness)
 
+    # Three moves here always crit, and a crit is a flat 1.5x on top. Modelled
+    # as the certainty it is rather than excluded as "a crit": Frost Breath,
+    # Storm Throw and Flower Trick have no non-crit case to predict.
+    crit = CRIT_MULTIPLIER if move.always_crits else 1.0
+
     def rolled(percent: int) -> int:
         """One end of the range, following the engine step for step.
 
@@ -314,9 +390,14 @@ def estimate_damage(
             damage = modify(damage, final)
         return max(1, damage)
 
+    low_hits, high_hits = hit_range(move)
+    low = rolled(MIN_ROLL_PERCENT)
+    high = rolled(MAX_ROLL_PERCENT)
+    average_hit = (low + high) / 2
     return DamageEstimate(
-        minimum=rolled(MIN_ROLL_PERCENT),
-        maximum=rolled(MAX_ROLL_PERCENT),
+        minimum=max(1, int(low * low_hits * crit)),
+        maximum=max(1, int(high * high_hits * crit)),
         effectiveness=effectiveness,
         defender_hp=defender_hp,
+        expected=average_hit * expected_hits(move) * crit,
     )

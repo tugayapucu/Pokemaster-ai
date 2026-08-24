@@ -205,13 +205,58 @@ class DamageCollector:
         A damage line is only attributed to the move before it when nothing
         intervenes: no `[from]` marker (that is residual damage), and never the
         attacker damaging itself (that is recoil).
+
+        One sample is emitted per *target*, covering everything that move did
+        to it -- so a five-hit Icicle Spear is one sample of the whole run, and
+        a spread move produces one per Pokemon it reached.
         """
         samples: list[DamageSample] = []
         pending: tuple[str, str] | None = None
         critical = False
         spread = False
         spread_targets = 1
-        multi_hit = False
+        # Every target this move has hit so far, as (HP before its first hit,
+        # HP after its latest). Accumulated rather than taken one line at a
+        # time, because a multi-hit move reports each hit separately and a
+        # spread move reports each target separately -- and taking the first
+        # line and stopping threw away every hit after it. Icicle Spear was
+        # scored on a third of its damage, and the second target of every
+        # spread move was never sampled at all.
+        landed: dict[str, tuple[int, int]] = {}
+
+        def flush() -> None:
+            if pending is None:
+                return
+            attacker_ident, move_id = pending
+            for target, (first, last) in landed.items():
+                if last >= first:
+                    continue
+                attacker = active_lookup(attacker_ident)
+                defender = active_lookup(target)
+                if attacker is None or defender is None:
+                    continue
+                samples.append(
+                    DamageSample(
+                        attacker=attacker,
+                        defender=defender,
+                        move_id=move_id,
+                        actual=first - last,
+                        defender_hp_before=first,
+                        weather=self.weather,
+                        critical=critical,
+                        spread=spread,
+                        spread_targets=spread_targets,
+                        truncated=last == 0,
+                        behind_screen=bool(
+                            self._screens.get(split_ident(target)[0], set())
+                        ),
+                        terrain=self.terrain,
+                        fainted_allies=self._fainted.get(
+                            split_ident(attacker_ident)[0], 0
+                        ),
+                    )
+                )
+            landed.clear()
 
         for line in protocol:
             parts = line.split("|")
@@ -220,6 +265,7 @@ class DamageCollector:
             tag, args = parts[1], parts[2:]
 
             if tag in ("switch", "drag", "replace"):
+                flush()
                 if len(args) > 2:
                     self._hp[args[0]] = _current_hp(args[2])
                 pending = None
@@ -254,17 +300,13 @@ class DamageCollector:
                     self._fainted[side] += 1
             elif tag == "-crit":
                 critical = True
-            elif tag == "-hitcount":
-                # Multi-hit moves report one damage line per hit, so a single
-                # prediction cannot be compared against any one of them.
-                multi_hit = True
             elif tag == "move":
+                flush()
                 if any(part.startswith(RESIDUAL_MARKER) for part in args):
                     pending = None
                     continue
                 pending = (args[0], to_id(args[1]))
                 critical = False
-                multi_hit = False
                 spread_note = next((p for p in args if p.startswith("[spread]")), None)
                 spread = spread_note is not None
                 spread_targets = (
@@ -287,41 +329,23 @@ class DamageCollector:
                     continue
                 if any(part.startswith(RESIDUAL_MARKER) for part in args):
                     continue
-                attacker_ident, move_id = pending
+                attacker_ident, _ = pending
+                if target == attacker_ident:
+                    continue
+                if target in landed:
+                    # A later hit of the same move: extend the run rather than
+                    # starting a new sample from the HP the last hit left.
+                    landed[target] = (landed[target][0], after)
+                    continue
                 if before is None:
                     self.unknown_hp += 1
                     continue
-                if target == attacker_ident or after >= before:
-                    continue
-
-                attacker = active_lookup(attacker_ident)
-                defender = active_lookup(target)
-                if attacker is not None and defender is not None and not multi_hit:
-                    samples.append(
-                        DamageSample(
-                            attacker=attacker,
-                            defender=defender,
-                            move_id=move_id,
-                            actual=before - after,
-                            defender_hp_before=before,
-                            weather=self.weather,
-                            critical=critical,
-                            spread=spread,
-                            spread_targets=spread_targets,
-                            truncated=after == 0,
-                            behind_screen=bool(
-                                self._screens.get(split_ident(target)[0], set())
-                            ),
-                            terrain=self.terrain,
-                            fainted_allies=self._fainted.get(
-                                split_ident(attacker_ident)[0], 0
-                            ),
-                        )
-                    )
-                pending = None
+                landed[target] = (before, after)
             elif tag == "turn":
+                flush()
                 pending = None
 
+        flush()
         return samples
 
 

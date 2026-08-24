@@ -2,8 +2,11 @@ from champions_ai.mechanics.base_power import dynamic_base_power
 from champions_ai.mechanics.damage import (
     DamageEstimate,
     attacking_side,
+    critical_chance,
     estimate_damage,
+    expected_hits,
     fixed_damage,
+    hit_range,
     is_spread_move,
 )
 from champions_ai.mechanics.evaluation import PositionValue, evaluate_position
@@ -58,7 +61,10 @@ __all__ = [
     "defender_multiplier",
     "dynamic_base_power",
     "effective_speed",
+    "critical_chance",
     "estimate_damage",
+    "expected_hits",
+    "hit_range",
     "fixed_damage",
     "estimate_stats",
     "evaluate_position",

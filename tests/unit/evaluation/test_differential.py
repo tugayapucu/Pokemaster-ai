@@ -112,15 +112,40 @@ def test_a_spread_move_records_how_many_targets_it_reached():
     assert one[0].spread_targets == 1
 
 
-def test_a_multi_hit_move_is_not_sampled():
-    """One prediction cannot be compared against one of several hits."""
+def test_a_multi_hit_move_is_one_sample_of_the_whole_run():
+    """Each hit gets its own damage line, and taking the first and stopping
+    scored Icicle Spear on a third of what it did."""
     samples = collect_samples(_log(
         "|switch|p2a: Garchomp|Garchomp, L50, F|194/194",
-        "|move|p1a: Charizard|Dual Wingbeat|p2a: Garchomp",
-        "|-hitcount|p2a: Garchomp|2",
-        "|-damage|p2a: Garchomp|150/194",
+        "|move|p1a: Charizard|Icicle Spear|p2a: Garchomp",
+        "|-damage|p2a: Garchomp|170/194",
+        "|-damage|p2a: Garchomp|146/194",
+        "|-damage|p2a: Garchomp|122/194",
+        "|-hitcount|p2a: Garchomp|3",
+        "|turn|2",
     ), LOOKUP)
-    assert samples == []
+    assert len(samples) == 1
+    assert samples[0].actual == 72, "the whole run, not the first hit"
+    assert samples[0].defender_hp_before == 194
+
+
+def test_a_spread_move_samples_every_target_it_reached():
+    """Clearing the pending move on the first damage line meant the second
+    target of every spread move was never sampled at all."""
+    lookup = active_by_ident({
+        "p1": [_mon("Charizard")],
+        "p2": [_mon("Garchomp"), _mon("Incineroar")],
+    })
+    samples = collect_samples(_log(
+        "|switch|p2a: Garchomp|Garchomp, L50, F|194/194",
+        "|switch|p2b: Incineroar|Incineroar, L50, F|180/180",
+        "|move|p1a: Charizard|Heat Wave|p2a: Garchomp|[spread] p2a,p2b",
+        "|-damage|p2a: Garchomp|150/194",
+        "|-damage|p2b: Incineroar|140/180",
+        "|turn|2",
+    ), lookup)
+    assert sorted(s.actual for s in samples) == [40, 44]
+    assert all(s.spread and s.spread_targets == 2 for s in samples)
 
 
 def test_weather_carries_into_the_sample():
