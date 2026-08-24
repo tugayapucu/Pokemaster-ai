@@ -59,6 +59,7 @@ from champions_ai.mechanics import (
     matchup,
     move_priority,
     moves_first,
+    ohko_chance,
 )
 
 # Scoring weights. Chosen to be legible rather than optimal: damage is the
@@ -520,7 +521,22 @@ class HeuristicAgent(Agent):
 
         # An accurate move is worth more than a strong one that misses. Applied
         # last so it discounts the whole package, KO bonus included.
-        if not move.always_hits:
+        #
+        # A one-hit knockout move gets its own number: the engine ignores every
+        # accuracy modifier for these and uses a flat 30, or 20 for Sheer Cold
+        # from a non-Ice user -- and the named type is outright immune, which
+        # the dumped accuracy of 30 cannot express.
+        landed = ohko_chance(move, attacker=attacker_species, defender=defender_species)
+        if landed is not None:
+            if landed == 0.0:
+                return ScoredAction(
+                    action,
+                    IMMUNE_PENALTY,
+                    (f"{defender_species.name} cannot be hit by {move.name}",),
+                )
+            score *= landed
+            reasons.append(f"{landed:.0%} to land a one-hit knockout")
+        elif not move.always_hits:
             score *= move.hit_chance
             if move.hit_chance < 1:
                 reasons.append(f"{move.accuracy}% accurate")

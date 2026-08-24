@@ -153,8 +153,19 @@ class MoveInfo(BaseModel, frozen=True):
 
     @property
     def deals_fixed_damage(self) -> bool:
-        """Whether this move ignores the damage formula entirely."""
-        return self.fixed_damage is not None or self.damage_callback
+        """Whether this move ignores the damage formula entirely.
+
+        A one-hit knockout move counts: it deals the target's whole remaining
+        bar. Without it Fissure, Guillotine, Horn Drill and Sheer Cold read as
+        *status* moves -- the fourth distinct reason a move in this dex can
+        carry a zero base power, after the per-hit callbacks, the situational
+        multipliers and the damage callbacks.
+        """
+        return (
+            self.fixed_damage is not None
+            or self.damage_callback
+            or bool(self.ohko)
+        )
 
     @property
     def offensive_stat(self) -> str:

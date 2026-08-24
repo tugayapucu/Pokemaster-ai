@@ -325,3 +325,21 @@ def test_an_ordinary_move_deals_no_fixed_damage(bridge):
     dex = Dex.load(bridge)
     assert not dex.get_move("dragonclaw").deals_fixed_damage
     assert not dex.get_move("protect").deals_fixed_damage
+
+
+def test_the_one_hit_knockout_moves_are_not_status_moves(bridge):
+    """The fourth distinct reason a move here can carry no base power, after
+    the per-hit callbacks, the situational multipliers and the damage
+    callbacks -- and the fourth time all of them read as support."""
+    dex = Dex.load(bridge)
+    for move_id in ("fissure", "guillotine", "horndrill", "sheercold"):
+        move = dex.get_move(move_id)
+        assert move.base_power == 0
+        assert move.ohko
+        assert move.is_damaging, f"{move_id} must not read as a status move"
+
+
+def test_sheer_cold_names_the_type_that_is_immune_to_it(bridge):
+    dex = Dex.load(bridge)
+    assert dex.get_move("sheercold").ohko == "Ice"
+    assert dex.get_move("fissure").ohko is True

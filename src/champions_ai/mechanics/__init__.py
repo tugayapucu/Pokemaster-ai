@@ -8,6 +8,7 @@ from champions_ai.mechanics.damage import (
     fixed_damage,
     hit_range,
     is_spread_move,
+    ohko_chance,
 )
 from champions_ai.mechanics.evaluation import PositionValue, evaluate_position
 from champions_ai.mechanics.items import (
@@ -73,6 +74,7 @@ __all__ = [
     "is_spread_move",
     "move_priority",
     "moves_first",
+    "ohko_chance",
     "speed_multiplier",
     "matchup",
     "other_stat",

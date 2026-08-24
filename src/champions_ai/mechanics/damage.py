@@ -208,6 +208,32 @@ def critical_chance(move: MoveInfo) -> float:
     return CRIT_CHANCES.get(move.crit_ratio or 1, 1.0)
 
 
+# One-hit knockout moves. The engine ignores every accuracy modifier for
+# these and uses a flat 30, dropping to 20 for Sheer Cold in the hands of a
+# non-Ice user, plus the level difference -- which is always zero here.
+OHKO_ACCURACY = 30
+OHKO_ACCURACY_WITHOUT_TYPE = 20
+
+
+def ohko_chance(
+    move: MoveInfo, *, attacker: SpeciesInfo, defender: SpeciesInfo
+) -> float | None:
+    """Probability a one-hit knockout move connects, or None if it is not one.
+
+    `ohko` is `True` for most of them and the *name of a type* for Sheer Cold,
+    which that type is outright immune to and which a user of that type lands
+    more often.
+    """
+    if not move.ohko:
+        return None
+    named = move.ohko if isinstance(move.ohko, str) else None
+    if named is not None and named in defender.types:
+        return 0.0
+    if named is not None and named not in attacker.types:
+        return OHKO_ACCURACY_WITHOUT_TYPE / 100
+    return OHKO_ACCURACY / 100
+
+
 # Fixed damage equal to the user's level. The engine spells it as a string.
 LEVEL_DAMAGE = "level"
 
@@ -241,6 +267,9 @@ def fixed_damage(
     """
     if not move.deals_fixed_damage:
         return None
+    if move.ohko:
+        # The whole bar, however much of it is left.
+        return defender_hp
     if move.fixed_damage == LEVEL_DAMAGE:
         return level
     if isinstance(move.fixed_damage, int):
