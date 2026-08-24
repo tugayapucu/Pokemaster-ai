@@ -87,16 +87,42 @@ The same silent bug shape appeared for the third time: `-singleturn` was
 recorded for the opponent and never for us, so our own Roost was invisible.
 Boosts, side conditions, and now single-turn effects.
 
-### 1. Ability tracking
+### ~~1. Abilities~~ — done 2026-08-24
 
-Five support moves need it — Skill Swap, Role Play, Entrainment, Worry Seed,
-Simple Beam — and `revealed_ability` is already tracked, so this is the same
-shape of job as item tracking was.
+The item said "five support moves need ability tracking". Measuring first
+found something an order of magnitude larger: **abilities were the biggest
+remaining source of damage error in the whole model.**
 
-Expected to be agreement-neutral, like item tracking. It is on the list for
-the same reason: the model should describe the game, not the sample.
+```
+fully random teams (all abilities and items)     80.1%   ->  92-94%
+items on, abilities inert                        92.5%
+the control (neither)                           96-99%
+```
 
-### 2. The rest of the unpriced support moves
+Values read off the residual before being written down, as Life Orb was:
+Huge Power 1.950, Hustle 1.472, Tough Claws 1.243, Iron Fist 1.158,
+Adaptability 1.319. Everything else landed inside ±5% of 1.0 — which is **not**
+the same as absent, because the median only catches *unconditional*
+multipliers. A Multiscale that halves damage one hit in five leaves it
+untouched, so the conditional ones are transcribed from the engine instead and
+their test is the harness afterwards.
+
+Two process notes worth keeping:
+
+- **Adaptability was missed by the first extraction** because it hangs off
+  `onModifySTAB` rather than any stat hook. A search for one hook shape finds
+  only that shape.
+- **The Dragon Darts split was inert**, and the control harness said so: every
+  mismatch in one run was Dragon Darts over-predicted by exactly 2x. The
+  harness was passing `spread_targets` as the opponent count, and that is 1
+  for a single-target move — which Dragon Darts is, despite reaching both
+  opponents. It now counts what actually landed.
+
+The **five support moves** the item was originally about — Skill Swap, Role
+Play, Entrainment, Worry Seed, Simple Beam — are still unpriced, and sit with
+the rest in item 1 below.
+
+### 1. The rest of the unpriced support moves
 
 23 remain of the original 54. They cluster, so each cluster is one job:
 
@@ -110,7 +136,7 @@ one-offs               Baton Pass, Transform, Lock-On, Perish Song,
                        Guard Split, Power Split, Magnetic Flux, Swallow, Teatime
 ```
 
-### 3. Make the terrain rules consult `is_grounded`
+### 2. Make the terrain rules consult `is_grounded`
 
 `is_grounded` exists now but nothing calls it. Five rules still apply to
 Flying types and Levitate users that should be exempt:
@@ -125,7 +151,7 @@ the terrain damage bonuses (Electric, Grassy, Psychic)   same
 
 Cheap, and it is the last of the terrain work.
 
-### 4. Speed Boost and the weather Speed abilities
+### 3. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -165,6 +191,9 @@ Kept here so the same ground is not covered twice.
   against the edge diagnostics every time.
 - **≥1,500 battles across ≥2 seeds** for any strength claim, paired against the
   version being replaced, on the same teams.
+- **A search for one hook shape finds only that shape.** Adaptability was
+  missed when abilities were extracted by grepping the stat hooks, because it
+  uses `onModifySTAB`. Cross-check an extraction against the measured residual.
 - **Rarity in the corpus is not unimportance.** The corpus is a measuring
   instrument, not the target.
 - **Check the size of a gap before trying to close it.** Target selection was
