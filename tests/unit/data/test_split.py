@@ -8,7 +8,7 @@ the corpus grows so that yesterday's model is graded on games it trained on.
 import pytest
 
 from champions_ai.data.replay import Replay, ReplayMetadata
-from champions_ai.data.split import is_test, split_replays
+from champions_ai.data.split import declared_rosters, is_test, split_replays
 
 
 def _replay(replay_id, players=("alice", "bob")):
@@ -88,3 +88,73 @@ def test_an_impossible_fraction_is_rejected():
     for bad in (0.0, 1.0, -0.1, 1.5):
         with pytest.raises(ValueError):
             split_replays(CORPUS, test_fraction=bad)
+
+
+# --------------------------------------------------------- teams, not players
+
+
+def _with_teams(replay_id, p1, p2, players=("alice", "bob")):
+    """A replay carrying Team Preview lines, which is where team identity lives."""
+    log = [f"|poke|p1|{species}, L50, M|" for species in p1]
+    log += [f"|poke|p2|{species}, L50, M|" for species in p2]
+    log.append("|turn|1")
+    return Replay(
+        metadata=ReplayMetadata(
+            replay_id=replay_id, format_id="gen9championsvgc2026regmb",
+            players=players, ratings=(1600, 1600), upload_time=0, rated=True,
+        ),
+        log=tuple(log),
+    )
+
+
+SIX = ("Charizard", "Venusaur", "Blastoise", "Pikachu", "Snorlax", "Gengar")
+OTHER = ("Machamp", "Alakazam", "Gyarados", "Lapras", "Ditto", "Eevee")
+THIRD = ("Onix", "Arcanine", "Rhydon", "Starmie", "Jolteon", "Vaporeon")
+
+
+def test_a_team_is_read_from_team_preview():
+    """The declared six, not the four actually brought -- which four you bring
+    is a choice made inside the battle and differs between two games on the
+    same team."""
+    rosters = declared_rosters(_with_teams("g", SIX, OTHER))
+    assert len(rosters) == 2
+    assert frozenset({"charizard", "venusaur", "blastoise", "pikachu",
+                      "snorlax", "gengar"}) in rosters
+
+
+def test_shared_teams_are_reported_not_hidden():
+    """The same stance the module already takes on players, and a stronger
+    effect: a player can change teams, but a team is exactly the thing an
+    agent could memorise."""
+    corpus = [_with_teams(f"g{i}", SIX, OTHER) for i in range(200)]
+    split = split_replays(corpus, test_fraction=0.2)
+    assert split.shared_rosters
+    assert "teams appear on both sides" in split.summary()
+
+
+def test_a_side_counts_as_clean_only_when_its_own_team_is_new():
+    """Measured per player rather than per replay, because on the real corpus
+    55 of 95 test replays have both teams already seen and only two have
+    neither -- while 38 have exactly one."""
+    corpus = [_with_teams(f"seen{i}", SIX, OTHER) for i in range(400)]
+    # Each fresh side brings a team of its own, so whichever lands in test is
+    # genuinely unseen rather than merely rare.
+    corpus += [
+        _with_teams(f"fresh{i}", SIX, (f"Uniq{i}", *THIRD[1:])) for i in range(100)
+    ]
+    split = split_replays(corpus, test_fraction=0.2)
+    sides = split.unseen_team_sides
+    # Only the second side is ever new; the SIX side was seen 400 times.
+    assert sides
+    assert all(player == 1 for _, player in sides)
+    assert all(replay.metadata.replay_id.startswith("fresh") for replay, _ in sides)
+
+
+def test_a_corpus_with_no_repeated_teams_leaks_nothing():
+    corpus = [
+        _with_teams(f"g{i}", (f"Mon{i}a", *SIX[1:]), (f"Mon{i}b", *OTHER[1:]))
+        for i in range(200)
+    ]
+    split = split_replays(corpus, test_fraction=0.2)
+    assert not split.shared_rosters
+    assert len(split.unseen_team_test) == len(split.test)

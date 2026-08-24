@@ -166,40 +166,59 @@ Three things the corpus *did* catch, all in Instruct:
 - **Instruct's target is `normal`, not `adjacentAlly`.** The engine offers it
   across the field, which hands the opponent a free attack.
 
-### 1. Split by team, not only by replay
+### ~~1. Split by team, not only by replay~~ — done 2026-08-24, and the answer was no
 
-**An external review raised this and it is right — measured, not argued.** The
-split is hashed by replay id, which stops the same *battle* being scored twice
-and says nothing about the same **team** appearing in both halves. It does:
+**A clean team-level split is impossible on this corpus, and the leakage was
+inflating every reported figure by about four points.** Written up as
+experiment 0014.
+
+Grouping replays so a roster lands wholly on one side fails because every
+replay has two rosters, so replays chain — A brings X and Y, B brings Y and Z,
+and now A and B must share a side:
 
 ```
-500 replays: 405 train, 95 test
-
-team roster   80 rosters appear in BOTH halves
-              141 of 190 test-side appearances (74.2%) also occur in train
-              worst: one roster 26 times in train, 5 in test
-
-player name   78 players appear in BOTH halves
-              140 of 190 (73.7%)
-              worst: one player 24 times in train, 8 in test
+500 replays -> 46 components, the largest holding 427 (85.4%)
+a strict team-disjoint test set could reach 14.6% at most,
+and it would be the least-connected replays: obscure teams, one-off players
 ```
 
-So "test" is not measuring generalisation to unseen teams. It is measuring
-recall of teams and players already seen 5 to 26 times. **Every agreement
-figure this project has reported rests on that**, and the standing rule says a
-figure is only as good as the instrument behind it.
+Subsetting whole replays fails too: 55 test replays have both teams already
+seen, 38 have one new, **2 have neither**. Two replays is not a measurement.
 
-It probably has not done much damage *yet* — only about thirteen global
-constants have ever been fitted, against 9,057 labels, so there is little
-capacity to memorise a particular player. But it makes the one overfitting
-result we already have (0012, train up and test down) harder to interpret, and
-it would quietly invalidate any learned policy trained on this split.
+What works is splitting the **sides** rather than the replays. Scoring only the
+player whose own team is new turns two replays into 42 player-sides and 466
+labels:
 
-The job: group by roster before splitting, so a team lands wholly on one side.
-Then re-report the agreement numbers and say plainly whether they moved. If
-they drop, they drop — the instrument was wrong, not the result.
+```
+TRAIN, everything                45.45%   (9057 labels)
+TEST,  everything                47.30%   (2076 labels)
+TEST,  unseen team only          43.13%   ( 466 labels)
+TEST,  team seen in training     48.51%   (1610 labels)
 
-### 2. Mega: never scored, never measured
+z = 2.047,  p = 0.041
+```
+
+So the test half has been reporting the model on teams it has already seen.
+`CorpusSplit.summary()` now states the contamination, and
+`unseen_team_sides` is the subset to quote when the claim is about
+generalisation.
+
+The split itself is **unchanged**. Reshuffling would invalidate every prior
+result while fixing nothing — the contamination is a property of the corpus,
+not of the hash.
+
+Two things follow, both recorded rather than done:
+
+- **Collect for team diversity, not volume.** 500 replays gave 448 distinct
+  rosters and only 42 usable clean sides. More games from the same ladder
+  population will not move that.
+- **For a variety of teams, the engine differential harness is the better
+  instrument and already is one.** It generates random teams, so it has
+  unlimited diversity by construction, and it is where damage (92–94%), turn
+  order (97.7%) and the knockout claim (99.0%) are measured. Replay agreement
+  measures something narrower, and now says so.
+
+### 1. Mega: never scored, never measured
 
 Also from the review, and worse than it looked from outside.
 
@@ -223,7 +242,7 @@ The job, in that order: let the differential and turn-order harnesses Mega, see
 what the accuracy does, and only then decide what the agent should think about
 it. Measure before building, as usual.
 
-### 3. Make the terrain rules consult `is_grounded`
+### 2. Make the terrain rules consult `is_grounded`
 
 `is_grounded` exists now but nothing calls it. Five rules still apply to
 Flying types and Levitate users that should be exempt:
@@ -238,7 +257,7 @@ the terrain damage bonuses (Electric, Grassy, Psychic)   same
 
 Cheap, and it is the last of the terrain work.
 
-### 4. Speed Boost and the weather Speed abilities
+### 3. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -247,7 +266,7 @@ Speed Boost needs a per-turn counter.
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
 
-### 5. The support moves that are still unpriced, and why
+### 4. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -301,12 +320,16 @@ correctness roadmap it inverts the priority. The work is done regardless, and
 the nine that remain are already parked last, which is where the reviewer
 would have put all of them.
 
-**A scope question, not a correction: the team discovery lab.** Evaluating
-candidate teams by their *matchup floor* rather than their average is a good
-idea and is not currently anywhere in the near-term plan. It is Milestone 13
-in `PROJECT_PLAN.md`, and pulling it forward means going ahead of milestones 6
-through 11. That is a decision about what this project is for, so it is left
-here as a question rather than added to the list.
+**Declined, on the project owner's call: the team discovery lab.** Evaluating
+candidate teams by their matchup floor is Milestone 13, and pulling it forward
+would jump milestones 6 through 11. Asked and answered on 2026-08-24: *"right
+now lets not focus on a team and prepare me for variety of teams."*
+
+That decision cuts the opposite way to how it sounds. Preparing for a **variety
+of teams** makes generalisation the thing to measure, which is exactly what
+item 1 turned out to be about — and it is why the engine differential harness,
+which generates random teams and therefore has unlimited team diversity, is the
+primary instrument here rather than replay agreement.
 
 ---
 
@@ -342,6 +365,10 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **A held-out set is only held out along the axis you split it on.** The
+  replay-id hash separated battles and left 74% of test-side teams present in
+  training; agreement on genuinely unseen teams is four points lower (0014).
+  Before quoting a test figure, ask what it is held out *from*.
 - **When the corpus cannot judge, the engine must.** Fourteen support moves
   were priced this round and humans picked them sixteen times in 500 battles.
   Agreement moved 0.03 points, which says nothing either way. Twenty-nine
