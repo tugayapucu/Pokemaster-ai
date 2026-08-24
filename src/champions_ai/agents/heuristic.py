@@ -17,7 +17,7 @@ from itertools import combinations
 from typing import NamedTuple
 
 from champions_ai.agents.base import Agent
-from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
+from champions_ai.dex import Dex, MoveInfo, SpeciesInfo, to_id
 from champions_ai.domain import (
     FIRST_TURN_MOVES,
     PROTECT_MOVES,
@@ -30,6 +30,7 @@ from champions_ai.domain import (
     TeamPreview,
     TeamPreviewAction,
 )
+from champions_ai.domain.boosts import BOOST_FIELDS, MAX_STAGE, MIN_STAGE
 from champions_ai.mechanics import (
     PARALYSIS,
     TAILWIND,
@@ -121,6 +122,76 @@ DEFENSIVE_STATS = frozenset({"def", "spd", "evasion"})
 # nothing at all unless we move first, which is where most of its subtlety is.
 FLINCH_VALUE = 0.40
 FLINCH_WEIGHT = 100.0
+
+# --- what a status move that is not Protect is worth -------------------------
+#
+# Three of these are *not* new judgements. A stat stage is priced with
+# STAT_STAGE_VALUE, a status with STATUS_VALUE and healing with SUSTAIN_WEIGHT,
+# which are the same numbers the damaging path already uses for the same
+# things -- so Swords Dance is worth what a Swords Dance rider is worth, and a
+# Recover is worth what a drain of the same size is worth. Nothing about a
+# move being "a status move" changes what it buys.
+#
+# The tables below are judgements in the same sense STATUS_VALUE is, and are
+# priced as a fraction of a health bar for the same reason: so they compete
+# with damage on equal terms rather than sitting on a separate scale.
+
+# Which targets mean "our side". Boosts land on the move's target, so a Swords
+# Dance and a Growl carry the same field with opposite meanings.
+SELF_TARGETS = frozenset({
+    "self", "adjacentAlly", "adjacentAllyOrSelf", "allies", "allySide", "allyTeam",
+})
+
+# A screen halves damage for several turns. Priced off the incoming threat the
+# way Protect is, rather than flat: a screen with nothing to block is worth
+# nothing, and one in front of a knockout is worth a great deal.
+SCREEN_CONDITIONS = frozenset({"reflect", "lightscreen", "auroraveil"})
+SCREEN_TURNS = 3.0
+SCREEN_FRACTION_BLOCKED = 0.5
+SCREEN_WEIGHT = 45.0
+
+# Everything else a move can put on a side. Hazards are deliberately cheap:
+# this is a four-Pokemon format over about five turns where rated humans
+# switch on 11.5% of decisions, so a hazard collects far less than it would in
+# singles.
+SIDE_CONDITION_VALUE = {
+    "tailwind": 45.0,
+    "safeguard": 15.0,
+    "mist": 8.0,
+    "stealthrock": 10.0,
+    "spikes": 7.0,
+    "toxicspikes": 7.0,
+    "stickyweb": 10.0,
+    "luckychant": 5.0,
+}
+
+# Weather and terrain are worth something to a team built around them and
+# little to one that is not, which this cannot see. A modest flat value is the
+# honest placeholder rather than a confident number.
+WEATHER_VALUE = 14.0
+TERRAIN_VALUE = 14.0
+PSEUDO_WEATHER_VALUE = {"trickroom": 35.0, "gravity": 12.0}
+PSEUDO_WEATHER_DEFAULT = 10.0
+
+# Volatiles inflicted on an opponent, ordered by how much of a turn they take
+# away. Taunt and Encore remove a choice outright; Leech Seed is chip damage
+# with a heal attached.
+VOLATILE_VALUE = {
+    "taunt": 32.0,
+    "encore": 30.0,
+    "yawn": 30.0,
+    "leechseed": 26.0,
+    "confusion": 25.0,
+    "disable": 22.0,
+    "attract": 18.0,
+    "torment": 14.0,
+    "healblock": 14.0,
+    "embargo": 8.0,
+    "telekinesis": 5.0,
+}
+# Ours, on ourselves.
+SELF_VOLATILE_VALUE = {"substitute": 28.0, "aquaring": 14.0, "ingrain": 10.0, "focusenergy": 12.0}
+VOLATILE_DEFAULT = 12.0
 
 # Low enough that anything else legal is preferred, without being so
 # extreme that it swamps a whole joint action's score.
@@ -638,9 +709,179 @@ class HeuristicAgent(Agent):
         move: MoveInfo,
         attacker,
     ) -> ScoredAction:
+        """What this move actually changes, priced like everything else.
+
+        Every status move but Protect used to score a flat 12.0, so Swords
+        Dance, Thunder Wave, Recover and Trick Room were indistinguishable --
+        and, worse, a *redundant* one scored the same as a fresh one. Recover
+        at full HP, Swords Dance at +6 and a second Tailwind were as attractive
+        as the first use of any of them.
+
+        Fifty-six of the 175 status moves here keep the flat value, because
+        their effects live in an `onHit` callback the engine cannot dump: Belly
+        Drum, Haze, Heal Bell, Defog, Baton Pass. Those are unknown rather than
+        worthless, and a flat value says so.
+        """
         if move.move_id in PROTECT_MOVES:
             return self._score_protect(observation, slot, action, move, attacker)
-        return ScoredAction(action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",))
+
+        observed = self._observed_target(observation, slot)
+        on_us = move.target in SELF_TARGETS
+        value = 0.0
+        reasons: list[str] = []
+
+        value += self._boost_value(move, attacker, observed, on_us, reasons)
+        value += self._status_move_status(move, observed, reasons)
+        value += self._heal_value(move, attacker, reasons)
+        value += self._field_value(move, observation, slot, attacker, reasons)
+        value += self._volatile_value(move, observed, on_us, reasons)
+
+        if not reasons:
+            return ScoredAction(
+                action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",)
+            )
+        return ScoredAction(action, value * move.hit_chance, tuple(reasons))
+
+    def _boost_value(self, move, attacker, observed, on_us, reasons) -> float:
+        """Stat stages the move applies, worth only the headroom that is left.
+
+        A stage is capped at six either way, so a second Swords Dance at +5
+        buys one stage and a third buys none. That headroom check is most of
+        the value here: without it the agent will boost forever.
+        """
+        value = 0.0
+        for stat, delta in move.boosts.items():
+            field = BOOST_FIELDS.get(stat)
+            if field is None:
+                continue
+            if on_us:
+                current = getattr(attacker.boosts, field)
+                gained = max(0, min(delta, MAX_STAGE - current))
+                if gained:
+                    value += gained * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+                    reasons.append(f"raises our {stat} by {gained}")
+                elif delta > 0:
+                    reasons.append(f"our {stat} is already maxed out")
+            else:
+                if observed is None:
+                    continue
+                current = getattr(observed.boosts, field)
+                # Only drops are worth anything on an opponent, and only as
+                # far as they can still fall.
+                dropped = max(0, min(-delta, current - MIN_STAGE))
+                if dropped:
+                    value += dropped * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+                    reasons.append(f"drops their {stat} by {dropped}")
+                elif delta < 0:
+                    reasons.append(f"their {stat} is already at the floor")
+
+        # A move that lowers its user's own stats while doing something else.
+        for stat, delta in move.self_boosts.items():
+            if delta < 0:
+                value += delta * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+                reasons.append(f"but costs us {-delta} stage(s) of {stat}")
+        return value
+
+    def _status_move_status(self, move, observed, reasons) -> float:
+        """A status the move inflicts, priced exactly as a rider would be."""
+        if not move.status or observed is None:
+            return 0.0
+        try:
+            species = self.dex.get_species(observed.species)
+        except KeyError:
+            return 0.0
+        gain = self._status_value(move.status, species, observed)
+        if not gain:
+            reasons.append(f"{move.status} cannot land on that target")
+            return 0.0
+        reasons.append(f"inflicts {move.status}")
+        return gain * STATUS_WEIGHT
+
+    def _heal_value(self, move, attacker, reasons) -> float:
+        """Healing, in the same currency as a drain of the same size.
+
+        Clamped to the HP actually missing, which is the whole point: a
+        Recover at full health restores nothing and used to score the same as
+        one at death's door.
+        """
+        if not move.heal:
+            return 0.0
+        fraction = move.heal[0] / move.heal[1]
+        missing = max(0, attacker.max_hp - attacker.current_hp) / max(1, attacker.max_hp)
+        restored = min(fraction, missing)
+        if restored <= 0:
+            reasons.append("already at full HP, so the healing is wasted")
+            return 0.0
+        reasons.append(f"restores ~{restored:.0%} of its HP")
+        return restored * SUSTAIN_WEIGHT
+
+    def _field_value(self, move, observation, slot, attacker, reasons) -> float:
+        """Screens, Tailwind, weather, terrain and Trick Room.
+
+        Anything already up is worth nothing, which is the check that stops
+        the agent re-setting its own Tailwind every turn.
+        """
+        value = 0.0
+
+        if move.side_condition:
+            condition = to_id(move.side_condition)
+            if condition in observation.own_side.side_conditions:
+                reasons.append(f"{move.name} is already up on our side")
+            elif condition in SCREEN_CONDITIONS:
+                # Priced off what it would actually block, like Protect.
+                fraction, _, source = self._incoming_threat(observation, slot, attacker)
+                blocked = fraction * SCREEN_FRACTION_BLOCKED * SCREEN_TURNS
+                value += blocked * SCREEN_WEIGHT
+                reasons.append(
+                    f"halves ~{fraction:.0%} incoming for several turns ({source})"
+                )
+            else:
+                value += SIDE_CONDITION_VALUE.get(condition, STATUS_MOVE_VALUE)
+                reasons.append(f"sets {move.side_condition} on our side")
+
+        if move.sets_weather:
+            if to_id(move.sets_weather) == (observation.weather or ""):
+                reasons.append(f"{move.sets_weather} is already up")
+            else:
+                value += WEATHER_VALUE
+                reasons.append(f"sets {move.sets_weather}")
+
+        if move.sets_terrain:
+            if to_id(move.sets_terrain) == (observation.terrain or ""):
+                reasons.append(f"{move.sets_terrain} is already up")
+            else:
+                value += TERRAIN_VALUE
+                reasons.append(f"sets {move.sets_terrain}")
+
+        if move.pseudo_weather:
+            condition = to_id(move.pseudo_weather)
+            if condition in observation.field_conditions:
+                reasons.append(f"{move.pseudo_weather} is already up")
+            else:
+                value += PSEUDO_WEATHER_VALUE.get(condition, PSEUDO_WEATHER_DEFAULT)
+                reasons.append(f"sets {move.pseudo_weather}")
+
+        return value
+
+    def _volatile_value(self, move, observed, on_us, reasons) -> float:
+        """Taunt, Encore, Leech Seed, Substitute and the rest.
+
+        Judgements, ordered by how much of a turn the volatile takes away.
+        Worth nothing when the target already has it.
+        """
+        if not move.volatile_status:
+            return 0.0
+        volatile = to_id(move.volatile_status)
+        if on_us:
+            reasons.append(f"puts {move.volatile_status} on us")
+            return SELF_VOLATILE_VALUE.get(volatile, VOLATILE_DEFAULT)
+        if observed is None:
+            return 0.0
+        if volatile in observed.volatile_conditions:
+            reasons.append(f"they already have {move.volatile_status}")
+            return 0.0
+        reasons.append(f"inflicts {move.volatile_status}")
+        return VOLATILE_VALUE.get(volatile, VOLATILE_DEFAULT)
 
     def _score_protect(
         self,

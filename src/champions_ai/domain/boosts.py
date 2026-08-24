@@ -12,6 +12,11 @@ BOOST_FIELDS = {
     "spa": "special_attack",
     "spd": "special_defense",
     "spe": "speed",
+    # Accuracy and evasion are stages too, and leaving them out meant the
+    # tracker dropped `|-boost|...|accuracy|1` on the floor and the scorer
+    # ignored the accuracy half of Coil and Hone Claws.
+    "accuracy": "accuracy",
+    "evasion": "evasion",
 }
 
 

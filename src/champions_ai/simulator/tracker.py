@@ -30,19 +30,9 @@ from champions_ai.domain import (
     Team,
     TeamPreview,
 )
+from champions_ai.domain.boosts import BOOST_FIELDS
 from champions_ai.domain.health import parse_exact_health, parse_shared_health
 from champions_ai.domain.legal_actions import TRAPPED
-
-# Showdown stat keys -> our Boosts fields.
-BOOST_FIELDS = {
-    "atk": "attack",
-    "def": "defense",
-    "spa": "special_attack",
-    "spd": "special_defense",
-    "spe": "speed",
-    "accuracy": "accuracy",
-    "evasion": "evasion",
-}
 
 SLOT_LETTERS = "abcdef"
 
