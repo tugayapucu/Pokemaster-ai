@@ -66,6 +66,12 @@ class DamageSample:
     # spread reduction when a move hits more than one, so a Heat Wave into a
     # single remaining opponent does full damage.
     spread_targets: int = 1
+    # How many Pokemon this move landed on, counted rather than inferred. Not
+    # the same as `spread_targets`: Dragon Darts is a *single-target* move that
+    # still reaches both opponents, one dart each, and reading its two hits as
+    # two hits on one target doubled it. Passing `spread_targets` here left the
+    # fix inert, which is what the control harness was reporting.
+    targets_reached: int = 1
     # The target fainted, so `actual` is the HP it had left rather than the
     # damage the move dealt. A hit that overkills by 80 is recorded as the 15
     # the target could absorb, which reads as a wild over-prediction.
@@ -139,11 +145,15 @@ class DamageSample:
                 terrain=self.terrain,
                 weather=self.weather,
             ),
-            opponents=self.spread_targets,
+            opponents=self.targets_reached,
             defender_at_full_hp=self.defender_hp_before >= self.defender.max_hp,
             defender_ability=self.defender.current_ability,
             attacker_volatiles=tuple(self.attacker.volatile_conditions),
             defender_volatiles=tuple(self.defender.volatile_conditions),
+            attacker_ability=self.attacker.current_ability,
+            attacker_hp_fraction=self.attacker.hp_fraction,
+            attacker_status=self.attacker.status,
+            defender_status=self.defender.status,
         )
         return estimate.minimum, estimate.maximum
 
@@ -255,6 +265,7 @@ class DamageCollector:
                         critical=critical,
                         spread=spread,
                         spread_targets=spread_targets,
+                        targets_reached=len(landed),
                         truncated=last == 0,
                         behind_screen=bool(
                             self._screens.get(split_ident(target)[0], set())

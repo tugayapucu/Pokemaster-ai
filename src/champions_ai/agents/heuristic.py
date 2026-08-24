@@ -505,6 +505,13 @@ class HeuristicAgent(Agent):
             # A Roost strips the Flying type for the turn, on either side.
             attacker_volatiles=tuple(attacker.volatile_conditions),
             defender_volatiles=target.volatiles,
+            # Ours is in our own request; theirs is None until it shows itself,
+            # and an unknown ability is treated as doing nothing rather than
+            # as an invented one.
+            attacker_ability=attacker.current_ability,
+            attacker_hp_fraction=attacker.hp_fraction,
+            attacker_status=attacker.status,
+            defender_status=target.status,
         )
 
         reasons: list[str] = []

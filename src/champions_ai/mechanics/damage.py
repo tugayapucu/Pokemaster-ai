@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from typing import TypeVar
 
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
+from champions_ai.mechanics import abilities as ability_rules
+from champions_ai.mechanics.abilities import ATE_MULTIPLIER
 from champions_ai.mechanics.items import (
     attack_multiplier,
     base_power_multiplier,
@@ -339,6 +341,10 @@ def estimate_damage(
     defender_ability: str | None = None,
     attacker_volatiles: tuple[str, ...] = (),
     defender_volatiles: tuple[str, ...] = (),
+    attacker_ability: str | None = None,
+    attacker_hp_fraction: float = 1.0,
+    attacker_status: str | None = None,
+    defender_status: str | None = None,
 ) -> DamageEstimate:
     """Estimate a single hit's damage range.
 
@@ -364,6 +370,11 @@ def estimate_damage(
     actual_type = effective_type(
         move, attacker=attacker, weather=weather, terrain=terrain
     )
+    # An -ate ability rewrites the move's type outright, which changes both
+    # the chart row and whether STAB applies.
+    rewritten = ability_rules.rewritten_type(attacker_ability, move)
+    if rewritten is not None:
+        actual_type = rewritten
     # Typing is not fixed for the battle either: a Roosting Pokemon has no
     # Flying type this turn, which is why Earthquake reaches an Altaria and
     # Head Smash into one does half what the chart says.
@@ -377,6 +388,16 @@ def estimate_damage(
 
     if not move.is_damaging or effectiveness == 0.0:
         return DamageEstimate(0, 0, effectiveness, defender_hp)
+
+    # An ability can make a hit not land at all -- Levitate against Ground,
+    # Flash Fire against Fire. That is an immunity, not a reduction, so it is
+    # settled here rather than folded into a multiplier further down.
+    absorbed = ability_rules.taken_multiplier(
+        defender_ability, move, effectiveness=effectiveness,
+        at_full_hp=defender_at_full_hp,
+    )
+    if absorbed == 0.0:
+        return DamageEstimate(0, 0, 0.0, defender_hp)
 
     # Fixed damage skips the formula but not the type chart: Night Shade is
     # Ghost and still does nothing at all to a Normal type, which the immunity
@@ -409,7 +430,17 @@ def estimate_damage(
     # both belong inside this term rather than after it.
     power = move.base_power if base_power is None else base_power
     power = modify(power, base_power_multiplier(attacker_item, move))
+    power = modify(power, ability_rules.base_power_multiplier(
+        attacker_ability, move, base_power=power, weather=weather
+    ))
     attack_stat = modify(attack_stat, attack_multiplier(attacker_item, attacker))
+    attack_stat = modify(attack_stat, ability_rules.attack_multiplier(
+        attacker_ability, move, hp_fraction=attacker_hp_fraction,
+        status=attacker_status, weather=weather,
+    ))
+    defense_stat = modify(defense_stat, ability_rules.defence_multiplier(
+        defender_ability, move, status=defender_status
+    ))
     base = (2 * level // 5 + 2) * power * attack_stat // max(1, defense_stat) // 50 + 2
 
     # Spread and weather apply *before* the roll, so they are part of the
@@ -422,10 +453,15 @@ def estimate_damage(
     steps = _effectiveness_steps(effectiveness)
     # STAB follows the type the move ends up with, not the one it was written
     # with: a Morpeko-Hangry gets it on a Dark Aura Wheel.
-    stab = actual_type in attacker_types
+    has_stab = actual_type in attacker_types
+    stab_bonus = ability_rules.stab_multiplier(attacker_ability, has_stab=has_stab)
+    if rewritten is not None:
+        # The -ate abilities pay a small bonus for the rewrite itself.
+        power = modify(power, ATE_MULTIPLIER)
     burned = attacker_burned and move.category == "Physical"
     final = damage_multiplier(attacker_item, effectiveness=effectiveness)
     final *= defender_multiplier(defender_item, move, effectiveness=effectiveness)
+    final *= absorbed
 
     # Three moves here always crit, and a crit is a flat 1.5x on top. Modelled
     # as the certainty it is rather than excluded as "a crit": Frost Breath,
@@ -440,8 +476,8 @@ def estimate_damage(
         above the engine's real damage often enough to dominate the residual.
         """
         damage = int(int(base * percent) / 100)
-        if stab:
-            damage = modify(damage, STAB_MULTIPLIER)
+        if has_stab:
+            damage = modify(damage, stab_bonus)
         # The chart is applied as doublings and truncated halvings, not as a
         # single multiply: 0.25x is two separate `trunc(damage / 2)` steps.
         for _ in range(steps):
