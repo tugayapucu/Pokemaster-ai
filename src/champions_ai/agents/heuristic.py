@@ -65,18 +65,26 @@ RESISTED_PENALTY = -15.0
 # so "unknown" should not mean "probably not worth it".
 STATUS_MOVE_VALUE = 30.0
 
+# Protect's three were hand-chosen in experiment 0003 and fitted in 0010: the
+# agreement curve has a sharp peak at this combination (44.5% at a tempo cost
+# of -60, 45.7% at -160, 44.7% at -260). Together they say something specific
+# and legible: protect only against a *large* incoming hit, because the turn it
+# costs is expensive. The knockout bonus is flat anywhere between 0 and 40, so
+# it keeps a positive value on the grounds that surviving a knockout plainly
+# matters even where agreement cannot see it.
+#
 # Protect is priced as damage *avoided*, in the same currency as damage dealt,
 # so the two compete on equal terms instead of Protect carrying a flat value
 # that almost any attack outbids. Measured against real humans (experiment
 # 0002), the flat value made the heuristic protect almost never: 90 of 643
 # disagreements were a human protecting where it attacked.
-PROTECT_DAMAGE_WEIGHT = 100.0
+PROTECT_DAMAGE_WEIGHT = 430.0
 # Surviving a knockout is worth less than landing one -- you keep a Pokemon,
 # but you have not removed theirs.
-PROTECT_SAVES_KO_BONUS = 90.0
+PROTECT_SAVES_KO_BONUS = 40.0
 # Attacking advances the game and protecting does not, so blocking N% of your
 # HP is worth slightly less than dealing N% of theirs.
-PROTECT_TEMPO_COST = -20.0
+PROTECT_TEMPO_COST = -160.0
 # Drain and recoil are priced in the same currency as damage dealt, because
 # that is exactly what they are: HP moved between the two bars. Weighted a
 # little below offence, since HP on our own bar is worth slightly less than HP
@@ -179,17 +187,24 @@ SIDE_CONDITION_VALUE = {
 # honest placeholder rather than a confident number.
 WEATHER_VALUE = 26.0
 TERRAIN_VALUE = 14.0
+# Trick Room is capped deliberately. Agreement keeps rising with it all the way
+# to 5,000, because a team that brought Trick Room nearly always uses it -- so
+# the fit degenerates from "worth this much" into "always do this". An agent
+# that recommends Trick Room regardless of the matchup would be wrong in a way
+# human agreement cannot see, so this stays a valuation.
 PSEUDO_WEATHER_VALUE = {"trickroom": 55.0, "gravity": 12.0}
 PSEUDO_WEATHER_DEFAULT = 10.0
 
 # Volatiles inflicted on an opponent, ordered by how much of a turn they take
-# away. Taunt and Encore remove a choice outright; Leech Seed is chip damage
-# with a heal attached.
+# away. Taunt was fitted to 50 (a real peak); Encore and Leech Seed were left
+# where they were, because the agreement curve is flat across their whole
+# plausible range and moving them would be fitting noise. Taunt and Encore
+# remove a choice outright; Leech Seed is chip damage with a heal attached.
 VOLATILE_VALUE = {
     "taunt": 50.0,
-    "encore": 15.0,
+    "encore": 30.0,
     "yawn": 30.0,
-    "leechseed": 13.0,
+    "leechseed": 26.0,
     "confusion": 25.0,
     "disable": 22.0,
     "attract": 18.0,
