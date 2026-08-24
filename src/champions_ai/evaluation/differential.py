@@ -33,6 +33,7 @@ from champions_ai.mechanics import (
     attacking_side,
     dynamic_base_power,
     estimate_damage,
+    is_removable,
 )
 from champions_ai.simulator.tracker import TERRAINS, split_ident, to_id
 
@@ -125,7 +126,11 @@ class DamageSample:
                 attacker_positive_boosts=self.attacker.boosts.positive_total,
                 attacker_status=self.attacker.status,
                 defender_status=self.defender.status,
-                defender_holds_item=self.defender.current_item is not None,
+                defender_item_removable=is_removable(
+                    dex.items.get(self.defender.current_item or ""),
+                    dex.get_species(self.defender.pokemon_set.species),
+                    self.defender.current_ability,
+                ),
                 fainted_allies=self.fainted_allies,
                 terrain=self.terrain,
                 weather=self.weather,

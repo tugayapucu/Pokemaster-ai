@@ -230,10 +230,16 @@ def test_an_ordinary_move_is_unaffected_by_any_of_it():
 # residual once items were modelled, at a steady 1.5x across 27 hits.
 
 
-def test_knock_off_hits_harder_when_there_is_something_to_knock_off():
+def test_knock_off_hits_harder_when_there_is_something_it_can_take():
+    """Gated on the item being *removable*, not merely held.
+
+    The engine asks `singleEvent('TakeItem', ...)` first and returns no boost
+    at all when the answer is no. Holding-anything was the first version, and
+    it was wrong against every Mega Stone in a dex that is full of them.
+    """
     move = _move("knockoff", base_power=65)
-    assert dynamic_base_power(move, defender_holds_item=True) == 97
-    assert dynamic_base_power(move, defender_holds_item=False) == 65
+    assert dynamic_base_power(move, defender_item_removable=True) == 97
+    assert dynamic_base_power(move, defender_item_removable=False) == 65
 
 
 def test_facade_doubles_off_any_status_but_sleep():

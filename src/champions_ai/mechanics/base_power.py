@@ -92,7 +92,9 @@ ELECTRIC_TERRAIN = "electricterrain"
 # --- It was the largest single term left in the damage residual once items
 # --- were modelled, at a steady 1.5x across 27 hits.
 
-# Knock Off hits 50% harder when there is an item to knock off.
+# Knock Off hits 50% harder when there is an item it can actually take.
+# Not merely when one is held: a Mega Stone on its own user cannot be
+# removed, and this dex is full of them.
 KNOCK_OFF = "knockoff"
 KNOCK_OFF_MULTIPLIER = 1.5
 
@@ -154,7 +156,7 @@ def dynamic_base_power(
     attacker_positive_boosts: int = 0,
     attacker_status: str | None = None,
     defender_status: str | None = None,
-    defender_holds_item: bool = False,
+    defender_item_removable: bool = False,
     fainted_allies: int = 0,
     terrain: str | None = None,
     weather: str | None = None,
@@ -196,7 +198,7 @@ def dynamic_base_power(
                 move,
                 attacker_status=attacker_status,
                 defender_status=defender_status,
-                defender_holds_item=defender_holds_item,
+                defender_item_removable=defender_item_removable,
                 terrain=terrain,
                 weather=weather,
             )
@@ -209,7 +211,7 @@ def conditional_multiplier(
     *,
     attacker_status: str | None = None,
     defender_status: str | None = None,
-    defender_holds_item: bool = False,
+    defender_item_removable: bool = False,
     terrain: str | None = None,
     weather: str | None = None,
 ) -> float:
@@ -222,7 +224,7 @@ def conditional_multiplier(
     move_id = move.move_id
     multiplier = 1.0
 
-    if move_id == KNOCK_OFF and defender_holds_item:
+    if move_id == KNOCK_OFF and defender_item_removable:
         multiplier *= KNOCK_OFF_MULTIPLIER
     if move_id == FACADE and attacker_status and attacker_status != FACADE_EXCLUDED_STATUS:
         multiplier *= FACADE_MULTIPLIER

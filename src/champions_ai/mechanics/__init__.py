@@ -12,6 +12,7 @@ from champions_ai.mechanics.items import (
     base_power_multiplier,
     damage_multiplier,
     defender_multiplier,
+    is_removable,
     speed_multiplier,
 )
 from champions_ai.mechanics.matchup import (
@@ -62,6 +63,7 @@ __all__ = [
     "estimate_stats",
     "evaluate_position",
     "hp_stat",
+    "is_removable",
     "is_spread_move",
     "move_priority",
     "moves_first",

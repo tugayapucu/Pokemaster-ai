@@ -17,7 +17,7 @@ item-holding control teams, which is the check that this table is being read
 at all rather than merely existing.
 """
 
-from champions_ai.dex import MoveInfo, SpeciesInfo
+from champions_ai.dex import ItemInfo, MoveInfo, SpeciesInfo
 
 # Multiply the *final* damage, after type effectiveness and STAB.
 LIFE_ORB = "lifeorb"
@@ -91,6 +91,39 @@ CHILAN_BERRY = "chilanberry"
 LIGHT_BALL = "lightball"
 LIGHT_BALL_MULTIPLIER = 2.0
 LIGHT_BALL_USER = "Pikachu"
+
+# Blocks item removal outright, so Knock Off gets no boost against it.
+STICKY_HOLD = "stickyhold"
+
+
+def is_removable(
+    item: ItemInfo | None,
+    holder: SpeciesInfo | None = None,
+    ability: str | None = None,
+) -> bool:
+    """Whether this item can be taken off its holder.
+
+    Knock Off's 1.5x is gated on this, not merely on holding something. The
+    engine asks `singleEvent('TakeItem', ...)` before deciding, and returns no
+    boost at all when the answer is no.
+
+    Seventy-five items in this dex refuse, and every one of them is a Mega
+    Stone -- which cannot be removed from *the species it evolves*, though it
+    can be taken off anyone else. That matters here more than it would in most
+    formats, because Champions teams are full of them.
+    """
+    if item is None:
+        return False
+    if ability == STICKY_HOLD:
+        return False
+    if item.mega_stone is None:
+        return True
+    if holder is None:
+        # Unknown holder: assume the stone is on the Pokemon it belongs to,
+        # which is the overwhelmingly common case and the cautious guess.
+        return False
+    return item.mega_stone not in (holder.name, holder.base_species)
+
 
 # Speed, for turn order rather than damage.
 SPEED_MULTIPLIERS: dict[str, float] = {

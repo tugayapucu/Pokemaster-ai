@@ -17,6 +17,7 @@ from champions_ai.mechanics.items import (
     base_power_multiplier,
     damage_multiplier,
     defender_multiplier,
+    is_removable,
     speed_multiplier,
 )
 
@@ -129,3 +130,52 @@ def test_choice_scarf_and_iron_ball():
     assert speed_multiplier("ironball") == 0.5
     assert speed_multiplier("lifeorb") == 1.0
     assert speed_multiplier(None) == 1.0
+
+
+# --------------------------------------------------- whether it can be taken
+
+
+def _item(item_id, *, mega_stone=None):
+    from champions_ai.dex import ItemInfo
+    return ItemInfo(item_id=item_id, name=item_id, mega_stone=mega_stone)
+
+
+def test_an_ordinary_item_can_be_taken():
+    assert is_removable(_item("lifeorb"), _species("Garchomp"))
+
+
+def test_nothing_held_is_not_removable():
+    assert not is_removable(None, _species("Garchomp"))
+
+
+def test_a_mega_stone_cannot_be_taken_off_the_species_it_evolves():
+    """Seventy-five items in this dex refuse to be removed and every one is a
+    Mega Stone. Champions teams are full of them, so pricing Knock Off on
+    "holds anything" was wrong far more often than it was right."""
+    stone = _item("alakazite", mega_stone="Alakazam")
+    assert not is_removable(stone, _species("Alakazam"))
+
+
+def test_a_mega_stone_can_be_taken_off_anyone_else():
+    """The engine checks the stone against *this* holder, not in general."""
+    stone = _item("alakazite", mega_stone="Alakazam")
+    assert is_removable(stone, _species("Garchomp"))
+
+
+def test_a_mega_stone_is_matched_against_the_base_species():
+    """`megaStone` is keyed by base species, and the engine compares against
+    `source.baseSpecies.baseSpecies` -- so a forme still cannot drop it."""
+    stone = _item("charizarditey", mega_stone="Charizard")
+    assert not is_removable(stone, _species("Charizard-Mega-Y", "Charizard"))
+
+
+def test_an_unknown_holder_is_assumed_to_be_the_stones_owner():
+    """The cautious guess: a stone is overwhelmingly on the Pokemon it
+    belongs to, so assume no boost rather than an imaginary one."""
+    assert not is_removable(_item("alakazite", mega_stone="Alakazam"), None)
+    assert is_removable(_item("lifeorb"), None), "an ordinary item still comes off"
+
+
+def test_sticky_hold_refuses_to_give_anything_up():
+    assert not is_removable(_item("lifeorb"), _species("Hydrapple"), "stickyhold")
+    assert is_removable(_item("lifeorb"), _species("Hydrapple"), "regenerator")

@@ -149,7 +149,7 @@ class FeatureExtractor:
         species = target.species
         if target.is_ally:
             return
-        from champions_ai.mechanics import dynamic_base_power, estimate_damage
+        from champions_ai.mechanics import dynamic_base_power, estimate_damage, is_removable
 
         estimate = estimate_damage(
             self.dex, move,
@@ -179,7 +179,9 @@ class FeatureExtractor:
                 attacker_positive_boosts=active.boosts.positive_total,
                 attacker_status=active.status,
                 defender_status=target.status,
-                defender_holds_item=target.item is not None,
+                defender_item_removable=is_removable(
+                    self.dex.items.get(target.item or ""), species, target.ability
+                ),
                 fainted_allies=sum(
                     1 for mon in observation.own_side.team if mon.fainted
                 ),

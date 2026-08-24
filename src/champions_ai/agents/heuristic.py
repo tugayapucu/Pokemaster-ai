@@ -42,6 +42,7 @@ from champions_ai.mechanics import (
     effective_speed,
     estimate_damage,
     estimate_stats,
+    is_removable,
     matchup,
     move_priority,
     moves_first,
@@ -177,6 +178,8 @@ class ResolvedTarget(NamedTuple):
     # A resist berry halves the hit it fires on. None means "none that we know
     # of", which for an opponent is the honest answer until they show it.
     item: str | None = None
+    # Sticky Hold refuses to give the item up, so Knock Off gets no boost.
+    ability: str | None = None
 
 
 class HeuristicAgent(Agent):
@@ -343,7 +346,14 @@ class HeuristicAgent(Agent):
                 # Only what they have shown us. An opponent's item is hidden
                 # until it fires, so an unrevealed one reads as "none" and
                 # Knock Off is priced at its floor rather than its ceiling.
-                defender_holds_item=target.item is not None,
+                # Holding one is not enough either: a Mega Stone cannot be
+                # taken off the species it evolves, and this dex is full of
+                # them.
+                defender_item_removable=is_removable(
+                    self.dex.items.get(target.item or ""),
+                    defender_species,
+                    target.ability,
+                ),
                 fainted_allies=sum(
                     1 for mon in observation.own_side.team if mon.fainted
                 ),
@@ -812,6 +822,7 @@ class HeuristicAgent(Agent):
                 is_ally=True,
                 status=ally.status,
                 item=ally.current_item,
+                ability=ally.current_ability,
                 attacking_stat=None
                 if attacking_key is None
                 else apply_boost(
@@ -850,6 +861,7 @@ class HeuristicAgent(Agent):
                 is_ally=False,
                 status=observed.status,
                 item=observed.revealed_item,
+                ability=observed.revealed_ability,
                 # Uniform rather than credited: the calibrated attacking
                 # investment is evidence from *using* a move, and a Foul Play
                 # target is not the one using it.
