@@ -166,7 +166,64 @@ Three things the corpus *did* catch, all in Instruct:
 - **Instruct's target is `normal`, not `adjacentAlly`.** The engine offers it
   across the field, which hands the opponent a free attack.
 
-### 1. Make the terrain rules consult `is_grounded`
+### 1. Split by team, not only by replay
+
+**An external review raised this and it is right — measured, not argued.** The
+split is hashed by replay id, which stops the same *battle* being scored twice
+and says nothing about the same **team** appearing in both halves. It does:
+
+```
+500 replays: 405 train, 95 test
+
+team roster   80 rosters appear in BOTH halves
+              141 of 190 test-side appearances (74.2%) also occur in train
+              worst: one roster 26 times in train, 5 in test
+
+player name   78 players appear in BOTH halves
+              140 of 190 (73.7%)
+              worst: one player 24 times in train, 8 in test
+```
+
+So "test" is not measuring generalisation to unseen teams. It is measuring
+recall of teams and players already seen 5 to 26 times. **Every agreement
+figure this project has reported rests on that**, and the standing rule says a
+figure is only as good as the instrument behind it.
+
+It probably has not done much damage *yet* — only about thirteen global
+constants have ever been fitted, against 9,057 labels, so there is little
+capacity to memorise a particular player. But it makes the one overfitting
+result we already have (0012, train up and test down) harder to interpret, and
+it would quietly invalidate any learned policy trained on this split.
+
+The job: group by roster before splitting, so a team lands wholly on one side.
+Then re-report the agreement numbers and say plainly whether they moved. If
+they drop, they drop — the instrument was wrong, not the result.
+
+### 2. Mega: never scored, never measured
+
+Also from the review, and worse than it looked from outside.
+
+Mega is generated as a legal action (`available_specials` in
+`domain/legal_actions.py`), tracked (`mega_used`), and reaches the agent. And
+then:
+
+- **The heuristic never reads `action.special`.** A Mega and a non-Mega of the
+  same move score *identically*, so which one the agent picks is whichever the
+  enumeration happens to hand it first. It has no opinion at all.
+- **No harness ever Megas.** Every measurement agent filters to
+  `special is None`, so the 92-94% damage figure and the 97.7% turn-order
+  figure were both measured with Mega switched off. Mega changes base stats,
+  ability, and sometimes typing — none of that has ever been checked against
+  the engine.
+
+That is the ninth instance this project has found of *state tracked and never
+read*, and the first where the unread thing is a whole game mechanic.
+
+The job, in that order: let the differential and turn-order harnesses Mega, see
+what the accuracy does, and only then decide what the agent should think about
+it. Measure before building, as usual.
+
+### 3. Make the terrain rules consult `is_grounded`
 
 `is_grounded` exists now but nothing calls it. Five rules still apply to
 Flying types and Levitate users that should be exempt:
@@ -181,7 +238,7 @@ the terrain damage bonuses (Electric, Grassy, Psychic)   same
 
 Cheap, and it is the last of the terrain work.
 
-### 2. Speed Boost and the weather Speed abilities
+### 4. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -190,7 +247,7 @@ Speed Boost needs a per-turn counter.
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
 
-### 3. The support moves that are still unpriced, and why
+### 5. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -212,6 +269,44 @@ should be revisited, not a permanent verdict.
 Three more — **Trick, Switcheroo, Fling** — are priced already, but only once
 the opponent's item has shown itself, which is the same shape as the five
 ability moves above.
+
+---
+
+## Reviewed externally, 2026-08-24
+
+A second model was asked to review the repository. Sorted rather than adopted
+wholesale, because a reviewer working from the public repo cannot see
+`data/replays/` and is reading our descriptions of the measurements rather
+than the measurements.
+
+**Accepted, and now items 1 and 2.** Split by team as well as by replay
+(measured at 74.2% leakage). Mega mechanics (never scored, never measured).
+Both are instrument problems, which is why they went to the top.
+
+**Already the plan, and confirms it.** Terrain and grounding, and the speed
+abilities, were already items 1 and 2 and are now 3 and 4. Damage accuracy is
+92-94% on random teams and turn order 97.7%, both measured against the engine.
+Legal-action generation is engine-reported by ADR 0003 rather than
+reimplemented. "Use the exact simulator for counterfactual testing" is ADR
+0001. "Avoid RL and large neural models for now" is already the position:
+experiment 0006 built a learned linear policy, got +4.2% agreement and a 32.5%
+win rate, and it was not wired in.
+
+**Rejected: "defer rare support moves".** This contradicts a standing
+instruction, and the reasoning behind it is the disagreement worth stating.
+The advice assumes the corpus is the target. It is not — it is a measuring
+instrument, and a move absent from 500 games is a fact about the sample rather
+than about the game. For a product roadmap the reviewer would be right; for a
+correctness roadmap it inverts the priority. The work is done regardless, and
+the nine that remain are already parked last, which is where the reviewer
+would have put all of them.
+
+**A scope question, not a correction: the team discovery lab.** Evaluating
+candidate teams by their *matchup floor* rather than their average is a good
+idea and is not currently anywhere in the near-term plan. It is Milestone 13
+in `PROJECT_PLAN.md`, and pulling it forward means going ahead of milestones 6
+through 11. That is a decision about what this project is for, so it is left
+here as a question rather than added to the list.
 
 ---
 
