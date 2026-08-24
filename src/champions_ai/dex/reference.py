@@ -132,6 +132,9 @@ class MoveInfo(BaseModel, frozen=True):
     multihit: int | tuple[int, int] | None = None
     # Each hit of these rolls accuracy separately.
     multiaccuracy: bool = False
+    # Spreads its hits across the opposing side instead of stacking them on
+    # one target. Dragon Darts is the only one here.
+    smart_target: bool = False
     # 1 is the ordinary 1/24 chance. Higher widens the crit stage.
     crit_ratio: int | None = None
     always_crits: bool | None = None
@@ -476,6 +479,7 @@ class Dex(BaseModel, frozen=True):
                     else entry.get("multihit")
                 ),
                 multiaccuracy=bool(entry.get("multiaccuracy", False)),
+                smart_target=bool(entry.get("smartTarget", False)),
                 crit_ratio=entry.get("critRatio"),
                 always_crits=entry.get("willCrit"),
                 ohko=entry.get("ohko"),

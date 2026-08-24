@@ -294,6 +294,8 @@ class ResolvedTarget(NamedTuple):
     # nothing about is assumed to be holding something, because they usually
     # are.
     may_hold_item: bool = True
+    # A Focus Sash and Sturdy both need the holder at full health.
+    at_full_hp: bool = False
     # Where this Pokemon sits in the opponent's revealed list, so two slots
     # aiming at the same one can be recognised as doing so.
     index: int | None = None
@@ -488,6 +490,16 @@ class HeuristicAgent(Agent):
             # Endeavor and Final Gambit are priced off our own remaining HP.
             attacker_hp=attacker.current_hp,
             terrain=observation.terrain,
+            # Dragon Darts splits its two hits across the opposing side.
+            opponents=sum(
+                1
+                for i in observation.opponent_side.active_slots
+                if i is not None and not observation.opponent_side.revealed[i].fainted
+            ),
+            # A Focus Sash only works from full health, and we can see that
+            # even when we cannot see the item.
+            defender_at_full_hp=target.at_full_hp,
+            defender_ability=target.ability,
         )
 
         reasons: list[str] = []
@@ -1264,6 +1276,7 @@ class HeuristicAgent(Agent):
                 item=ally.current_item,
                 ability=ally.current_ability,
                 may_hold_item=ally.current_item is not None,
+                at_full_hp=ally.current_hp >= ally.max_hp,
                 attacking_stat=None
                 if attacking_key is None
                 else apply_boost(
@@ -1308,6 +1321,7 @@ class HeuristicAgent(Agent):
                 item=observed.revealed_item,
                 ability=observed.revealed_ability,
                 may_hold_item=observed.may_hold_item,
+                at_full_hp=observed.hp_percent >= 100,
                 # Uniform rather than credited: the calibrated attacking
                 # investment is evidence from *using* a move, and a Foul Play
                 # target is not the one using it.

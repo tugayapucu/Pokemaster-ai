@@ -226,6 +226,10 @@ function moveSecondaries(entry) {
 			multihit: entry.multihit === undefined ? null : entry.multihit,
 			// Each hit of these rolls accuracy separately.
 			multiaccuracy: !!entry.multiaccuracy,
+			// Dragon Darts fires one of its two hits at *each* opponent in
+			// doubles rather than both at one, so a plain multi-hit reading
+			// doubles it.
+			smartTarget: !!entry.smartTarget,
 			// 1 is the ordinary 1/24. Higher means a wider crit stage.
 			critRatio: entry.critRatio === undefined ? null : entry.critRatio,
 			willCrit: entry.willCrit === undefined ? null : entry.willCrit,

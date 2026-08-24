@@ -25,6 +25,7 @@ from champions_ai.mechanics.items import (
     base_power_multiplier,
     damage_multiplier,
     defender_multiplier,
+    survives_a_knockout,
 )
 from champions_ai.mechanics.move_type import effective_type
 
@@ -182,6 +183,16 @@ def expected_hits(move: MoveInfo) -> float:
     return hits
 
 
+def _splits_hits(move: MoveInfo, doubles: bool, opponents: int) -> bool:
+    """Whether this move spreads its hits instead of stacking them.
+
+    Dragon Darts fires one of its two darts at *each* opponent in doubles, so
+    reading it as two hits on one target doubled it -- which showed up as
+    knockouts the model promised and the engine did not deliver.
+    """
+    return bool(move.smart_target) and doubles and opponents > 1
+
+
 def hit_range(move: MoveInfo) -> tuple[int, int]:
     """Fewest and most times this move can land.
 
@@ -322,6 +333,9 @@ def estimate_damage(
     defender_item: str | None = None,
     attacker_hp: int = 0,
     terrain: str | None = None,
+    opponents: int = 1,
+    defender_at_full_hp: bool = False,
+    defender_ability: str | None = None,
 ) -> DamageEstimate:
     """Estimate a single hit's damage range.
 
@@ -431,6 +445,8 @@ def estimate_damage(
         return max(1, damage)
 
     low_hits, high_hits = hit_range(move)
+    if _splits_hits(move, doubles, opponents):
+        low_hits = high_hits = 1
     low = rolled(MIN_ROLL_PERCENT)
     high = rolled(MAX_ROLL_PERCENT)
     average_hit = (low + high) / 2
@@ -443,10 +459,26 @@ def estimate_damage(
     # counted twice.
     crit_lift = 1.0 if move.always_crits else 1 + (CRIT_MULTIPLIER - 1) * critical_chance(move)
 
+    hits = 1.0 if _splits_hits(move, doubles, opponents) else expected_hits(move)
+    minimum = max(1, int(low * low_hits * crit))
+    maximum = max(1, int(high * high_hits * crit))
+    expected = average_hit * hits * crit * crit_lift
+
+    # A Focus Sash or Sturdy leaves the holder on 1 HP rather than fainting,
+    # but only from full health. Capping here is what stops the model
+    # *promising* a knockout it will not get: measured against the engine, a
+    # "guaranteed" knockout lands 98.1% of the time and a sash is the single
+    # largest reason for the rest.
+    if survives_a_knockout(defender_item, defender_ability, at_full_hp=defender_at_full_hp):
+        survivable = max(1, defender_hp - 1)
+        minimum = min(minimum, survivable)
+        maximum = min(maximum, survivable)
+        expected = min(expected, float(survivable))
+
     return DamageEstimate(
-        minimum=max(1, int(low * low_hits * crit)),
-        maximum=max(1, int(high * high_hits * crit)),
+        minimum=minimum,
+        maximum=maximum,
         effectiveness=effectiveness,
         defender_hp=defender_hp,
-        expected=average_hit * expected_hits(move) * crit * crit_lift,
+        expected=expected,
     )

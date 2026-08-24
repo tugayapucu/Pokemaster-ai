@@ -95,6 +95,26 @@ LIGHT_BALL_USER = "Pikachu"
 # Blocks item removal outright, so Knock Off gets no boost against it.
 STICKY_HOLD = "stickyhold"
 
+# Leaves the holder on 1 HP instead of fainting, but only from full health.
+# Sturdy is the same effect as an ability. Focus Band is deliberately absent:
+# it is a 10% chance at *any* HP, so folding it in would report a coin flip as
+# a certainty -- the same reasoning that leaves out Quick Draw.
+FOCUS_SASH = "focussash"
+STURDY = "sturdy"
+
+
+def survives_a_knockout(
+    item: str | None, ability: str | None, *, at_full_hp: bool
+) -> bool:
+    """Whether this Pokemon would be left on 1 HP rather than fainting.
+
+    Only from full health, which is the whole condition -- a Focus Sash on
+    something already chipped does nothing at all.
+    """
+    if not at_full_hp:
+        return False
+    return item == FOCUS_SASH or ability == STURDY
+
 
 def is_removable(
     item: ItemInfo | None,

@@ -18,6 +18,7 @@ from champions_ai.mechanics.items import (
     defender_multiplier,
     is_removable,
     speed_multiplier,
+    survives_a_knockout,
 )
 from champions_ai.mechanics.matchup import (
     ASSUMED_MOVE_POWER,
@@ -78,6 +79,7 @@ __all__ = [
     "moves_first",
     "ohko_chance",
     "speed_multiplier",
+    "survives_a_knockout",
     "matchup",
     "other_stat",
     "own_stats",
