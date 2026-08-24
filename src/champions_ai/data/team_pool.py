@@ -14,6 +14,20 @@ from champions_ai.data.team_text import parse_showdown_team
 from champions_ai.domain import Team
 
 
+# Showdown seeds look like `sodium,<64 hex>`; a pool derives one per team from
+# its own so that growing `size` leaves earlier teams untouched.
+def _derived(seed: str, index: int) -> str:
+    prefix, _, hex_part = seed.partition(",")
+    if not hex_part:
+        return seed
+    bumped = format(
+        (int(hex_part, 16) + index * 0x9E3779B97F4A7C15) % (1 << (4 * len(hex_part))),
+        f"0{len(hex_part)}x",
+    )
+    return f"{prefix},{bumped}"
+
+
+
 @dataclass(frozen=True)
 class BattleTeam:
     """A team in both forms it is needed in.
@@ -100,16 +114,29 @@ class TeamPool:
         *,
         size: int,
         generator: str | None = None,
+        seed: str | None = None,
     ) -> "TeamPool":
         """Sample legal teams from Showdown's generator.
 
         Slow -- the generator is not regulation-aware and the validator rejects
         most attempts -- so build a pool once and reuse it across an evaluation
         run rather than generating per battle.
+
+        **Pass a `seed` for anything whose number gets reported.** Without one
+        the pool is redrawn every run, so re-running a comparison changes the
+        teams underneath it. Two 90-battle runs of the Mega comparison
+        disagreed in direction because of exactly this, and the swing was
+        larger than the effect being measured.
         """
         prepared = []
         for index in range(size):
-            packed, exported = bridge.random_team_pair(battle_format, generator)
+            packed, exported = bridge.random_team_pair(
+                battle_format,
+                generator,
+                # One seed per team, derived from the pool's, so a pool stays
+                # stable when `size` grows: team 3 is the same team either way.
+                seed=None if seed is None else _derived(seed, index),
+            )
             prepared.append(
                 BattleTeam(
                     team=parse_showdown_team(exported),

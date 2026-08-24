@@ -101,15 +101,25 @@ class ShowdownBridge:
         return self.random_team_pair(battle_format, generator)[0]
 
     def random_team_pair(
-        self, battle_format: str, generator: str | None = None
+        self,
+        battle_format: str,
+        generator: str | None = None,
+        seed: str | None = None,
     ) -> tuple[str, str]:
         """A legal team as (packed, export text).
 
         Both forms are returned because only Showdown can convert between them:
         the engine is started from the packed form, and the export form is what
         parses into domain objects.
+
+        `seed` makes the draw reproducible, in the same `sodium,<hex>` shape a
+        battle seed takes. Without one the pool differs every run, which is
+        fine for a demo and quietly fatal for a measurement -- two runs of the
+        same comparison then differ by which teams they happened to draw.
         """
-        events = self.request(cmd="randomteam", format=battle_format, generator=generator)
+        events = self.request(
+            cmd="randomteam", format=battle_format, generator=generator, seed=seed
+        )
         for event in events:
             if event["type"] == "team":
                 return event["packed"], event.get("exported", "")

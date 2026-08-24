@@ -57,3 +57,23 @@ def test_battle_team_exposes_its_species():
     team = _battle_team("t", "pikachu_")
     assert len(team.species) == 6
     assert team.species[0] == "pikachu_0"
+
+
+def test_a_seeded_pool_derives_one_seed_per_team():
+    """Derived rather than shared, so growing `size` leaves earlier teams
+    alone: team 3 is the same team in a pool of 4 and a pool of 40."""
+    from champions_ai.data.team_pool import _derived
+
+    base = "sodium," + "0" * 64
+    seeds = [_derived(base, i) for i in range(5)]
+    assert len(set(seeds)) == 5
+    assert all(s.startswith("sodium,") for s in seeds)
+    assert all(len(s.split(",")[1]) == 64 for s in seeds)
+    # Stable: the same index always derives the same seed.
+    assert _derived(base, 3) == seeds[3]
+
+
+def test_an_unseeded_pool_asks_for_no_seed():
+    from champions_ai.data.team_pool import _derived
+
+    assert _derived("not-a-seed", 2) == "not-a-seed"

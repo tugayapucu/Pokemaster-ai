@@ -69,13 +69,30 @@ function startBattle(msg) {
 	);
 }
 
+// Derive a distinct-but-deterministic seed for each sampling attempt.
+// A fixed seed alone is not enough: the generator would hand back the same
+// rejected team every time and the loop would spin to maxTries.
+function seedForAttempt(base, attempt) {
+	if (!base) return undefined;
+	const comma = base.indexOf(',');
+	if (comma < 0) return undefined;
+	const prefix = base.slice(0, comma);
+	const hex = base.slice(comma + 1);
+	const bumped = (BigInt('0x' + hex) + BigInt(attempt))
+		.toString(16)
+		.padStart(hex.length, '0')
+		.slice(-hex.length);
+	return `${prefix},${bumped}`;
+}
+
 function randomTeam(msg) {
 	// Showdown's random generator isn't Reg M-B aware and regularly trips Item
 	// Clause or event-legality, so sample until the validator agrees.
 	const validator = new TeamValidator(msg.format);
 	const generatorFormat = msg.generator || msg.format;
 	for (let attempt = 1; attempt <= (msg.maxTries || 500); attempt++) {
-		const team = Teams.generate(generatorFormat);
+		const seed = seedForAttempt(msg.seed, attempt);
+		const team = Teams.generate(generatorFormat, seed ? { seed } : null);
 		if (!validator.validateTeam(team)) {
 			// Export text as well as packed: the packed form is what the engine
 			// needs, the export form is what the Python side parses into domain
