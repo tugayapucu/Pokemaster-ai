@@ -14,7 +14,7 @@ Remaining gap: Struggle is unmodelled -- a Pokemon with no usable move and no
 switch yields a pass instead.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from itertools import product
 
 from pydantic import ValidationError
@@ -118,11 +118,66 @@ def legal_slot_actions(
 
     engine_targets = pokemon.choosable_move_targets
 
+    def move_actions(*, honour_availability: bool) -> list[SlotAction]:
+        return list(
+            _move_actions(
+                observation,
+                acting_slot,
+                pokemon,
+                move_data,
+                engine_targets,
+                specials,
+                honour_availability=honour_availability,
+            )
+        )
+
+    actions.extend(move_actions(honour_availability=True))
+
+    if TRAPPED not in pokemon.volatile_conditions:
+        actions.extend(_switch_actions(observation, exclude=team_index))
+
+    if actions:
+        return actions
+
+    # Nothing survived, and **a pass is not legal for a slot the engine expects
+    # to act**. Two situations reach here and they want different answers, so
+    # try the gentler one first: offer the moves again without the PP and
+    # disabled filters. If the engine really does consider one usable, this
+    # hands it back with a proper target.
+    relaxed = move_actions(honour_availability=False)
+    if relaxed:
+        return relaxed
+
+    # Otherwise every move is genuinely spent, and the engine answers that
+    # itself -- `Side.chooseMove`: "Override action and use Struggle if there
+    # are no enabled moves with PP". It substitutes Struggle for whatever is
+    # chosen, and Struggle needs no target.
+    return [MoveAction(move_index=0, target=None)]
+
+
+def _move_actions(
+    observation: Observation,
+    acting_slot: int,
+    pokemon,
+    move_data: Mapping[str, MoveData],
+    engine_targets,
+    specials: tuple[str | None, ...],
+    *,
+    honour_availability: bool,
+) -> Iterator[SlotAction]:
+    """The move half of `legal_slot_actions`.
+
+    `honour_availability` is the ADR 0003 behaviour -- trust what the engine
+    reports about PP and disabled moves. It is turned off only for the
+    last-resort pass described above, where honouring it has left us with
+    nothing to submit and a pass would be rejected.
+    """
     for move_index, move_id in enumerate(pokemon.selectable_moves):
-        if move_id in pokemon.disabled_moves:
-            continue
-        if pokemon.move_pp is not None and pokemon.move_pp[move_index] <= 0:
-            continue
+        if honour_availability:
+            if move_id in pokemon.disabled_moves:
+                continue
+            if pokemon.move_pp is not None and pokemon.move_pp[move_index] <= 0:
+                continue
 
         if engine_targets is not None:
             # What the engine says about *this* Pokemon *this* turn beats the
@@ -140,14 +195,9 @@ def legal_slot_actions(
             if target_type in TARGETS_REQUIRING_CHOICE and target is None:
                 continue
             for special in specials:
-                actions.append(
-                    MoveAction(move_index=move_index, target=target, special=special)
+                yield MoveAction(
+                    move_index=move_index, target=target, special=special
                 )
-
-    if TRAPPED not in pokemon.volatile_conditions:
-        actions.extend(_switch_actions(observation, exclude=team_index))
-
-    return actions or [PassAction()]
 
 
 def legal_joint_actions(

@@ -174,3 +174,41 @@ def test_generator_never_offers_a_special_mechanic_while_engine_flags_are_unavai
     obs = _observation(_own_side())
     for action in legal_joint_actions(obs, MOVES):
         assert not any(isinstance(a, MoveAction) and a.special for a in action.slot_actions)
+
+
+# --------------------------------------------------------------- out of PP
+
+
+def test_a_pokemon_with_no_usable_moves_is_offered_one_anyway():
+    """Struggle, and the engine supplies it.
+
+    When every move is disabled or out of PP the engine does not accept a pass
+    -- `Side.chooseMove` says "Override action and use Struggle if there are no
+    enabled moves with PP" and substitutes it for whatever move is chosen. So
+    the generator must still offer a move.
+
+    Found by a harness crash rather than by reading the code: 800 battles of
+    random attacking exhaust PP often enough to hit it in the first run, and it
+    would have crashed the agent in any sufficiently long real game.
+    """
+    spent = _mon("Solo", moves=("tackle", "protect"), move_pp=(0, 0))
+    # Every bench Pokemon fainted, so there is nowhere to switch either --
+    # which is the only way the move list can come out empty.
+    own = Side(
+        team=(spent, *(_mon(f"Down{i}", current_hp=0) for i in range(3))),
+        active_slots=(0, None),
+    )
+    actions = legal_slot_actions(_observation(own), 0, MOVES)
+    assert actions
+    assert not any(isinstance(a, PassAction) for a in actions)
+    assert all(isinstance(a, MoveAction) for a in actions)
+
+
+def test_an_empty_slot_still_passes():
+    """The other branch, and it is genuinely a pass: nothing is there to act."""
+    own = Side(
+        team=(_mon("Solo"), *(_mon(f"Down{i}", current_hp=0) for i in range(3))),
+        active_slots=(0, None),
+    )
+    actions = legal_slot_actions(_observation(own), 1, MOVES)
+    assert actions == [PassAction()]
