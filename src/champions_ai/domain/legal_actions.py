@@ -118,7 +118,7 @@ def legal_slot_actions(
 
     engine_targets = pokemon.choosable_move_targets
 
-    def move_actions(*, honour_availability: bool) -> list[SlotAction]:
+    def move_actions(*, relax_targets: bool) -> list[SlotAction]:
         return list(
             _move_actions(
                 observation,
@@ -127,11 +127,11 @@ def legal_slot_actions(
                 move_data,
                 engine_targets,
                 specials,
-                honour_availability=honour_availability,
+                relax_targets=relax_targets,
             )
         )
 
-    actions.extend(move_actions(honour_availability=True))
+    actions.extend(move_actions(relax_targets=False))
 
     if TRAPPED not in pokemon.volatile_conditions:
         actions.extend(_switch_actions(observation, exclude=team_index))
@@ -140,18 +140,21 @@ def legal_slot_actions(
         return actions
 
     # Nothing survived, and **a pass is not legal for a slot the engine expects
-    # to act**. Two situations reach here and they want different answers, so
-    # try the gentler one first: offer the moves again without the PP and
-    # disabled filters. If the engine really does consider one usable, this
-    # hands it back with a proper target.
-    relaxed = move_actions(honour_availability=False)
+    # to act**. Two different situations reach here and they want opposite
+    # answers, so they are separated rather than relaxed together -- lumping
+    # them offered disabled moves and the engine refused those too.
+    #
+    # First: the move is usable and we simply could not name a target, because
+    # our view of who is still standing lags the engine's mid-turn. Keep the
+    # availability filters and aim at the first foe slot.
+    relaxed = move_actions(relax_targets=True)
     if relaxed:
         return relaxed
 
-    # Otherwise every move is genuinely spent, and the engine answers that
-    # itself -- `Side.chooseMove`: "Override action and use Struggle if there
-    # are no enabled moves with PP". It substitutes Struggle for whatever is
-    # chosen, and Struggle needs no target.
+    # Otherwise every move really is spent or disabled, and the engine answers
+    # that itself -- `Side.chooseMove`: "Override action and use Struggle if
+    # there are no enabled moves with PP". It substitutes Struggle for whatever
+    # is chosen, and Struggle needs no target.
     return [MoveAction(move_index=0, target=None)]
 
 
@@ -163,21 +166,20 @@ def _move_actions(
     engine_targets,
     specials: tuple[str | None, ...],
     *,
-    honour_availability: bool,
+    relax_targets: bool,
 ) -> Iterator[SlotAction]:
     """The move half of `legal_slot_actions`.
 
-    `honour_availability` is the ADR 0003 behaviour -- trust what the engine
-    reports about PP and disabled moves. It is turned off only for the
-    last-resort pass described above, where honouring it has left us with
-    nothing to submit and a pass would be rejected.
+    PP and disabled moves are *always* honoured -- that is ADR 0003, and
+    ignoring it just produces choices the engine rejects as unavailable.
+    `relax_targets` loosens only the targeting, for the last-resort pass where
+    we could not name a live target and a pass would be refused.
     """
     for move_index, move_id in enumerate(pokemon.selectable_moves):
-        if honour_availability:
-            if move_id in pokemon.disabled_moves:
-                continue
-            if pokemon.move_pp is not None and pokemon.move_pp[move_index] <= 0:
-                continue
+        if move_id in pokemon.disabled_moves:
+            continue
+        if pokemon.move_pp is not None and pokemon.move_pp[move_index] <= 0:
+            continue
 
         if engine_targets is not None:
             # What the engine says about *this* Pokemon *this* turn beats the
@@ -191,7 +193,15 @@ def _move_actions(
                 )
             target_type = move.target
 
-        for target in _candidate_targets(observation, acting_slot, target_type):
+        candidates = _candidate_targets(observation, acting_slot, target_type)
+        if not candidates and relax_targets:
+            # Last resort only. We believe nothing is alive to aim at, and the
+            # engine disagrees -- it rejected a targetless choice with "Ice
+            # Beam needs a target". Our view of who is still standing can lag
+            # the engine's mid-turn, so name the first foe slot rather than
+            # submit a choice that is certain to be refused.
+            candidates = (TargetSlot(side="foe", slot=0),)
+        for target in candidates:
             if target_type in TARGETS_REQUIRING_CHOICE and target is None:
                 continue
             for special in specials:

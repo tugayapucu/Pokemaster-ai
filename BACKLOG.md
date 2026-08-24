@@ -218,48 +218,55 @@ Two things follow, both recorded rather than done:
   order (97.7%) and the knockout claim (99.0%) are measured. Replay agreement
   measures something narrower, and now says so.
 
-### 1. Mega, continued — the harness is fixed, the measurement is not made
+### ~~1. Mega — measured 2026-08-25~~, and the priority was upside down
 
-**Half done 2026-08-24.** The measuring instrument was broken in a way that
-made the item's own claim understate itself: *turning Mega on did not measure
-it either*.
+Experiment 0015. **Enabling Mega costs the damage model about seven points,
+and 75–85% of that loss is on hits that do not involve a Mega at all.**
 
-`active_by_ident` resolved a protocol ident to a Pokemon by species name. A
-Pokemon that Mega Evolves keeps its ident — `p1a: Metagross` — while its set
-becomes `Metagross-Mega`, so the names stop agreeing and the lookup returned
-None. A failed lookup does not mis-attribute a hit, it **drops** it. Every hit
-by or against a Mega'd Pokemon was silently excluded. Fixed: resolve by slot,
-which a forme change cannot break.
+```
+                    seed 1                 seed 7
+never Mega        93.9% (n= 9991)       91.2% (n=10156)
+always Mega       87.3% (n= 9717)       83.2% (n=10042)
+  involves a Mega 88.3% (n= 1751)       78.6% (n= 1583)
+  no Mega on field 87.0% (n= 7966)      84.0% (n= 8459)
+```
 
-Tenth instance of data tracked and never read, and the nastiest shape so far —
-a harness that discards exactly the cases it is pointed at.
+The non-Mega bucket is the stable finding: −6.9 and −7.2 points across two
+seeds on ~8,000 hits each. The Mega bucket is *not* stable (88.3% vs 78.6% on
+~1,700), so nothing is concluded from it.
 
-**What is still open, in order:**
+Getting there needed two measurement bugs fixed first, both of which had
+already produced plausible-looking numbers: `active_by_ident` silently dropped
+every Mega'd Pokemon's hits, and `TeamPool.generated` was unseeded so two runs
+drew different teams.
 
-1. **Measure it properly.** Two runs of 90 battles disagree in *direction* on
-   n≈115 Mega hits (94.8% and 76.1% against an 87–92% baseline). Nothing can
-   be concluded from that. Needs the standing bar — ≥1,500 battles across ≥2
-   seeds — and `TeamPool.generated` needs a **seed parameter** first, because
-   it currently draws a different pool every run and that is most of the swing.
-2. **A Mega's ability is public and we record it as unknown.** After
-   `|detailschange|` the forme is known and its ability is deterministic —
-   Metagross-Mega is always Tough Claws, there is exactly one option — but
-   `revealed_ability` stays None. Cheap, and it feeds damage estimates.
-3. **33 of the 57 abilities on Mega formes are unmodelled.** The
-   damage-relevant ones, from the engine: **Parental Bond** (two hits, the
-   second at half — effectively ×1.5), **Skill Link** (multi-hit always maxes,
-   ~×1.6 on those moves), **Protean** (STAB on everything), **Mold Breaker**
-   (ignores the defender's ability), and the field-setters **Drought**,
-   **Sand Stream**, **Snow Warning**, **Electric Surge**. Four are
-   Champions-specific and re-enabled by the mod rather than redefined
-   (`megasol`, `piercingdrill`, `eelevate`, `spicyspray`), so their definitions
-   are in the standard `abilities.ts` after all.
-4. **The agent still never reads `action.special`.** A Mega and a non-Mega of
-   the same move score identically, so which one it picks falls to enumeration
-   order. Do this *last*: what the agent should think about Mega depends on
-   what steps 1–3 say it is worth.
+### 1. The field effects a Mega brings, which is where the loss actually is
 
-### 2. Make the terrain rules consult `is_grounded`
+Something a Mega puts on the field degrades prediction for **everyone**, and it
+is worth more than three times what the Mega formes' own stats and typing are.
+In likely order:
+
+```
+Drought, Sand Stream, Snow Warning, Electric Surge   weather/terrain for all
+Fairy Aura (Floette-Mega)      every Fairy move x1.33, both sides
+Intimidate (Manectric-Mega, Scrafty-Mega)  fires on the forme change
+```
+
+First job is to separate them — the weather split from one run was not clean
+enough to say which dominates.
+
+**The holder-only abilities are the smaller half**, which inverts what this
+backlog assumed a day ago: Parental Bond (×1.5 in effect), Skill Link, Protean
+and Mold Breaker can only touch hits the Mega is party to. Worth doing, second.
+
+### 2. Whether the agent should Mega at all
+
+Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
+non-Mega of the same move score identically and the choice falls to
+enumeration order. Deliberately last — building the judgement before the model
+can price a Mega correctly is the mistake 0013 already paid for.
+
+### 3. Make the terrain rules consult `is_grounded`
 
 `is_grounded` exists now but nothing calls it. Five rules still apply to
 Flying types and Levitate users that should be exempt:
@@ -274,7 +281,7 @@ the terrain damage bonuses (Electric, Grassy, Psychic)   same
 
 Cheap, and it is the last of the terrain work.
 
-### 3. Speed Boost and the weather Speed abilities
+### 4. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -283,7 +290,7 @@ Speed Boost needs a per-turn counter.
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
 
-### 4. The support moves that are still unpriced, and why
+### 5. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -382,6 +389,13 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **An unseeded pool is not a measurement.** Two runs of the Mega comparison
+  disagreed in direction because `TeamPool.generated` redrew the teams each
+  time, and that swing was larger than the effect. Seed anything whose number
+  gets reported.
+- **Long runs visit states short runs do not.** 800-battle runs found two
+  legality bugs that 90-battle runs never reached, both reachable in ordinary
+  play and both fatal to the agent in a long game.
 - **A lookup that fails silently deletes your evidence.** `active_by_ident`
   returned None for any Mega'd Pokemon, so the hits were dropped rather than
   mis-attributed and the harness looked healthy while measuring nothing. When

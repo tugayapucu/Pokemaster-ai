@@ -792,7 +792,9 @@ class HeuristicAgent(Agent):
         Their ability counts too, once revealed -- a Grimmsnarl whose Prankster
         has shown itself puts every status move it has a bracket above ours.
         `revealed_ability` was tracked by the tracker and read by nothing until
-        now, which is the same shape as most of the bugs in this project.
+        now, which is the same shape as most of the bugs in this project. It is
+        asked through `_known_ability`, which also settles the species that
+        only have one ability to have.
 
         Unrevealed moves are assumed ordinary. That is optimistic -- they may
         be holding an Aqua Jet we have not seen -- but assuming one would be
@@ -800,7 +802,7 @@ class HeuristicAgent(Agent):
         Pokemon that has shown nothing at all, which is every Pokemon on the
         turn it arrives.
         """
-        ability = observed.revealed_ability
+        ability = self._known_ability(observed)
         at_full_hp = observed.hp_percent >= 100
         return max(
             (
@@ -1057,7 +1059,7 @@ class HeuristicAgent(Agent):
         observed = self._observed_target(observation, slot)
         if observed is None:
             return ScoredAction(action, 0.0, ("nobody there to reach",))
-        theirs = observed.revealed_ability
+        theirs = self._known_ability(observed)
         ours = attacker.current_ability
         if theirs is None:
             return None
@@ -1683,6 +1685,32 @@ class HeuristicAgent(Agent):
             ),
         )
 
+    def _known_ability(self, observed) -> str | None:
+        """The opponent's ability, if it is actually knowable.
+
+        `revealed_ability` answers "have we watched it fire", and that is the
+        wrong question for a species with only one to have. A Mega forme has
+        exactly one -- all 77 of them -- so the forme change *is* the reveal:
+        Metagross-Mega is Tough Claws and there is nothing else it could be.
+        Waiting for it to announce itself throws away information every player
+        at the table already has.
+
+        The rule is not special to Mega. 42 base formes also have a single
+        ability, so it is stated as what it is: one candidate means no doubt.
+        Anything with a choice stays unknown until it shows itself.
+        """
+        if observed is None:
+            return None
+        if observed.revealed_ability:
+            return observed.revealed_ability
+        try:
+            species = self.dex.get_species(observed.species)
+        except KeyError:
+            return None
+        if len(species.abilities) == 1:
+            return to_id(species.abilities[0])
+        return None
+
     def _observed_types(self, observed) -> tuple[str, ...]:
         try:
             species = self.dex.get_species(observed.species)
@@ -2099,7 +2127,7 @@ class HeuristicAgent(Agent):
                 index=index,
                 status=observed.status,
                 item=observed.revealed_item,
-                ability=observed.revealed_ability,
+                ability=self._known_ability(observed),
                 may_hold_item=observed.may_hold_item,
                 at_full_hp=observed.hp_percent >= 100,
                 volatiles=tuple(observed.volatile_conditions),
