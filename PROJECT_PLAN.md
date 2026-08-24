@@ -815,6 +815,29 @@ The measurement did catch two real errors, both of the same kind -- pricing *par
 
 That last point is now the rule for the remaining 33: returning None means the effect depends on state nothing tracks, and the caller falls back to its unknown-support value rather than to zero. Being unable to price a move is not the same as the move being worthless. The 33 need item tracking (Trick, Recycle, Stuff Cheeks), last-move tracking (Copycat, Instruct, Sleep Talk), ability tracking (Skill Swap, Entrainment, Worry Seed), type overwriting (Soak, Forest's Curse), turn-order manipulation (After You, Quash) or trapping (Block, Mean Look).
 
+### Item tracking (2026-08-24)
+
+A live bug, found by asking what the tracker actually knew. **`revealed_item is None` meant two different things** -- "we have never seen an item" and "we watched it get used up" -- and only the second says a Pokémon is empty-handed. Almost every Pokémon in this format carries something, so collapsing the two priced **Knock Off at its floor against nearly every target**.
+
+Three states now, and the third has a wrinkle worth its own rule:
+
+```
+watched it leave   holding nothing, and `consumed_item` remembers what it was
+seen what it is    check it properly -- Mega Stones and Sticky Hold included
+seen nothing       assume they hold something, because they usually do
+                   ...unless they are a Mega-capable species, in which case
+                   the item they most likely hold is the one that CANNOT be
+                   knocked off them
+```
+
+That last refinement matters here more than it would elsewhere: **75 of this dex's 148 items are Mega Stones**. Assuming an unseen item is present without it handed Knock Off a boost against every un-Mega-Evolved Alakazam on the field, and the corpus noticed — 3 up against 10 down before the refinement, 3 against 6 after, and neutral once it was in.
+
+`is_removable` takes an explicit `unknown_counts_as_held` flag rather than inferring from context. **The differential harness leaves it off**, because it knows both sides exactly and should never assume anything — the agent and the referee want different answers to the same question, and saying so in the signature keeps them from drifting.
+
+Five more support moves became priceable as a result: Stuff Cheeks, Corrosive Gas, Recycle, Trick and Switcheroo. **26 of the 54 are priced now**, up from 21. Trick and Switcheroo deliberately return "cannot say" while the opponent's item is unseen, because the whole point of them is that theirs is better than ours.
+
+Agreement is neutral throughout (p 1 on both halves), which is expected for corrections to hidden-information assumptions about rare moves, and is not the reason for making them.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
