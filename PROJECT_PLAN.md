@@ -728,6 +728,42 @@ A zero base power meant **three different things** in this dex — computed per 
 
 **The check that catches this class**: for each new public symbol, name the test that fails if it stops working — and for each table, grep for a second copy of it.
 
+### Fitting the judgements, and what fitting hides (2026-08-24)
+
+Experiment 0009 priced status moves in currencies that already existed. What it could not borrow it invented — the side-condition, weather, terrain and volatile tables — and those, plus Protect's three constants from 0003, are what experiment 0010 fitted.
+
+Fitted on **train only**, using the hash-based split that already existed, and reported on a test half the sweep never saw:
+
+```
+                    train (9,057)        test (2,076, never swept)
+overall            42.95 -> 45.66%        44.41 -> 46.68%
+status slots       31.34 -> 45.51%        36.16 -> 47.04%
+protect            44.32 -> 57.59%        46.21 -> 60.29%
+McNemar             p 1.8e-17              p 1.5e-04
+```
+
+**The largest measured gain in the project, and the first significant on held-out data.**
+
+#### What the headline number hid
+
+Seven of thirteen knobs landed on a **grid edge**, meaning the search wanted to keep going and the value reported was really "the largest number I offered it". Sweeping each one far past its grid separated three cases, none visible in the score:
+
+- **Trick Room is degenerate.** Agreement still climbs at 5,000 and never stops, because a team that brought Trick Room nearly always uses it. The constant stops meaning *"worth this much"* and becomes *"always do this"*. Capped deliberately: an agent that recommends Trick Room regardless of matchup is wrong in a way agreement structurally cannot see.
+- **Leech Seed and Encore measure nothing** — identical agreement across their whole range. Those fits were noise and were reverted.
+- **Protect's knockout bonus is flat between 0 and 40.** Kept positive on the grounds that surviving a knockout matters even where agreement cannot detect it.
+
+**Agreement as an objective degenerates for any move humans almost always use when they have it.** That is a property of the instrument, not of the agent, and the edge check is the guard. Run it on any future fit rather than trusting the headline.
+
+#### Protect: the diagnosis changed the question
+
+0009 left Protect looking worse, 45% -> 44%, and it was nearly treated as a regression to undo. It was not: the agent lost 18 correct Protects and made **58 fewer wrong ones** — a precision/recall shift. In *both* versions, 94-99% of missed Protects were the agent attacking instead.
+
+The real problem was older: Protect's constants had never been fitted, on the most common status move humans play. Fitted, they say something legible — **protect only against a large incoming hit, because the turn it costs is expensive** (damage weight 100 -> 430, tempo cost -20 -> -160).
+
+#### Strength, for once, moved
+
+1,600 paired battles across two seeds: 53.1% and 52.2%, neither significant alone, **pooled 52.7% (95% CI 50.2-55.1%, p 0.032)**. The first change here to show any positive strength signal. Suggestive rather than established — it is self-play against a weaker copy, the easiest possible test — but Protect timing is one of the few things a self-play opponent can actually punish, which is probably why this one moved when every correctness fix before it did not.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
