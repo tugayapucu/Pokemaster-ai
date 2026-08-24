@@ -518,6 +518,13 @@ class HeuristicAgent(Agent):
             reasons.append("knockout on a high roll")
         score += knockout_bonus
 
+        # Deliberately *not* scaled by how dangerous the target is. That was
+        # built and measured (experiment 0013): it made agreement significantly
+        # worse on both halves and *increased* the wrong-target count it was
+        # meant to reduce. Humans prefer the more threatening of two opponents
+        # only 53.7% of the time, which is barely above a coin flip.
+
+
         if estimate.effectiveness > 1:
             reasons.append(f"super effective ({estimate.effectiveness:g}x)")
         elif estimate.effectiveness < 1:
@@ -1110,55 +1117,72 @@ class HeuristicAgent(Agent):
             observed = observation.opponent_side.revealed[index]
             if observed.fainted:
                 continue
-            try:
-                species = self.dex.get_species(observed.species)
-            except KeyError:
-                continue
+            found, found_ko, label = self._threat_from(
+                observed, defender, defender_species, observation
+            )
+            if found > worst:
+                worst, worst_ko, source = found, found_ko, label
+        return min(worst, 1.0), worst_ko, source
 
-            known = [m for m in self._revealed_moves(observed) if m.is_damaging]
-            candidates = known or assumed_attacks(species)
-            label = "seen" if known else "assumed"
+    def _threat_from(
+        self, observed, defender, defender_species, observation: Observation
+    ) -> tuple[float, bool, str]:
+        """Worst hit *one* named opponent could land on this Pokemon.
 
-            for move in candidates:
-                attacking = move.offensive_stat
-                defending = move.defensive_stat
-                # Credit investment to the stat the move actually uses: an
-                # opponent swinging a physical move is likely built for it.
-                stats = assumed_stats(
-                    species.base_stats,
-                    self.assumed_opponent_points,
-                    attacking=attacking,
-                )
-                # A Foul Play aimed at us swings with *our* Attack, which is
-                # exactly why it is dangerous into our own physical attacker.
-                swinging_stats, swinging_boosts = attacking_side(
-                    move,
-                    user=(stats, observed.boosts),
-                    target=(defender.computed_stats or {}, defender.boosts),
-                )
-                estimate = estimate_damage(
-                    self.dex,
-                    move,
-                    attacker=species,
-                    attack_stat=apply_boost(
-                        swinging_stats.get(attacking, 100),
-                        swinging_boosts.stage(attacking),
-                    ),
-                    defender=defender_species,
-                    defense_stat=apply_boost(
-                        (defender.computed_stats or {}).get(defending, 100),
-                        defender.boosts.stage(defending),
-                    ),
-                    defender_hp=max(1, defender.current_hp),
-                    level=observation.regulation.level,
-                    doubles=observation.regulation.game_type == "doubles",
-                    weather=observation.weather,
-                )
-                expected = estimate.average_fraction * move.hit_chance
-                if expected > worst:
-                    worst = expected
-                    worst_ko = estimate.guaranteed_ko
-                    source = f"{species.name}, {label}"
+        Split out of `_incoming_threat`, which took the maximum over both and
+        discarded which one it came from -- and knowing which one is exactly
+        what target selection needs.
+        """
+        worst, worst_ko, source = 0.0, False, "nothing visible"
+        try:
+            species = self.dex.get_species(observed.species)
+        except KeyError:
+            return 0.0, False, "unknown attacker"
+
+        known = [m for m in self._revealed_moves(observed) if m.is_damaging]
+        candidates = known or assumed_attacks(species)
+        label = "seen" if known else "assumed"
+
+        for move in candidates:
+            attacking = move.offensive_stat
+            defending = move.defensive_stat
+            # Credit investment to the stat the move actually uses: an
+            # opponent swinging a physical move is likely built for it.
+            stats = assumed_stats(
+                species.base_stats,
+                self.assumed_opponent_points,
+                attacking=attacking,
+            )
+            # A Foul Play aimed at us swings with *our* Attack, which is
+            # exactly why it is dangerous into our own physical attacker.
+            swinging_stats, swinging_boosts = attacking_side(
+                move,
+                user=(stats, observed.boosts),
+                target=(defender.computed_stats or {}, defender.boosts),
+            )
+            estimate = estimate_damage(
+                self.dex,
+                move,
+                attacker=species,
+                attack_stat=apply_boost(
+                    swinging_stats.get(attacking, 100),
+                    swinging_boosts.stage(attacking),
+                ),
+                defender=defender_species,
+                defense_stat=apply_boost(
+                    (defender.computed_stats or {}).get(defending, 100),
+                    defender.boosts.stage(defending),
+                ),
+                defender_hp=max(1, defender.current_hp),
+                level=observation.regulation.level,
+                doubles=observation.regulation.game_type == "doubles",
+                weather=observation.weather,
+            )
+            expected = estimate.average_fraction * move.hit_chance
+            if expected > worst:
+                worst = expected
+                worst_ko = estimate.guaranteed_ko
+                source = f"{species.name}, {label}"
         return min(worst, 1.0), worst_ko, source
 
     def _revealed_moves(self, observed) -> list[MoveInfo]:

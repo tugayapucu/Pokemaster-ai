@@ -26,24 +26,7 @@ Raging Bull and Aura Wheel were all read on the wrong row of the type chart.
 Agreement train 45.36 → 45.42%, test 47.06 → **47.25%**. Damage prediction
 holds at ~95% on the control team.
 
-### 1. Target selection
-
-The largest measured gap: **858 of 2,477 missed attacks (35%) are the right
-move aimed at the wrong Pokémon** — 9.5% of all labels.
-
-Two causes already eliminated: not focus fire (0011), and not a slot bias
-(495 vs 432, near-symmetric). What is left is that the agent rates the two
-opponents almost equally and picks near-randomly, while the human had a reason.
-
-**One untested hypothesis:** removing a *dangerous* opponent is worth more than
-removing a harmless one, and nothing in the score says so — while
-`_incoming_threat` already computes exactly that per opponent and is used only
-for Protect.
-
-**Done when** the hypothesis is measured on train and reported on test, kept or
-refuted either way.
-
-### 2. Focus Sash and the knockout claim
+### 1. Focus Sash and the knockout claim
 
 "Guaranteed knockout" is wrong about **17%** of the time. Focus Sash is the
 likeliest cause: it measured at 0.985 for *damage*, meaning it does nothing
@@ -53,7 +36,7 @@ mechanic, so it needs the KO calibration rather than the differential.
 **Done when** a "guaranteed" claim is right at least ~90% of the time, or the
 remaining error is attributed to something else.
 
-### 3. Ability tracking
+### 2. Ability tracking
 
 Five support moves need it — Skill Swap, Role Play, Entrainment, Worry Seed,
 Simple Beam — and `revealed_ability` is already tracked, so this is the same
@@ -62,7 +45,7 @@ shape of job as item tracking was.
 Expected to be agreement-neutral, like item tracking. It is on the list for
 the same reason: the model should describe the game, not the sample.
 
-### 4. The rest of the unpriced support moves
+### 3. The rest of the unpriced support moves
 
 23 remain of the original 54. They cluster, so each cluster is one job:
 
@@ -76,7 +59,7 @@ one-offs               Baton Pass, Transform, Lock-On, Perish Song,
                        Guard Split, Power Split, Magnetic Flux, Swallow, Teatime
 ```
 
-### 5. Speed Boost and the weather Speed abilities
+### 4. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -85,7 +68,7 @@ Speed Boost needs a per-turn counter.
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
 
-### 6. Grounding
+### 5. Grounding
 
 **New, found while wiring `modifies_type`.** Several rules turn on whether a
 Pokémon is *grounded*, and nothing models it — a Flying type or a Levitate
@@ -120,7 +103,8 @@ Kept here so the same ground is not covered twice.
 | Direction | Why it is off the list |
 |---|---|
 | **Switching** | Three independent failures: a matchup model (0004, reverted as worse), fitting the constants (0012, overfits — train up, test down), and matching the human rate (0012, still 73% disagreement and 1.8 points worse overall). Plus 0005: perfect knowledge of the opponent's move *this turn* makes the agent worse. Hypothesis left is that human switches are plans about the game rather than the turn, which a one-turn scorer cannot express — a different shape of agent, not another constant. |
-| **Focus fire / joint targets** | Refuted (0011). The correction was kept only on the narrow ground that a Pokémon can only faint once. |
+| **Target selection** | Mostly a **ceiling**, not a gap (0013). The agent is at 77.5% / 79.7% on genuine two-target choices against a 50% floor, and no computable feature predicts the human's pick better than 57%: more damaged 45.9%, faster 44.6%, more threatening 53.7%, already boosted 57.1%. Scaling a knockout by the target's threat was built and made agreement *significantly worse* on both halves (p 0.0004 / 0.004) while increasing the wrong-target count. Experiment 0011 called this "the largest gap"; that overstated it. |
+| **Focus fire / joint targets** | Refuted (0011), and humans do not do it either: over 709 turns where one player attacked with both slots and both opponents were alive, they aimed at the same target 48.1% of the time (0013). The correction was kept only on the narrow ground that a Pokémon can only faint once. |
 | **Opponent-knowledge modelling** | Oracle measured at +0.09 points (0005). Flat ceiling. |
 | **Learned linear policy** | +4.2% agreement but 32.5% win rate (0006). Not wired in. |
 | **Team Preview lead ordering** | No signal: 56.6% → 48.4% against human leads. |
@@ -143,3 +127,9 @@ Kept here so the same ground is not covered twice.
   version being replaced, on the same teams.
 - **Rarity in the corpus is not unimportance.** The corpus is a measuring
   instrument, not the target.
+- **Check the size of a gap before trying to close it.** Target selection was
+  called "the largest gap" and turned out to be 77-80% against a 50% floor,
+  with the rest irreducible. Measure the ceiling first (0013).
+- **A weak signal implemented as a strong one does damage.** Humans prefer the
+  more threatening target 53.7% of the time; weighting that as though it were
+  decisive cost significant agreement on both halves (0013).
