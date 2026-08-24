@@ -49,10 +49,12 @@ from champions_ai.mechanics import (
     INSTRUCT,
     MAX_BORROW_DEPTH,
     PARALYSIS,
+    REFLECT_TYPE,
     SLEEP_TALK,
     SPITE,
     TAILWIND,
     TRICK_ROOM,
+    TYPE_CHANGING_MOVES,
     apply_boost,
     assumed_attacks,
     assumed_stats,
@@ -60,6 +62,7 @@ from champions_ai.mechanics import (
     copycat_borrows,
     dynamic_base_power,
     effective_speed,
+    effective_types,
     estimate_damage,
     estimate_stats,
     gains_from_repeating,
@@ -69,6 +72,7 @@ from champions_ai.mechanics import (
     move_priority,
     moves_first,
     ohko_chance,
+    retyped_by,
     sleep_talk_candidates,
     spite_removes,
 )
@@ -882,6 +886,11 @@ class HeuristicAgent(Agent):
         if move.move_id in PROTECT_MOVES:
             return self._score_protect(observation, slot, action, move, attacker)
 
+        if move.move_id in TYPE_CHANGING_MOVES:
+            retyped = self._score_retype(observation, slot, action, move, attacker)
+            if retyped is not None:
+                return retyped
+
         if move.move_id in BORROWING_MOVES:
             borrowed = self._score_borrowed(
                 observation, slot, action, move, attacker, borrow_depth
@@ -991,6 +1000,146 @@ class HeuristicAgent(Agent):
             return None
 
         return None
+
+    def _score_retype(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        move: MoveInfo,
+        attacker,
+    ) -> "ScoredAction | None":
+        """What rewriting somebody's typing is worth.
+
+        Five moves in this dex do it and none of them was priced. What they are
+        worth is entirely a matter of the type chart -- a Soak that strips a
+        Steel type's resistances is worth a great deal, and the same Soak aimed
+        at a Water type does nothing at all -- so it is computable, and only
+        the wiring was missing.
+
+        Priced as the difference between two damage estimates rather than as a
+        number invented for it: how much more our side can do to them
+        afterwards, or in Reflect Type's case how much less they can do to us.
+        Both are in the currency our own attacks already use.
+        """
+        if move.move_id == REFLECT_TYPE:
+            return self._score_reflect_type(observation, slot, action, attacker)
+
+        observed = self._observed_target(observation, slot)
+        if observed is None:
+            return ScoredAction(action, 0.0, ("nobody to retype",))
+        try:
+            species = self.dex.get_species(observed.species)
+        except KeyError:
+            return None
+        before = effective_types(species.types, tuple(observed.volatile_conditions))
+        after = retyped_by(move.move_id, before)
+        if after is None:
+            # The engine's own answer: Soak on a Water type fails outright, and
+            # so does Trick-or-Treat on anything already part Ghost.
+            return ScoredAction(
+                action, 0.0, (f"{move.name} would fail on {species.name}",)
+            )
+
+        gained = self._best_damage(observation, slot, observed, after) - self._best_damage(
+            observation, slot, observed, before
+        )
+        return ScoredAction(
+            action,
+            gained * DAMAGE_WEIGHT,
+            (
+                f"makes {species.name} {'/'.join(after)}",
+                f"which is worth ~{gained:+.0%} of its health bar to us",
+            ),
+        )
+
+    def _score_reflect_type(
+        self, observation: Observation, slot: int, action: MoveAction, attacker
+    ) -> "ScoredAction | None":
+        """Copying their typing onto ourselves, worth the damage it avoids."""
+        observed = self._observed_target(observation, slot)
+        if observed is None:
+            return ScoredAction(action, 0.0, ("nobody to copy",))
+        try:
+            theirs = self.dex.get_species(observed.species)
+            ours = self.dex.get_species(attacker.pokemon_set.species)
+        except KeyError:
+            return None
+        current = effective_types(ours.types, tuple(attacker.volatile_conditions))
+        copied = effective_types(theirs.types, tuple(observed.volatile_conditions))
+        after = retyped_by(REFLECT_TYPE, current, copied=copied)
+        if after is None:
+            return ScoredAction(
+                action, 0.0, (f"we are already {'/'.join(current)}",)
+            )
+        now, _, _ = self._incoming_threat(observation, slot, attacker)
+        later, _, _ = self._incoming_threat(observation, slot, attacker, after)
+        return ScoredAction(
+            action,
+            (now - later) * DAMAGE_WEIGHT,
+            (
+                f"turns us into {'/'.join(after)}",
+                f"which avoids ~{now - later:+.0%} of the worst hit coming",
+            ),
+        )
+
+    def _best_damage(
+        self,
+        observation: Observation,
+        slot: int,
+        observed,
+        defender_types: tuple[str, ...],
+    ) -> float:
+        """The best fraction our side could take off this target, given a typing.
+
+        Over both our active Pokemon, because a Soak is usually thrown so that
+        the *partner* can hit -- scoring only the user's own moves would miss
+        the reason the move is in the team.
+        """
+        try:
+            species = self.dex.get_species(observed.species)
+        except KeyError:
+            return 0.0
+        opponent_stats = estimate_stats(species.base_stats, self.assumed_opponent_points)
+        hp = max(1, round(opponent_stats["hp"] * observed.hp_percent / 100))
+
+        best = 0.0
+        for index in observation.own_side.active_slots:
+            if index is None:
+                continue
+            mon = observation.own_side.team[index]
+            if mon.fainted:
+                continue
+            try:
+                mon_species = self.dex.get_species(mon.pokemon_set.species)
+            except KeyError:
+                continue
+            for move_id in mon.selectable_moves:
+                try:
+                    candidate = self.dex.get_move(move_id)
+                except KeyError:
+                    continue
+                if not candidate.is_damaging:
+                    continue
+                estimate = estimate_damage(
+                    self.dex,
+                    candidate,
+                    attacker=mon_species,
+                    attack_stat=self._attack_stat(mon, candidate),
+                    defender=species,
+                    defense_stat=apply_boost(
+                        opponent_stats.get(candidate.defensive_stat, 100),
+                        observed.boosts.stage(candidate.defensive_stat),
+                    ),
+                    defender_hp=hp,
+                    level=observation.regulation.level,
+                    doubles=observation.regulation.game_type == "doubles",
+                    weather=observation.weather,
+                    terrain=observation.terrain,
+                    defender_types=defender_types,
+                )
+                best = max(best, estimate.average_fraction * candidate.hit_chance)
+        return min(best, 1.0)
 
     def _score_instruct(
         self,
@@ -1418,7 +1567,11 @@ class HeuristicAgent(Agent):
         return ScoredAction(action, score, tuple(reasons))
 
     def _incoming_threat(
-        self, observation: Observation, slot: int, defender
+        self,
+        observation: Observation,
+        slot: int,
+        defender,
+        defender_types: tuple[str, ...] | None = None,
     ) -> tuple[float, bool, str]:
         """Worst expected hit on this Pokemon: (fraction of its HP, would KO, why).
 
@@ -1441,14 +1594,19 @@ class HeuristicAgent(Agent):
             if observed.fainted:
                 continue
             found, found_ko, label = self._threat_from(
-                observed, defender, defender_species, observation
+                observed, defender, defender_species, observation, defender_types
             )
             if found > worst:
                 worst, worst_ko, source = found, found_ko, label
         return min(worst, 1.0), worst_ko, source
 
     def _threat_from(
-        self, observed, defender, defender_species, observation: Observation
+        self,
+        observed,
+        defender,
+        defender_species,
+        observation: Observation,
+        defender_types: tuple[str, ...] | None = None,
     ) -> tuple[float, bool, str]:
         """Worst hit *one* named opponent could land on this Pokemon.
 
@@ -1500,6 +1658,9 @@ class HeuristicAgent(Agent):
                 level=observation.regulation.level,
                 doubles=observation.regulation.game_type == "doubles",
                 weather=observation.weather,
+                # Set when something has rewritten our typing -- Reflect Type
+                # is worth exactly the difference this makes.
+                defender_types=defender_types,
             )
             expected = estimate.average_fraction * move.hit_chance
             if expected > worst:

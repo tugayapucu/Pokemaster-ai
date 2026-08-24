@@ -1,8 +1,12 @@
-"""The engine's rules for moves that borrow another move.
+"""Moves that borrow another move, and moves that rewrite what a Pokemon is.
 
-Checked against `data/abilities.ts`-style transcription of the engine, not
-against the corpus: humans used one of these four moves seven times in 500
-battles, so the corpus cannot settle any of it. The engine can.
+Nine moves across the two groups, and all nine were unpriced. Every rule here
+is read off the engine -- `moves.ts` and the flags already in our own dump --
+rather than off the corpus, because the corpus cannot settle any of it: humans
+picked one of the four borrowing moves seven times in 500 battles, and none of
+the five retyping ones at all.
+
+Rarity in 500 games is a fact about that sample, not about the game.
 """
 
 from champions_ai.dex import MoveInfo
@@ -10,6 +14,7 @@ from champions_ai.mechanics import (
     copycat_borrows,
     gains_from_repeating,
     instruct_repeats,
+    retyped_by,
     sleep_talk_candidates,
     spite_removes,
 )
@@ -125,3 +130,44 @@ def test_protect_is_not_worth_repeating():
 def test_a_field_effect_is_not_worth_repeating():
     """A second Trick Room in one turn undoes the first."""
     assert not gains_from_repeating(TRICK_ROOM)
+
+
+# --- moves that rewrite what a Pokemon is --------------------------------
+
+
+def test_soak_makes_the_target_pure_water():
+    assert retyped_by("soak", ("Steel", "Ghost")) == ("Water",)
+
+
+def test_soak_fails_on_something_already_pure_water():
+    """The engine returns false, so the turn is wasted -- which is a different
+    statement from the move being weak, and an agent needs to know which."""
+    assert retyped_by("soak", ("Water",)) is None
+
+
+def test_soak_still_works_on_a_part_water_type():
+    assert retyped_by("soak", ("Water", "Bug")) == ("Water",)
+
+
+def test_trick_or_treat_adds_a_third_type():
+    assert retyped_by("trickortreat", ("Flying", "Steel")) == ("Flying", "Steel", "Ghost")
+
+
+def test_trick_or_treat_fails_on_something_already_part_ghost():
+    assert retyped_by("trickortreat", ("Ghost", "Poison")) is None
+
+
+def test_forests_curse_adds_grass():
+    assert retyped_by("forestscurse", ("Fire",)) == ("Fire", "Grass")
+
+
+def test_magic_powder_makes_the_target_pure_psychic():
+    assert retyped_by("magicpowder", ("Dark", "Steel")) == ("Psychic",)
+
+
+def test_reflect_type_copies_the_target():
+    assert retyped_by("reflecttype", ("Fire",), copied=("Water", "Bug")) == ("Water", "Bug")
+
+
+def test_reflect_type_fails_when_we_already_match():
+    assert retyped_by("reflecttype", ("Water", "Bug"), copied=("Water", "Bug")) is None

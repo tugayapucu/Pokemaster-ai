@@ -345,6 +345,7 @@ def estimate_damage(
     attacker_hp_fraction: float = 1.0,
     attacker_status: str | None = None,
     defender_status: str | None = None,
+    defender_types: tuple[str, ...] | None = None,
 ) -> DamageEstimate:
     """Estimate a single hit's damage range.
 
@@ -379,7 +380,11 @@ def estimate_damage(
     # Flying type this turn, which is why Earthquake reaches an Altaria and
     # Head Smash into one does half what the chart says.
     attacker_types = effective_types(attacker.types, attacker_volatiles)
-    defender_types = effective_types(defender.types, defender_volatiles)
+    # An explicit override answers "what if they were this type instead",
+    # which is the only way to price Soak, Trick-or-Treat and the rest: what
+    # those moves are worth *is* the difference between two of these calls.
+    if defender_types is None:
+        defender_types = effective_types(defender.types, defender_volatiles)
     # Through the dex rather than the chart: Freeze-Dry and Flying Press do
     # not follow it, and reading the chart here bypassed both.
     effectiveness = dex.effectiveness(

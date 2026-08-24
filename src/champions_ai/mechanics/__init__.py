@@ -57,7 +57,13 @@ from champions_ai.mechanics.turn_order import (
     move_priority,
     moves_first,
 )
-from champions_ai.mechanics.typing import effective_types, is_grounded
+from champions_ai.mechanics.typing import (
+    REFLECT_TYPE,
+    TYPE_CHANGING_MOVES,
+    effective_types,
+    is_grounded,
+    retyped_by,
+)
 
 __all__ = [
     "ASSUMED_ATTACKING_POINTS",
@@ -89,7 +95,10 @@ __all__ = [
     "dynamic_base_power",
     "effective_speed",
     "effective_type",
+    "REFLECT_TYPE",
+    "TYPE_CHANGING_MOVES",
     "effective_types",
+    "retyped_by",
     "critical_chance",
     "estimate_damage",
     "expected_hits",
