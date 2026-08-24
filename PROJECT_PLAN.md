@@ -840,6 +840,29 @@ Agreement is neutral throughout (p 1 on both halves), and so is **strength**: 1,
 
 The change is kept because the ambiguity was a genuine bug and the assumption is correct about the game, which is the standard this project set for itself. Where that standard has been applied to a *scoring* change rather than a modelling one -- the joint knockout correction in 0011 -- it was flagged as arguable, and this is not that case: `revealed_item is None` meaning two different things was wrong however it scored.
 
+### Switching: three failures and what they rule out (2026-08-24)
+
+Switching is **19% of every disagreement** and looked exactly like a mis-set threshold — humans switch on 11.7% of decisions, this agent on 2.2%, and when it does switch the human agrees 62.9% of the time. High precision, low recall. `SWITCH_COST` had never been fitted, which is the same situation that made Protect the largest gain in the project.
+
+**Fitting it overfits.** Train 45.357% -> 45.468%, test **47.062% -> 46.821%**. Held-out went *down*; the change was not applied. The sweep also wanted the cost to go from -25 to **-60** — switch *less* — which is the opposite of what the rate gap suggested.
+
+Sweeping the cost by hand shows why:
+
+```
+switch cost   we switch    recall   precision    overall
+      -25        2.2%      10.3%      62.9%      45.36%   <- current
+      +25       11.2%      26.7%      34.9%      43.52%   <- the human rate
+      +60       26.7%      41.1%      23.9%      38.37%
+```
+
+At +25 the agent switches as often as humans do, still disagrees with **73%** of their switches, and loses 1.8 points overall. **Matching the rate does not mean matching the decisions.** The agent does not switch too rarely; it does not know *when*.
+
+That is now three independent failures — the matchup model (0004, reverted), constant fitting (0012, overfits), rate matching (0012, worse) — plus a fourth from another direction: **0005** found perfect knowledge of the opponent's moveset worth +0.09 points and perfect knowledge of their move *this turn* actively harmful. The missing signal is not the opponent's immediate action either.
+
+The hypothesis left, recorded and **not acted on**: human switches are plans about the *game* rather than the turn — preserving a win condition, keeping a check healthy for a threat not yet on the field, conceding a turn to be positioned three later. This agent scores one turn at a time and sums two slots, so no single-turn signal could express any of it. If that is right, closing this gap is a different shape of agent rather than another constant, and worth being sure about before paying for it.
+
+**The full sweep also re-made two corrections that 0010 had already reverted on principle** — Trick Room back to its degenerate value, Leech Seed back to noise. A sweep maximising training agreement will undo a judgement made for a reason, so fitted values need re-checking against the edge diagnostics every time, not once.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
