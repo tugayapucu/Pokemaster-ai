@@ -110,7 +110,7 @@ one-offs               Baton Pass, Transform, Lock-On, Perish Song,
                        Guard Split, Power Split, Magnetic Flux, Swallow, Teatime
 ```
 
-### 4. Make the terrain rules consult `is_grounded`
+### 3. Make the terrain rules consult `is_grounded`
 
 `is_grounded` exists now but nothing calls it. Five rules still apply to
 Flying types and Levitate users that should be exempt:
@@ -125,7 +125,7 @@ the terrain damage bonuses (Electric, Grassy, Psychic)   same
 
 Cheap, and it is the last of the terrain work.
 
-### 3. Speed Boost and the weather Speed abilities
+### 4. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
