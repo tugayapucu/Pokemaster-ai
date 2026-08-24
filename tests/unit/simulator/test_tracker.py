@@ -479,3 +479,22 @@ def test_getting_an_item_back_clears_the_consumed_flag():
     back = tracker.opponent_side().revealed[0]
     assert back.revealed_item == "lifeorb"
     assert back.may_hold_item
+
+
+def test_our_own_single_turn_effects_are_tracked():
+    """Recorded for the opponent since `-singleturn` was first handled and
+    never for us -- the same shape as the own-boosts bug, and it matters for
+    the same reason: our own Roost strips our own Flying type."""
+    tracker = _tracker()
+    _sideline(tracker, "|-singleturn|p1a: Charizard|move: Roost")
+    _request(tracker, _move_request())
+    ours = tracker.own_side().team[0]
+    assert "roost" in ours.volatile_conditions
+
+
+def test_our_own_single_turn_effects_expire_at_the_turn_boundary():
+    tracker = _tracker()
+    _sideline(tracker, "|-singleturn|p1a: Charizard|move: Roost")
+    _sideline(tracker, "|turn|3")
+    _request(tracker, _move_request())
+    assert "roost" not in tracker.own_side().team[0].volatile_conditions

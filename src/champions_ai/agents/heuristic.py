@@ -296,6 +296,8 @@ class ResolvedTarget(NamedTuple):
     may_hold_item: bool = True
     # A Focus Sash and Sturdy both need the holder at full health.
     at_full_hp: bool = False
+    # One-turn effects, most importantly Roost, which strips the Flying type.
+    volatiles: tuple[str, ...] = ()
     # Where this Pokemon sits in the opponent's revealed list, so two slots
     # aiming at the same one can be recognised as doing so.
     index: int | None = None
@@ -500,6 +502,9 @@ class HeuristicAgent(Agent):
             # even when we cannot see the item.
             defender_at_full_hp=target.at_full_hp,
             defender_ability=target.ability,
+            # A Roost strips the Flying type for the turn, on either side.
+            attacker_volatiles=tuple(attacker.volatile_conditions),
+            defender_volatiles=target.volatiles,
         )
 
         reasons: list[str] = []
@@ -1277,6 +1282,7 @@ class HeuristicAgent(Agent):
                 ability=ally.current_ability,
                 may_hold_item=ally.current_item is not None,
                 at_full_hp=ally.current_hp >= ally.max_hp,
+                volatiles=tuple(ally.volatile_conditions),
                 attacking_stat=None
                 if attacking_key is None
                 else apply_boost(
@@ -1322,6 +1328,7 @@ class HeuristicAgent(Agent):
                 ability=observed.revealed_ability,
                 may_hold_item=observed.may_hold_item,
                 at_full_hp=observed.hp_percent >= 100,
+                volatiles=tuple(observed.volatile_conditions),
                 # Uniform rather than credited: the calibrated attacking
                 # investment is evidence from *using* a move, and a Foul Play
                 # target is not the one using it.

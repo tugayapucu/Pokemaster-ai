@@ -378,7 +378,12 @@ class Dex(BaseModel, frozen=True):
         return found
 
     def effectiveness(
-        self, move: MoveInfo, defender: SpeciesInfo, *, move_type: str | None = None
+        self,
+        move: MoveInfo,
+        defender: SpeciesInfo,
+        *,
+        move_type: str | None = None,
+        defender_types: tuple[str, ...] | None = None,
     ) -> float:
         """This move's type multiplier against this defender.
 
@@ -391,22 +396,26 @@ class Dex(BaseModel, frozen=True):
         type when they are used -- Weather Ball, Terrain Pulse, Raging Bull and
         Aura Wheel. Passing it here rather than looking the chart up separately
         keeps this the single path it was made to be.
+
+        `defender_types` overrides theirs, because typing is not fixed for the
+        battle either: a Roosting Pokemon has no Flying type this turn.
         """
         typing = move_type or move.type
+        against = defender_types or defender.types
         substitutions = EFFECTIVENESS_SUBSTITUTIONS.get(move.move_id)
         if substitutions:
             row = self.type_chart.multipliers.get(typing)
             if row is None:
                 raise KeyError(f"unknown attacking type {typing!r}")
             total = 1.0
-            for defending in defender.types:
+            for defending in against:
                 total *= substitutions.get(defending, row[defending])
             return total
 
-        total = self.type_chart.effectiveness(typing, defender.types)
+        total = self.type_chart.effectiveness(typing, against)
         added = ADDED_TYPES.get(move.move_id)
         if added:
-            total *= self.type_chart.effectiveness(added, defender.types)
+            total *= self.type_chart.effectiveness(added, against)
         return total
 
     @classmethod

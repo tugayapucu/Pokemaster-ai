@@ -201,6 +201,11 @@ class BattleTracker:
         # not the stages applied to them, so these come from the protocol --
         # without this our own Swords Dance raised nothing.
         self._own_boosts: dict[str, Boosts] = {}
+        # Our own one-turn effects. Recorded for the opponent since the day
+        # `-singleturn` was handled and never for us -- the same shape as the
+        # boosts above, and it matters for the same reason: a Roost strips our
+        # own Flying type, so an Earthquake that should miss us connects.
+        self._own_single_turn: dict[str, set[str]] = {}
         self._protect_streak: dict[tuple[str, str], int] = {}
         # The turn each Pokemon arrived, for both sides. Fake Out and
         # First Impression only work on the first turn out, and the engine
@@ -273,6 +278,7 @@ class BattleTracker:
         self._turn = int(args[0])
         for mon in self._opponents.values():
             mon.single_turn.clear()
+        self._own_single_turn.clear()
         for nickname, species in self._nickname_to_species.items():
             if species in self._opponents:
                 self._opponents[species].turns_on_field = self.turns_on_field(
@@ -328,6 +334,7 @@ class BattleTracker:
             if side == self.own_tag:
                 # A Pokemon leaving the field loses its stages, ours included.
                 self._own_boosts.pop(name, None)
+                self._own_single_turn.pop(name, None)
             return
 
         species = species_from_details(details)
@@ -486,6 +493,8 @@ class BattleTracker:
         mon = self._opponent_at(args[0])
         if mon is not None:
             mon.single_turn.add(effect)
+        elif side == self.own_tag:
+            self._own_single_turn.setdefault(name, set()).add(effect)
 
         # The *wider* set: Endure drives the same counter without blocking
         # anything, so missing it would leave us expecting a Protect to
@@ -743,6 +752,9 @@ class BattleTracker:
                 )
                 if active.get("trapped") or active.get("maybeTrapped"):
                     volatiles = volatiles | {TRAPPED}
+            volatiles = volatiles | frozenset(
+                self._own_single_turn.get(split_ident(entry["ident"])[2], ())
+            )
 
             team.append(
                 BattlePokemon(

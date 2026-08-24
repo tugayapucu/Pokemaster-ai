@@ -28,6 +28,7 @@ from champions_ai.mechanics.items import (
     survives_a_knockout,
 )
 from champions_ai.mechanics.move_type import effective_type
+from champions_ai.mechanics.typing import effective_types
 
 T = TypeVar("T")
 
@@ -336,6 +337,8 @@ def estimate_damage(
     opponents: int = 1,
     defender_at_full_hp: bool = False,
     defender_ability: str | None = None,
+    attacker_volatiles: tuple[str, ...] = (),
+    defender_volatiles: tuple[str, ...] = (),
 ) -> DamageEstimate:
     """Estimate a single hit's damage range.
 
@@ -361,9 +364,16 @@ def estimate_damage(
     actual_type = effective_type(
         move, attacker=attacker, weather=weather, terrain=terrain
     )
+    # Typing is not fixed for the battle either: a Roosting Pokemon has no
+    # Flying type this turn, which is why Earthquake reaches an Altaria and
+    # Head Smash into one does half what the chart says.
+    attacker_types = effective_types(attacker.types, attacker_volatiles)
+    defender_types = effective_types(defender.types, defender_volatiles)
     # Through the dex rather than the chart: Freeze-Dry and Flying Press do
     # not follow it, and reading the chart here bypassed both.
-    effectiveness = dex.effectiveness(move, defender, move_type=actual_type)
+    effectiveness = dex.effectiveness(
+        move, defender, move_type=actual_type, defender_types=defender_types
+    )
 
     if not move.is_damaging or effectiveness == 0.0:
         return DamageEstimate(0, 0, effectiveness, defender_hp)
@@ -382,7 +392,7 @@ def estimate_damage(
     boosted = WEATHER_DEFENCE_BOOSTS.get(weather or "")
     if boosted is not None:
         typing, category = boosted
-        if typing in defender.types and move.category == category:
+        if typing in defender_types and move.category == category:
             defense_stat = int(defense_stat * WEATHER_DEFENCE_MULTIPLIER)
 
     # A primal weather negating the opposing type means the move genuinely does
@@ -412,7 +422,7 @@ def estimate_damage(
     steps = _effectiveness_steps(effectiveness)
     # STAB follows the type the move ends up with, not the one it was written
     # with: a Morpeko-Hangry gets it on a Dark Aura Wheel.
-    stab = actual_type in attacker.types
+    stab = actual_type in attacker_types
     burned = attacker_burned and move.category == "Physical"
     final = damage_multiplier(attacker_item, effectiveness=effectiveness)
     final *= defender_multiplier(defender_item, move, effectiveness=effectiveness)

@@ -142,6 +142,8 @@ class DamageSample:
             opponents=self.spread_targets,
             defender_at_full_hp=self.defender_hp_before >= self.defender.max_hp,
             defender_ability=self.defender.current_ability,
+            attacker_volatiles=tuple(self.attacker.volatile_conditions),
+            defender_volatiles=tuple(self.defender.volatile_conditions),
         )
         return estimate.minimum, estimate.maximum
 

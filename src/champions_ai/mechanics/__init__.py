@@ -44,6 +44,7 @@ from champions_ai.mechanics.turn_order import (
     move_priority,
     moves_first,
 )
+from champions_ai.mechanics.typing import effective_types, is_grounded
 
 __all__ = [
     "ASSUMED_ATTACKING_POINTS",
@@ -65,6 +66,7 @@ __all__ = [
     "dynamic_base_power",
     "effective_speed",
     "effective_type",
+    "effective_types",
     "critical_chance",
     "estimate_damage",
     "expected_hits",
@@ -73,6 +75,7 @@ __all__ = [
     "estimate_stats",
     "evaluate_position",
     "hp_stat",
+    "is_grounded",
     "is_removable",
     "is_spread_move",
     "move_priority",
