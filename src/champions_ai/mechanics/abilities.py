@@ -265,3 +265,92 @@ def taken_multiplier(
     if ability == WATER_BUBBLE and move.type == "Fire":
         multiplier *= 0.5
     return multiplier
+
+
+# --- the five moves that change what ability something has ---------------
+#
+# These were the moves the "ability tracking" backlog item was originally
+# about, and they stayed unpriced through it: the tracking was the easy half,
+# and what an ability is *worth* is the hard one. That is answerable now, and
+# by the same route as everything else here -- run the damage estimate twice,
+# once with the ability and once without, and the difference is the answer.
+#
+# The refusal lists are the engine's own ability flags, filtered to the 210
+# abilities that exist in this dex. An ability that is really a forme change
+# in disguise cannot be handed around.
+SKILL_SWAP = "skillswap"
+ROLE_PLAY = "roleplay"
+ENTRAINMENT = "entrainment"
+WORRY_SEED = "worryseed"
+SIMPLE_BEAM = "simplebeam"
+ABILITY_MOVES = frozenset(
+    {SKILL_SWAP, ROLE_PLAY, ENTRAINMENT, WORRY_SEED, SIMPLE_BEAM}
+)
+
+# `cantsuppress` -- Worry Seed and Simple Beam overwrite, so they refuse these.
+CANNOT_BE_OVERWRITTEN = frozenset({
+    "battlebond", "disguise", "gulpmissile", "iceface", "shieldsdown",
+    "stancechange", "zerotohero",
+})
+# `failroleplay`
+CANNOT_BE_COPIED = frozenset({
+    "battlebond", "disguise", "embodyaspectcornerstone",
+    "embodyaspecthearthflame", "embodyaspectteal", "embodyaspectwellspring",
+    "forecast", "hungerswitch", "iceface", "illusion", "imposter", "receiver",
+    "shieldsdown", "stancechange", "terashell", "trace", "zerotohero",
+})
+# `failskillswap` -- checked on *both* sides, because the swap moves both ways.
+CANNOT_BE_SWAPPED = frozenset({
+    "battlebond", "disguise", "embodyaspectcornerstone",
+    "embodyaspecthearthflame", "embodyaspectteal", "embodyaspectwellspring",
+    "hungerswitch", "iceface", "illusion", "shieldsdown", "stancechange",
+    "terashell", "zerotohero",
+})
+# `noentrain`
+CANNOT_BE_GIVEN_AWAY = frozenset({
+    "battlebond", "disguise", "embodyaspectcornerstone",
+    "embodyaspecthearthflame", "embodyaspectteal", "embodyaspectwellspring",
+    "forecast", "hungerswitch", "iceface", "illusion", "imposter", "receiver",
+    "shieldsdown", "stancechange", "terashell", "trace", "zerotohero",
+})
+
+INSOMNIA = "insomnia"
+SIMPLE = "simple"
+
+
+def ability_move_succeeds(
+    move_id: str, *, ours: str | None, theirs: str | None
+) -> bool:
+    """Whether the engine would let this move through."""
+    if move_id == WORRY_SEED:
+        return theirs not in CANNOT_BE_OVERWRITTEN and theirs != INSOMNIA
+    if move_id == SIMPLE_BEAM:
+        return theirs not in CANNOT_BE_OVERWRITTEN and theirs != SIMPLE
+    if move_id == ROLE_PLAY:
+        return theirs not in CANNOT_BE_COPIED and theirs != ours
+    if move_id == ENTRAINMENT:
+        return theirs not in CANNOT_BE_GIVEN_AWAY and theirs != ours
+    if move_id == SKILL_SWAP:
+        return (
+            ours not in CANNOT_BE_SWAPPED
+            and theirs not in CANNOT_BE_SWAPPED
+            and ours != theirs
+        )
+    return False
+
+
+def abilities_after(
+    move_id: str, *, ours: str | None, theirs: str | None
+) -> tuple[str | None, str | None]:
+    """(ours, theirs) once the move has resolved."""
+    if move_id == WORRY_SEED:
+        return ours, INSOMNIA
+    if move_id == SIMPLE_BEAM:
+        return ours, SIMPLE
+    if move_id == ROLE_PLAY:
+        return theirs, theirs
+    if move_id == ENTRAINMENT:
+        return ours, ours
+    if move_id == SKILL_SWAP:
+        return theirs, ours
+    return ours, theirs

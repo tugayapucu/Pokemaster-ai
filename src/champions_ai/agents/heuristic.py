@@ -44,6 +44,7 @@ from champions_ai.domain import (
 )
 from champions_ai.domain.boosts import BOOST_FIELDS, MAX_STAGE, MIN_STAGE
 from champions_ai.mechanics import (
+    ABILITY_MOVES,
     AFTER_YOU,
     BORROWING_MOVES,
     COPYCAT,
@@ -58,6 +59,8 @@ from champions_ai.mechanics import (
     TRICK_ROOM,
     TURN_ORDER_MOVES,
     TYPE_CHANGING_MOVES,
+    abilities_after,
+    ability_move_succeeds,
     apply_boost,
     assumed_attacks,
     assumed_stats,
@@ -897,6 +900,13 @@ class HeuristicAgent(Agent):
         if move.move_id in PROTECT_MOVES:
             return self._score_protect(observation, slot, action, move, attacker)
 
+        if move.move_id in ABILITY_MOVES:
+            swapped = self._score_ability_move(
+                observation, slot, action, move, attacker
+            )
+            if swapped is not None:
+                return swapped
+
         if move.move_id in TURN_ORDER_MOVES:
             ordered = self._score_turn_order(observation, slot, action, move, attacker)
             if ordered is not None:
@@ -1016,6 +1026,117 @@ class HeuristicAgent(Agent):
             return None
 
         return None
+
+    def _score_ability_move(
+        self,
+        observation: Observation,
+        slot: int,
+        action: MoveAction,
+        move: MoveInfo,
+        attacker,
+    ) -> "ScoredAction | None":
+        """Skill Swap, Role Play, Entrainment, Worry Seed and Simple Beam.
+
+        These are the five the "ability tracking" backlog item was originally
+        about, and they stayed unpriced through it -- tracking was the easy
+        half. What an ability is *worth* is answerable now, and by the same
+        route as everything else: run the damage estimate twice, once with the
+        ability and once with what the move would replace it with, and the
+        difference is the answer.
+
+        An ability we have not seen makes this unanswerable rather than zero.
+        `revealed_ability` is the gate, and it means these moves stay unpriced
+        against anything that has not shown itself -- which is honest, because
+        we genuinely do not know what we would be taking away.
+
+        Only the offensive half is counted: what *we* can then do to *them*.
+        Skill Swap and Entrainment also hand our ability to the opponent, and
+        what that is worth to them is not modelled, so both read slightly
+        generously against anything that would enjoy what we are giving away.
+        """
+        observed = self._observed_target(observation, slot)
+        if observed is None:
+            return ScoredAction(action, 0.0, ("nobody there to reach",))
+        theirs = observed.revealed_ability
+        ours = attacker.current_ability
+        if theirs is None:
+            return None
+
+        if not ability_move_succeeds(move.move_id, ours=ours, theirs=theirs):
+            return ScoredAction(action, 0.0, (f"{move.name} would fail here",))
+
+        after_ours, after_theirs = abilities_after(
+            move.move_id, ours=ours, theirs=theirs
+        )
+        now = self._our_best_hit(observation, slot, observed, ours, theirs)
+        later = self._our_best_hit(
+            observation, slot, observed, after_ours, after_theirs
+        )
+        return ScoredAction(
+            action,
+            (later - now) * DAMAGE_WEIGHT,
+            (
+                f"leaves them with {after_theirs} and us with {after_ours}",
+                f"which is worth ~{later - now:+.0%} of a health bar to us",
+            ),
+        )
+
+    def _our_best_hit(
+        self,
+        observation: Observation,
+        slot: int,
+        observed,
+        attacker_ability: str | None,
+        defender_ability: str | None,
+    ) -> float:
+        """Best fraction *this* Pokemon of ours could take off that target.
+
+        Only our own slot, unlike the retyping moves: Skill Swap and Role Play
+        change what *we* have, so the partner's numbers do not move.
+        """
+        attacker = self._own_active(observation, slot)
+        if attacker is None:
+            return 0.0
+        try:
+            species = self.dex.get_species(observed.species)
+            attacker_species = self.dex.get_species(attacker.pokemon_set.species)
+        except KeyError:
+            return 0.0
+        stats = estimate_stats(species.base_stats, self.assumed_opponent_points)
+        hp = max(1, round(stats["hp"] * observed.hp_percent / 100))
+
+        best = 0.0
+        for move_id in attacker.selectable_moves:
+            try:
+                candidate = self.dex.get_move(move_id)
+            except KeyError:
+                continue
+            if not candidate.is_damaging:
+                continue
+            estimate = estimate_damage(
+                self.dex,
+                candidate,
+                attacker=attacker_species,
+                attack_stat=self._attack_stat(attacker, candidate),
+                defender=species,
+                defense_stat=apply_boost(
+                    stats.get(candidate.defensive_stat, 100),
+                    observed.boosts.stage(candidate.defensive_stat),
+                ),
+                defender_hp=hp,
+                level=observation.regulation.level,
+                doubles=observation.regulation.game_type == "doubles",
+                weather=observation.weather,
+                terrain=observation.terrain,
+                attacker_ability=attacker_ability,
+                defender_ability=defender_ability,
+                attacker_hp_fraction=attacker.hp_fraction,
+                attacker_status=attacker.status,
+                defender_status=observed.status,
+                defender_at_full_hp=observed.hp_percent >= 100,
+            )
+            best = max(best, estimate.average_fraction * candidate.hit_chance)
+        return min(best, 1.0)
 
     def _score_turn_order(
         self,

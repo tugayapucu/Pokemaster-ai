@@ -1,3 +1,8 @@
+from champions_ai.mechanics.abilities import (
+    ABILITY_MOVES,
+    abilities_after,
+    ability_move_succeeds,
+)
 from champions_ai.mechanics.base_power import dynamic_base_power
 from champions_ai.mechanics.damage import (
     DamageEstimate,
@@ -79,6 +84,9 @@ __all__ = [
     "Matchup",
     "PositionValue",
     "apply_boost",
+    "ABILITY_MOVES",
+    "abilities_after",
+    "ability_move_succeeds",
     "assumed_attacks",
     "BORROWING_MOVES",
     "MAX_BORROW_DEPTH",

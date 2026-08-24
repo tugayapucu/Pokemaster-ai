@@ -1,6 +1,6 @@
-"""Moves that borrow another move, and moves that rewrite what a Pokemon is.
+"""Moves that borrow another move, rewrite a typing, or hand an ability around.
 
-Nine moves across the two groups, and all nine were unpriced. Every rule here
+Fourteen moves across the three groups, and all fourteen were unpriced. Every rule here
 is read off the engine -- `moves.ts` and the flags already in our own dump --
 rather than off the corpus, because the corpus cannot settle any of it: humans
 picked one of the four borrowing moves seven times in 500 battles, and none of
@@ -11,6 +11,8 @@ Rarity in 500 games is a fact about that sample, not about the game.
 
 from champions_ai.dex import MoveInfo
 from champions_ai.mechanics import (
+    abilities_after,
+    ability_move_succeeds,
     copycat_borrows,
     gains_from_repeating,
     instruct_repeats,
@@ -171,3 +173,54 @@ def test_reflect_type_copies_the_target():
 
 def test_reflect_type_fails_when_we_already_match():
     assert retyped_by("reflecttype", ("Water", "Bug"), copied=("Water", "Bug")) is None
+
+
+# --- moves that change what ability something has -------------------------
+
+
+def test_worry_seed_overwrites_with_insomnia():
+    assert ability_move_succeeds("worryseed", ours="guts", theirs="furcoat")
+    assert abilities_after("worryseed", ours="guts", theirs="furcoat") == (
+        "guts",
+        "insomnia",
+    )
+
+
+def test_worry_seed_fails_on_an_ability_that_is_really_a_forme_change():
+    """`cantsuppress` in the engine: Stance Change is not an ability you can
+    take off a Pokemon, it is how the Pokemon works."""
+    assert not ability_move_succeeds("worryseed", ours="guts", theirs="stancechange")
+
+
+def test_role_play_copies_theirs_onto_us_and_leaves_them_alone():
+    assert abilities_after("roleplay", ours="guts", theirs="furcoat") == (
+        "furcoat",
+        "furcoat",
+    )
+
+
+def test_entrainment_pushes_ours_onto_them():
+    assert abilities_after("entrainment", ours="guts", theirs="furcoat") == (
+        "guts",
+        "guts",
+    )
+
+
+def test_skill_swap_exchanges_them():
+    assert abilities_after("skillswap", ours="guts", theirs="furcoat") == (
+        "furcoat",
+        "guts",
+    )
+
+
+def test_the_ability_moves_fail_when_both_sides_already_match():
+    """Nothing would change, so the engine refuses -- except the two that
+    overwrite with a fixed ability, which still have something to do."""
+    for move_id in ("roleplay", "entrainment", "skillswap"):
+        assert not ability_move_succeeds(move_id, ours="guts", theirs="guts")
+    assert ability_move_succeeds("worryseed", ours="guts", theirs="guts")
+
+
+def test_skill_swap_checks_our_side_too():
+    """It moves both ways, so an unswappable ability on *either* side stops it."""
+    assert not ability_move_succeeds("skillswap", ours="illusion", theirs="guts")
