@@ -285,6 +285,10 @@ class ResolvedTarget(NamedTuple):
     item: str | None = None
     # Sticky Hold refuses to give the item up, so Knock Off gets no boost.
     ability: str | None = None
+    # False only when we watched an item leave. An opponent we have learnt
+    # nothing about is assumed to be holding something, because they usually
+    # are.
+    may_hold_item: bool = True
     # Where this Pokemon sits in the opponent's revealed list, so two slots
     # aiming at the same one can be recognised as doing so.
     index: int | None = None
@@ -452,16 +456,14 @@ class HeuristicAgent(Agent):
                 attacker_positive_boosts=attacker.boosts.positive_total,
                 attacker_status=attacker.status,
                 defender_status=target.status,
-                # Only what they have shown us. An opponent's item is hidden
-                # until it fires, so an unrevealed one reads as "none" and
-                # Knock Off is priced at its floor rather than its ceiling.
-                # Holding one is not enough either: a Mega Stone cannot be
-                # taken off the species it evolves, and this dex is full of
-                # them.
-                defender_item_removable=is_removable(
-                    self.dex.items.get(target.item or ""),
-                    defender_species,
-                    target.ability,
+                # An opponent's item is hidden until it fires, and "we have
+                # not seen it" is not the same as "there is none" -- almost
+                # every Pokemon here carries one. What we *do* know is when an
+                # item has left, because the engine announces it. Holding one
+                # is still not enough on its own: a Mega Stone cannot be taken
+                # off the species it evolves, and this dex is full of them.
+                defender_item_removable=self._item_can_be_taken(
+                    target, defender_species
                 ),
                 fainted_allies=sum(
                     1 for mon in observation.own_side.team if mon.fainted
@@ -796,6 +798,25 @@ class HeuristicAgent(Agent):
                 action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",)
             )
         return ScoredAction(action, value * move.hit_chance, tuple(reasons))
+
+    def _item_can_be_taken(self, target, species) -> bool:
+        """Whether Knock Off would find something it can actually remove.
+
+        Three states, not two. We watched an item leave: nothing to take. We
+        have seen what they hold: check it properly. We have seen nothing:
+        they almost certainly hold *something* in this format, so assume they
+        do -- unless they are a species with a Mega Stone, in which case the
+        thing they are most likely holding is the one item that cannot be
+        taken off them.
+        """
+        if not target.may_hold_item:
+            return False
+        known = self.dex.items.get(target.item or "")
+        if known is not None:
+            return is_removable(known, species, target.ability)
+        if species is not None and self.dex.mega_stone_for(species) is not None:
+            return False
+        return is_removable(None, species, target.ability, unknown_counts_as_held=True)
 
     def _support_value(self, move, observation, slot, attacker, observed):
         """Gather the state `support.score_support_move` needs, and ask it."""
@@ -1154,6 +1175,7 @@ class HeuristicAgent(Agent):
                 status=ally.status,
                 item=ally.current_item,
                 ability=ally.current_ability,
+                may_hold_item=ally.current_item is not None,
                 attacking_stat=None
                 if attacking_key is None
                 else apply_boost(
@@ -1194,6 +1216,7 @@ class HeuristicAgent(Agent):
                 status=observed.status,
                 item=observed.revealed_item,
                 ability=observed.revealed_ability,
+                may_hold_item=observed.may_hold_item,
                 # Uniform rather than credited: the calibrated attacking
                 # investment is evidence from *using* a move, and a Foul Play
                 # target is not the one using it.

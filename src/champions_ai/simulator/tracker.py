@@ -127,6 +127,14 @@ class _OpponentPokemon:
         self.turns_on_field = 0
         self.revealed_moves: set[str] = set()
         self.revealed_item: str | None = None
+        # `revealed_item is None` meant two different things -- "we have never
+        # seen an item" and "we watched it get used up" -- and the second is
+        # the only one that tells us they are holding nothing. Almost every
+        # Pokemon in this format carries an item, so treating the first as
+        # "empty-handed" priced Knock Off at its floor against most targets.
+        self.item_consumed = False
+        # What went, so Recycle can be priced.
+        self.consumed_item: str | None = None
         self.revealed_ability: str | None = None
 
     def snapshot(self) -> ObservedPokemon:
@@ -143,6 +151,8 @@ class _OpponentPokemon:
             revealed_moves=frozenset(self.revealed_moves),
             revealed_ability=self.revealed_ability,
             revealed_item=self.revealed_item,
+            item_consumed=self.item_consumed,
+            consumed_item=self.consumed_item,
         )
 
 
@@ -572,12 +582,19 @@ class BattleTracker:
         mon = self._opponent_at(args[0])
         if mon:
             mon.revealed_item = to_id(args[1])
+            # Seeing an item means they are holding one now, whatever went
+            # before -- Recycle and Trick both put one back.
+            mon.item_consumed = False
 
     def _on_minor_enditem(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])
         if mon:
-            # Consumed or knocked off: now known to be holding nothing.
+            # Consumed, knocked off or eaten: now *known* to be holding
+            # nothing, which is a stronger statement than never having seen
+            # one. What it was is kept, because Recycle brings it back.
+            mon.consumed_item = to_id(args[1]) if len(args) > 1 else mon.revealed_item
             mon.revealed_item = None
+            mon.item_consumed = True
 
     def _on_minor_ability(self, args: list[str]) -> None:
         mon = self._opponent_at(args[0])

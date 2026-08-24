@@ -438,3 +438,44 @@ def test_our_own_side_conditions_reach_the_observation():
 
     _sideline(tracker, "|-sideend|p1: Player 1|move: Tailwind")
     assert "tailwind" not in tracker.own_side().side_conditions
+
+
+# ------------------------------------------------------------- item knowledge
+
+
+def test_an_item_that_leaves_is_remembered_as_gone():
+    """`revealed_item = None` meant both "never seen one" and "watched it go",
+    and only the second says they are empty-handed."""
+    tracker = _tracker()
+    _sideline(tracker, "|switch|p2a: Incineroar|Incineroar, L50, F|100/100")
+    _sideline(tracker, "|-item|p2a: Incineroar|Sitrus Berry")
+    seen = tracker.opponent_side().revealed[0]
+    assert seen.revealed_item == "sitrusberry"
+    assert seen.may_hold_item
+
+    _sideline(tracker, "|-enditem|p2a: Incineroar|Sitrus Berry")
+    spent = tracker.opponent_side().revealed[0]
+    assert spent.revealed_item is None
+    assert spent.item_consumed
+    assert not spent.may_hold_item
+    assert spent.consumed_item == "sitrusberry", "Recycle needs to know what went"
+
+
+def test_an_opponent_we_know_nothing_about_may_still_hold_something():
+    tracker = _tracker()
+    _sideline(tracker, "|switch|p2a: Incineroar|Incineroar, L50, F|100/100")
+    fresh = tracker.opponent_side().revealed[0]
+    assert fresh.revealed_item is None
+    assert not fresh.item_consumed
+    assert fresh.may_hold_item
+
+
+def test_getting_an_item_back_clears_the_consumed_flag():
+    """Recycle and Trick both put one back."""
+    tracker = _tracker()
+    _sideline(tracker, "|switch|p2a: Incineroar|Incineroar, L50, F|100/100")
+    _sideline(tracker, "|-enditem|p2a: Incineroar|Sitrus Berry")
+    _sideline(tracker, "|-item|p2a: Incineroar|Life Orb")
+    back = tracker.opponent_side().revealed[0]
+    assert back.revealed_item == "lifeorb"
+    assert back.may_hold_item

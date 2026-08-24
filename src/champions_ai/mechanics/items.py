@@ -100,6 +100,8 @@ def is_removable(
     item: ItemInfo | None,
     holder: SpeciesInfo | None = None,
     ability: str | None = None,
+    *,
+    unknown_counts_as_held: bool = False,
 ) -> bool:
     """Whether this item can be taken off its holder.
 
@@ -111,9 +113,16 @@ def is_removable(
     Stone -- which cannot be removed from *the species it evolves*, though it
     can be taken off anyone else. That matters here more than it would in most
     formats, because Champions teams are full of them.
+
+    `unknown_counts_as_held` is for the agent, which cannot see an opponent's
+    item until it fires. Passing None then means "not seen", not "not there",
+    and almost every Pokemon in this format carries something -- so treating
+    an unseen item as absent priced Knock Off at its floor against nearly
+    every target. The differential harness, which knows both sides exactly,
+    leaves this off.
     """
     if item is None:
-        return False
+        return unknown_counts_as_held
     if ability == STICKY_HOLD:
         return False
     if item.mega_stone is None:

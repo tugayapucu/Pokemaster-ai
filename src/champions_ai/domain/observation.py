@@ -31,6 +31,22 @@ class ObservedPokemon(BaseModel, frozen=True):
     revealed_moves: frozenset[str] = frozenset()
     revealed_ability: str | None = None
     revealed_item: str | None = None
+    # We watched an item leave, so they are *known* to be holding nothing.
+    # Distinct from `revealed_item is None`, which usually just means we have
+    # not seen it yet -- and in this format they almost certainly have one.
+    item_consumed: bool = False
+    # What left, because Recycle brings it back.
+    consumed_item: str | None = None
+
+    @property
+    def may_hold_item(self) -> bool:
+        """Whether they could still be holding something.
+
+        True unless we actually watched an item go. Almost every Pokemon in
+        this format carries one, so "we have not seen it" is much closer to
+        "yes" than to "no".
+        """
+        return not self.item_consumed
 
     @classmethod
     def from_battle_pokemon(cls, mon: BattlePokemon) -> "ObservedPokemon":
@@ -47,6 +63,7 @@ class ObservedPokemon(BaseModel, frozen=True):
             revealed_moves=mon.revealed_moves,
             revealed_ability=mon.current_ability if mon.ability_revealed else None,
             revealed_item=mon.current_item if mon.item_revealed else None,
+            item_consumed=mon.item_revealed and mon.current_item is None,
         )
 
 

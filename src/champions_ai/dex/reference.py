@@ -337,6 +337,20 @@ class Dex(BaseModel, frozen=True):
             raise KeyError(f"no species data for {name!r}")
         return found
 
+    def mega_stone_for(self, species: SpeciesInfo) -> ItemInfo | None:
+        """The Mega Stone this species evolves with, if one exists.
+
+        Used when an opponent's item is *unseen*: a Mega-capable species in
+        this format is very likely holding its own stone, and a stone cannot
+        be knocked off the species it evolves. Without this, assuming an
+        unseen item is present handed Knock Off a boost against every
+        un-Mega-Evolved Alakazam and Gardevoir on the field.
+        """
+        for item in self.items.values():
+            if item.mega_stone in (species.name, species.base_species):
+                return item
+        return None
+
     def get_item(self, name: str) -> ItemInfo:
         found = self.items.get(to_id(name))
         if found is None:
