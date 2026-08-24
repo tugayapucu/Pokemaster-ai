@@ -67,28 +67,27 @@ Dragon Darts   is multihit 2 *and* smartTarget, so in doubles it fires one
 
 Now **99.0%**, with neither cause left among the survivors.
 
-### 1. Roost, and the Flying type
+### ~~1. Roost, and the Flying type~~ — done 2026-08-24
 
-**New, found while measuring the knockout claim.** Roost removes the user's
-Flying type for the turn, and nothing models it. One mechanic explained every
-large mismatch in a control run that read 90.0% instead of the usual ~95%:
+Roost strips the user's Flying type for the turn, and it explained the whole
+run-to-run swing in the control differential. **That swing was never noise** —
+it was whether the random team drew a Roost user.
 
 ```
-Earthquake hitting Altaria        Dragon/Flying -> Dragon, so it is grounded
-Head Smash halved into Altaria    Rock vs Flying 2x -> vs Dragon 1x
-Body Press doubled into Corviknight   Fighting vs Flying/Steel 1x -> vs Steel 2x
+before   90.0% ... 95.0%   depending on team composition
+after    96.5%, 97.1%, 98.8% across three runs
 ```
 
-The run-to-run swing in the control differential (90.0% against 94–95%) is
-team composition: a team with Roost users exposes it, one without does not.
+Typing and grounding turned out to be one question, so item 5 is folded in
+here: `is_grounded` exists and knows Levitate, Air Balloon, Iron Ball,
+Gravity, Smack Down and Ingrain. The **terrain rules still have to consult
+it** — see item 4.
 
-The tracker already records `|-singleturn|...move: Roost` for Protect's sake,
-so the signal is likely there already.
+The same silent bug shape appeared for the third time: `-singleturn` was
+recorded for the opponent and never for us, so our own Roost was invisible.
+Boosts, side conditions, and now single-turn effects.
 
-**Done when** a Roosting Pokémon is typed without Flying for that turn, and the
-control differential stops swinging on whether the team drew one.
-
-### 2. Ability tracking
+### 1. Ability tracking
 
 Five support moves need it — Skill Swap, Role Play, Entrainment, Worry Seed,
 Simple Beam — and `revealed_ability` is already tracked, so this is the same
@@ -97,7 +96,7 @@ shape of job as item tracking was.
 Expected to be agreement-neutral, like item tracking. It is on the list for
 the same reason: the model should describe the game, not the sample.
 
-### 3. The rest of the unpriced support moves
+### 2. The rest of the unpriced support moves
 
 23 remain of the original 54. They cluster, so each cluster is one job:
 
@@ -111,7 +110,22 @@ one-offs               Baton Pass, Transform, Lock-On, Perish Song,
                        Guard Split, Power Split, Magnetic Flux, Swallow, Teatime
 ```
 
-### 4. Speed Boost and the weather Speed abilities
+### 4. Make the terrain rules consult `is_grounded`
+
+`is_grounded` exists now but nothing calls it. Five rules still apply to
+Flying types and Levitate users that should be exempt:
+
+```
+Terrain Pulse       only changes type for a grounded user
+Rising Voltage      only doubles against a grounded target
+Expanding Force     only boosted for a grounded user
+Misty Explosion     same
+the terrain damage bonuses (Electric, Grassy, Psychic)   same
+```
+
+Cheap, and it is the last of the terrain work.
+
+### 3. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -119,36 +133,6 @@ Speed Boost needs a per-turn counter.
 
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
-
-### 5. Grounding
-
-**New, found while wiring `modifies_type`.** Several rules turn on whether a
-Pokémon is *grounded*, and nothing models it — a Flying type or a Levitate
-user is not:
-
-```
-Terrain Pulse       only changes type for a grounded user
-Rising Voltage      only doubles against a grounded target
-Expanding Force     only boosted for a grounded user
-Misty Explosion     same
-the terrain damage bonuses   same
-```
-
-Each of these currently applies to everyone, so a Flying-type gets terrain
-effects it should not. Small individually, and one concept fixes all of them.
-
-**Done when** a `is_grounded` helper exists and every terrain rule consults it.
-
-Related to item 1: Roost makes a Flying type grounded for a turn, so the two
-share a notion of "what types does this Pokémon have *right now*" and are
-probably one job rather than two.
-
-### ~~7. Critical hits~~ — done 2026-08-24
-
-Folded into expected damage as part of item 1. Deliberately *not* folded into
-the range: a crit is a different calculation, not a lucky end of the ordinary
-roll. They remain excluded from the differential calibration for the same
-reason.
 
 ---
 
