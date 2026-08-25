@@ -10,6 +10,8 @@ each one made our damage model look wrong when it was not:
 - the spread reduction only applies when a move reaches more than one target.
 """
 
+import pytest
+
 from champions_ai.domain import BattlePokemon, PokemonSet, Side
 from champions_ai.evaluation.differential import (
     DamageCollector,
@@ -453,3 +455,64 @@ def test_an_empty_slot_falls_back_to_the_species_scan():
     found = lookup("p1b: Kangaskhan")
     assert found is not None
     assert found.pokemon_set.species == "Kangaskhan"
+
+
+# ------------------------------------------- when the spread reduction applies
+
+
+def _spread_dex():
+    from champions_ai.dex import BaseStats, Dex, MoveInfo, SpeciesInfo, TypeChart
+
+    quake = MoveInfo(
+        move_id="earthquake", name="Earthquake", type="Ground",
+        category="Physical", base_power=100, accuracy=100, priority=0,
+        target="allAdjacent",
+    )
+    types = ("Ground", "Normal")
+    mon = SpeciesInfo(
+        species_id="garchomp", name="Garchomp", types=("Normal",),
+        base_stats=BaseStats(hp=108, attack=130, defense=95,
+                             special_attack=80, special_defense=85, speed=102),
+    )
+    return Dex(
+        species={mon.species_id: mon}, moves={quake.move_id: quake},
+        types=types,
+        type_chart=TypeChart(multipliers={a: dict.fromkeys(types, 1.0) for a in types}),
+    )
+
+
+def _spread_sample(spread: bool, named: int):
+    from champions_ai.evaluation.differential import DamageSample
+
+    return DamageSample(
+        attacker=_mon("Garchomp"), defender=_mon("Garchomp"),
+        move_id="earthquake", actual=50, defender_hp_before=200,
+        weather=None, critical=False, spread=spread,
+        spread_targets=named, targets_reached=named,
+    )
+
+
+def test_the_spread_reduction_follows_the_tag_not_the_names_in_it():
+    """The engine sets `spreadHit` from how many targets the move *selects*
+    (`targets.length > 1`) and emits `[spread]` exactly when that flag is set.
+    The names listed are the survivors, after immunity, Protect and faints
+    removed the rest.
+
+    So a Blizzard that selected two and landed on one still takes the 0.75.
+    Counting the names instead measured 1.8% inside the range on 57 such hits,
+    median 0.743 -- which is 0.75 wearing a false moustache.
+    """
+    dex = _spread_dex()
+    one = _spread_sample(spread=True, named=1).predict(dex, level=50, doubles=True)
+    two = _spread_sample(spread=True, named=2).predict(dex, level=50, doubles=True)
+    assert one == two
+
+
+def test_a_move_with_no_spread_tag_is_not_reduced():
+    """A Heat Wave thrown at a single remaining opponent does full damage --
+    because the engine never sets `spreadHit`, so no tag is emitted at all."""
+    dex = _spread_dex()
+    tagged = _spread_sample(spread=True, named=1).predict(dex, level=50, doubles=True)
+    untagged = _spread_sample(spread=False, named=1).predict(dex, level=50, doubles=True)
+    assert tagged[1] < untagged[1]
+    assert tagged[1] / untagged[1] == pytest.approx(0.75, abs=0.02)

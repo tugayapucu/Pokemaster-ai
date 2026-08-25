@@ -62,9 +62,14 @@ class DamageSample:
     # Veil halve damage and we do not model them, so these are excluded rather
     # than scored as arithmetic errors.
     behind_screen: bool = False
-    # How many targets the move actually reached. The engine only applies the
-    # spread reduction when a move hits more than one, so a Heat Wave into a
-    # single remaining opponent does full damage.
+    # How many targets the `[spread]` tag named. **Not** what decides the
+    # spread reduction -- `spread` itself is, because the engine emits the tag
+    # exactly when it applied the reduction. Kept because it says how many
+    # survived to be hit, which is a different and still useful fact.
+    #
+    # A Heat Wave thrown at a single remaining opponent does full damage, but
+    # that is because the engine never sets `spreadHit` in the first place and
+    # so never emits the tag -- not because the tag names one Pokemon.
     spread_targets: int = 1
     # How many Pokemon this move landed on, counted rather than inferred. Not
     # the same as `spread_targets`: Dragon Darts is a *single-target* move that
@@ -114,7 +119,14 @@ class DamageSample:
             # The spread reduction only applies when a move reaches more than
             # one target, so tell the estimator this is a singles-shaped hit
             # when the engine says it only hit one.
-            doubles=doubles and self.spread_targets > 1,
+            # The engine sets `spreadHit` from how many targets the move
+            # *selects* -- `targets.length > 1` -- and emits `[spread]` if and
+            # only if that flag is set. The names it lists are the survivors,
+            # after immunity, Protect and faints have removed the rest, so
+            # counting them is the wrong test: a Blizzard that selected two and
+            # landed on one still takes the reduction. Measured at 1.8% inside
+            # the range on 57 such hits, median 0.743 -- which is 0.75.
+            doubles=doubles and self.spread,
             attacker_burned=self.attacker.status == "brn",
             weather=self.weather,
             attacker_item=self.attacker.current_item,

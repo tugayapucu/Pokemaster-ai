@@ -33,25 +33,7 @@ than disappearing.
 
 ## Now
 
-### 1. Spread moves are eight points worse, in both arms
-
-A new finding, and independent of Mega — the gap is the same size with Mega off:
-
-```
-              never Mega        always Mega
-ordinary       92.5%             85.7%
-spread         84.9%  (-7.6)     77.4%  (-8.3)
-```
-
-n≈1,700 spread hits. Not the cause of the Mega gap (which hits both classes
-about equally) but a real, general, well-sampled defect that predates it.
-
-The obvious cause is already handled — `DamageSample.predict` passes
-`doubles=False` when a spread move reached only one target, so the 0.75
-reduction is correctly skipped there. So it is something else, and worth its
-own pass.
-
-### 2. Make the terrain rules consult `is_grounded`
+### 1. Make the terrain rules consult `is_grounded`
 
 `is_grounded` exists now but nothing calls it. Five rules still apply to
 Flying types and Levitate users that should be exempt:
@@ -66,7 +48,7 @@ the terrain damage bonuses (Electric, Grassy, Psychic)   same
 
 Cheap, and it is the last of the terrain work.
 
-### 3. Speed Boost and the weather Speed abilities
+### 2. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -75,7 +57,7 @@ Speed Boost needs a per-turn counter.
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
 
-### 4. Mega Sol and Contrary — genuinely unmodelled, well sampled
+### 3. Mega Sol and Contrary — genuinely unmodelled, well sampled
 
 ```
 Mega Sol   n=215   55.3% accuracy   acts as sun for damage (Meganium-Mega)
@@ -88,14 +70,14 @@ merits. Contrary is the more interesting of the two: it inverts every stat
 change, so a Close Combat *raises* the user's defences, and nothing in the
 model expects that.
 
-### 5. Whether the agent should Mega at all
+### 4. Whether the agent should Mega at all
 
 Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
 non-Mega of the same move score identically and the choice falls to
 enumeration order. Deliberately last — building the judgement before the model
 can price a Mega correctly is the mistake 0013 already paid for.
 
-### 6. The support moves that are still unpriced, and why
+### 5. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -125,6 +107,38 @@ ability moves above.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~Spread moves are eight points worse~~ — done 2026-08-25
+
+We were counting the wrong thing. The engine sets `spreadHit` from how many
+targets the move **selects**:
+
+```js
+if (targets.length > 1 && !move.smartTarget) move.spreadHit = true;   // 551
+...
+if (move.spreadHit) this.battle.attrLastMove('[spread] ' + hitSlot.join(','));   // 618
+```
+
+and emits `[spread]` if and only if that flag is set. The names it lists are
+the *survivors*, after immunity, Protect and faints have removed the rest — so
+**the tag's presence is the condition, and the count of names in it is
+irrelevant.** `predict` was testing `spread_targets > 1`.
+
+A Blizzard that selected two targets and landed on one still takes the 0.75,
+and we were giving it full damage:
+
+```
+                        before            after
+1 named, 1 hit      1.8%  (median 0.743)  91.2%  (median 1.000)
+all spread hits    85.1%                  89.2%
+```
+
+n=57 in that bucket, and a median of 0.743 is 0.75 wearing a false moustache.
+The spread-vs-ordinary gap narrows from ~7.6 points to ~3.3.
+
+Two remain, both with the conditional-effect signature (good bias, poor
+accuracy) and neither large: **Hyper Voice** 77.5% (n=40, median 0.949) and
+**Blizzard** 80.9% (n=141, median 0.991).
 
 ### ~~The `-ate` cluster~~ — done 2026-08-25, and it was dead code
 
