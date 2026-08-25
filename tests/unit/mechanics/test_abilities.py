@@ -319,3 +319,51 @@ def test_skill_link_narrows_the_predicted_range_not_just_its_centre():
     # ...and it sits at the top, because five hits is the most it could roll.
     assert linked.maximum == rolled.maximum
     assert linked.minimum > rolled.minimum
+
+
+def test_an_ate_ability_actually_raises_the_damage():
+    """The bonus was dead code for its entire life and the suite was content.
+
+    `power = modify(power, ATE_MULTIPLIER)` sat twenty-six lines *below* the
+    line that computes `base` from `power`, so it modified a variable nothing
+    read again. Every test passed because every test checked the pieces --
+    `rewritten_type` returned "Ice", `stab_multiplier` returned 1.5 -- and none
+    checked that the assembled number moved.
+
+    Measured cost: Glalie-Mega and Altaria-Mega at 50.7% and 51.9% accuracy,
+    the two worst readings in the whole Mega measurement.
+    """
+    from champions_ai.dex import BaseStats, Dex, SpeciesInfo, TypeChart
+    from champions_ai.mechanics.damage import estimate_damage
+
+    body_slam = MoveInfo(
+        move_id="bodyslam", name="Body Slam", type="Normal",
+        category="Physical", base_power=85, accuracy=100, priority=0,
+        target="normal",
+    )
+    types = ("Normal", "Ice", "Water")
+    # Neutral both ways, so only the base-power bonus can move the number.
+    glalie = SpeciesInfo(
+        species_id="glalie", name="Glalie", types=("Water",),
+        base_stats=BaseStats(hp=80, attack=80, defense=80,
+                             special_attack=80, special_defense=80, speed=80),
+    )
+    dex = Dex(
+        species={glalie.species_id: glalie},
+        moves={body_slam.move_id: body_slam},
+        types=types,
+        type_chart=TypeChart(multipliers={a: dict.fromkeys(types, 1.0) for a in types}),
+    )
+
+    def estimate(ability):
+        return estimate_damage(
+            dex, body_slam, attacker=glalie, attack_stat=150,
+            defender=glalie, defense_stat=100, defender_hp=400,
+            doubles=False, attacker_ability=ability,
+        )
+
+    plain = estimate(None)
+    refrigerated = estimate("refrigerate")
+    assert refrigerated.maximum > plain.maximum
+    # 1.2x on base power, and neither STAB nor effectiveness moves here.
+    assert refrigerated.maximum / plain.maximum == pytest.approx(1.2, abs=0.03)

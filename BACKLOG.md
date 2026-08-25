@@ -33,39 +33,38 @@ than disappearing.
 
 ## Now
 
-### 1. The `-ate` cluster — a bug in code we already have
+### ~~The `-ate` cluster~~ — done 2026-08-25, and it was dead code
 
-The worst thing in the whole Mega measurement, and unlike everything else on
-this list it is not a missing feature:
+`ATE_MULTIPLIER` was applied to `power` **twenty-six lines after** `base` had
+already consumed it:
 
-```
-ATK Glalie-Mega    n=136   accuracy 50.7%   Refrigerate  (Normal -> Ice)
-ATK Altaria-Mega   n= 52   accuracy 51.9%   Pixilate     (Normal -> Fairy)
-ATK Feraligatr-Mega n= 82  accuracy 72.0%   Dragonize    (Normal -> Dragon)
-```
-
-**All three are already in `ATE_ABILITIES`.** Coin-flip accuracy on an ability
-we model means the implementation is wrong, not absent — and the engine's rule
-is short enough to check line by line:
-
-```js
-if (move.type === 'Normal' && !noModifyType.includes(move.id) && ...) {
-    move.type = 'Ice';
-    move.typeChangerBoosted = this.effect;
-}
-onBasePower(...) {
-    if (move.typeChangerBoosted === this.effect) return this.chainModify([4915, 4096]);
-}
+```python
+base = (2 * level // 5 + 2) * power * attack_stat // ...   # line 449
+...
+if rewritten is not None:
+    power = modify(power, ATE_MULTIPLIER)                   # line 475
 ```
 
-Note the ordering: the type changes *first*, then the 1.2x applies only if
-this ability was the thing that changed it. Both the STAB and the
-effectiveness follow from the new type.
+So the bonus modified a variable nothing read again. **Refrigerate, Pixilate
+and Dragonize have never once paid it** — a flat 20% under-prediction on every
+Normal move an -ate user throws, well outside a 17.5%-wide interval, and
+diluted in the median because their other moves are unaffected. That is
+exactly the perfect-median/poor-accuracy signature that led here.
 
-Highest expected value on the list: a known-broken piece of existing code with
-a large measured effect beats another exploratory hunt.
+```
+ATK Glalie-Mega    50.7% -> 87.5%   (+36.8, identical 136 hits)
+Altaria-Mega and Feraligatr-Mega both leave the worst-26 list entirely
+overall, on this Mega-dense population   79.0% -> 79.5%
+```
 
-### 2. Spread moves are eight points worse, in both arms
+**All 1092 tests passed with the bug in place.** The suite tested every piece
+-- `rewritten_type` returned "Ice", `stab_multiplier` returned 1.5 -- and
+never checked that the assembled number moved. Unit tests on components cannot
+see a wiring error between them. The regression test added here asserts the
+damage actually changes, and was verified by reverting only `damage.py` and
+watching it fail.
+
+### 1. Spread moves are eight points worse, in both arms
 
 A new finding, and independent of Mega — the gap is the same size with Mega off:
 
@@ -83,7 +82,7 @@ The obvious cause is already handled — `DamageSample.predict` passes
 reduction is correctly skipped there. So it is something else, and worth its
 own pass.
 
-### 3. Make the terrain rules consult `is_grounded`
+### 2. Make the terrain rules consult `is_grounded`
 
 `is_grounded` exists now but nothing calls it. Five rules still apply to
 Flying types and Levitate users that should be exempt:
@@ -98,7 +97,7 @@ the terrain damage bonuses (Electric, Grassy, Psychic)   same
 
 Cheap, and it is the last of the terrain work.
 
-### 4. Speed Boost and the weather Speed abilities
+### 3. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -107,7 +106,7 @@ Speed Boost needs a per-turn counter.
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
 
-### 5. Mega Sol and Contrary — genuinely unmodelled, well sampled
+### 4. Mega Sol and Contrary — genuinely unmodelled, well sampled
 
 ```
 Mega Sol   n=215   55.3% accuracy   acts as sun for damage (Meganium-Mega)
@@ -120,14 +119,14 @@ merits. Contrary is the more interesting of the two: it inverts every stat
 change, so a Close Combat *raises* the user's defences, and nothing in the
 model expects that.
 
-### 6. Whether the agent should Mega at all
+### 5. Whether the agent should Mega at all
 
 Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
 non-Mega of the same move score identically and the choice falls to
 enumeration order. Deliberately last — building the judgement before the model
 can price a Mega correctly is the mistake 0013 already paid for.
 
-### 7. The support moves that are still unpriced, and why
+### 6. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -149,8 +148,6 @@ should be revisited, not a permanent verdict.
 Three more — **Trick, Switcheroo, Fling** — are priced already, but only once
 the opponent's item has shown itself, which is the same shape as the five
 ability moves above.
-
----
 
 ---
 
@@ -518,6 +515,10 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **Test the assembled number, not only the pieces.** The -ate bonus was dead
+  code for its whole life and 1092 tests were content, because each piece
+  behaved and nothing checked that the damage moved. A component suite cannot
+  see a wiring error between components.
 - **Where a miss lands tells you which bug it is.** Misses clustered just
   outside the interval mean it is too narrow; misses one to two widths out
   mean specific hits carry a multiplier you do not model. Measuring *how far*

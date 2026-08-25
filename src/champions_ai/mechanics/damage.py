@@ -438,6 +438,11 @@ def estimate_damage(
     power = modify(power, ability_rules.base_power_multiplier(
         attacker_ability, move, base_power=power, weather=weather
     ))
+    if rewritten is not None:
+        # The -ate abilities pay a small bonus for the rewrite itself, and the
+        # engine pays it through `onBasePower` -- so it has to land here, while
+        # `power` still feeds the base term below.
+        power = modify(power, ATE_MULTIPLIER)
     attack_stat = modify(attack_stat, attack_multiplier(attacker_item, attacker))
     attack_stat = modify(attack_stat, ability_rules.attack_multiplier(
         attacker_ability, move, hp_fraction=attacker_hp_fraction,
@@ -470,9 +475,6 @@ def estimate_damage(
     # with: a Morpeko-Hangry gets it on a Dark Aura Wheel.
     has_stab = actual_type in attacker_types
     stab_bonus = ability_rules.stab_multiplier(attacker_ability, has_stab=has_stab)
-    if rewritten is not None:
-        # The -ate abilities pay a small bonus for the rewrite itself.
-        power = modify(power, ATE_MULTIPLIER)
     burned = attacker_burned and move.category == "Physical"
     final = damage_multiplier(attacker_item, effectiveness=effectiveness)
     final *= defender_multiplier(defender_item, move, effectiveness=effectiveness)
