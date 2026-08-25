@@ -33,37 +33,14 @@ than disappearing.
 
 ## Now
 
-### 1. The harness cannot see a stat change made earlier in the same turn
-
-`DamageCollector` reads both sides from a snapshot taken *before* the turn
-resolves. Across turns that is right; within one it lags, so a hit that lands
-after a Swords Dance, an Intimidate or a Close Combat is scored against stale
-stages. Measured:
-
-```
-a stage changed earlier in the same turn   n=1167   inside 82.5%
-no stage change that turn                  n=3804   inside 88.9%
-```
-
-**A 6.4-point gap on 23% of all sampled hits**, which makes it the largest
-single measured defect left and the best explanation on offer for
-Staraptor-Mega: Contrary turns a Close Combat's −1/−1 into +1/+1, so the miss
-is two stages wide rather than one.
-
-It is an *instrument* problem, not a model one -- the same class as
-`active_by_ident` dropping Mega'd Pokemon and the turn-order harness never
-looking at the weather. Both of those made a real effect unmeasurable until
-fixed. The job: track `-boost`/`-unboost` within the chunk and apply them to
-the snapshot before predicting.
-
-### 2. Whether the agent should Mega at all
+### 1. Whether the agent should Mega at all
 
 Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
 non-Mega of the same move score identically and the choice falls to
 enumeration order. Deliberately last — building the judgement before the model
 can price a Mega correctly is the mistake 0013 already paid for.
 
-### 3. The support moves that are still unpriced, and why
+### 2. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -93,6 +70,38 @@ ability moves above.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~The harness cannot see a stat change made earlier in the same turn~~ — done 2026-08-25
+
+`DamageCollector` read both sides from a snapshot taken *before* the turn
+resolved. Across turns that is right; within one it lagged, so a hit landing
+after a Swords Dance, an Intimidate or a Close Combat was scored against stale
+stages. It now tracks `-boost`/`-unboost` through the chunk.
+
+**The timing is the whole trick.** Stages are frozen at the `|move|` line
+rather than read at flush time, because a self-lowering move must not weaken
+its own hit — Close Combat drops the user's defences *after* it lands. Reading
+them a moment later would apply the drop to the hit that caused it.
+
+The deltas reset each chunk, because the next snapshot already includes them
+and counting twice would double them. Both edges have tests.
+
+```
+                                         before    after
+a stage changed earlier in the turn       82.5%  →  87.3%   (n=1167)
+no stage change that turn                 88.9%  →  89.3%   (n=3804)
+```
+
+The gap closes from 6.4 points to 2.0, and because 23% of hits were affected it
+is the largest global gain of the day:
+
+```
+never Mega    92.1%  →  93.9%
+always Mega   85.2%  →  86.9%
+```
+
+**Every damage figure measured before this was slightly pessimistic**, this
+session's included. The instrument was wrong, not only the model.
 
 ### ~~Mega Sol and Contrary~~ — done 2026-08-25, and only one needed code
 

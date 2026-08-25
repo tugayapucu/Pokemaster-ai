@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 
 from champions_ai.dex import Dex
 from champions_ai.domain import BattlePokemon, Side
+from champions_ai.domain.boosts import BOOST_FIELDS
 from champions_ai.mechanics import (
     apply_boost,
     attacking_side,
@@ -279,6 +280,30 @@ class DamageCollector:
         # scored on a third of its damage, and the second target of every
         # spread move was never sampled at all.
         landed: dict[str, tuple[int, int]] = {}
+        # Stat stages this chunk has changed, per ident. The snapshot the
+        # caller hands us is state from *before* the turn resolved, so across
+        # turns it is right and within one it lags: a hit landing after a
+        # Swords Dance, an Intimidate or a Close Combat was scored against
+        # stale stages. Measured at 82.5% inside the range against 88.9% for
+        # hits in turns where nothing moved -- on 23% of all sampled hits.
+        stage_delta: dict[str, dict[str, int]] = {}
+        # ...and the stages **as of the moment this move started**, which is
+        # what its own damage is computed from. Captured at the `|move|` line
+        # rather than read at flush time, because a self-lowering move like
+        # Close Combat must not weaken its own hit.
+        stages_at_move: dict[str, dict[str, int]] = {}
+
+        def with_stages(mon, ident):
+            """`mon` with this chunk's stage changes applied."""
+            delta = stages_at_move.get(ident)
+            if not delta:
+                return mon
+            boosts = mon.boosts
+            for stat, amount in delta.items():
+                field = BOOST_FIELDS.get(stat)
+                if field:
+                    boosts = boosts.clamped_add(field, amount)
+            return mon.model_copy(update={"boosts": boosts})
 
         def flush() -> None:
             if pending is None:
@@ -291,6 +316,8 @@ class DamageCollector:
                 defender = active_lookup(target)
                 if attacker is None or defender is None:
                     continue
+                attacker = with_stages(attacker, attacker_ident)
+                defender = with_stages(defender, target)
                 samples.append(
                     DamageSample(
                         attacker=attacker,
@@ -340,6 +367,18 @@ class DamageCollector:
                         self._screens[side].add(condition)
                     else:
                         self._screens[side].discard(condition)
+            elif tag in ("-boost", "-unboost") and len(args) > 2:
+                # Kept as a running total rather than applied immediately: the
+                # move already in flight was ordered before this happened.
+                try:
+                    amount = int(args[2])
+                except ValueError:
+                    continue
+                per_mon = stage_delta.setdefault(args[0], {})
+                stat = args[1]
+                per_mon[stat] = per_mon.get(stat, 0) + (
+                    amount if tag == "-boost" else -amount
+                )
             elif tag == "-weather":
                 self.weather = None if args[0] == "none" else to_id(args[0])
             elif tag == "-fieldstart":
@@ -363,6 +402,9 @@ class DamageCollector:
                     pending = None
                     continue
                 pending = (args[0], to_id(args[1]))
+                # Freeze the stages every side carries right now: that is what
+                # the engine computes this move's damage from.
+                stages_at_move = {k: dict(v) for k, v in stage_delta.items()}
                 critical = False
                 spread_note = next((p for p in args if p.startswith("[spread]")), None)
                 spread = spread_note is not None

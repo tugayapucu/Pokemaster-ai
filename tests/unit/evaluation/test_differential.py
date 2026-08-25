@@ -516,3 +516,101 @@ def test_a_move_with_no_spread_tag_is_not_reduced():
     untagged = _spread_sample(spread=False, named=1).predict(dex, level=50, doubles=True)
     assert tagged[1] < untagged[1]
     assert tagged[1] / untagged[1] == pytest.approx(0.75, abs=0.02)
+
+
+# ------------------------------------ stat changes made earlier in the turn
+
+# The collector measures damage from the HP it has on record, so the target
+# has to arrive before it can be hit.
+SWITCH_IN = "|switch|p2a: Garchomp|Garchomp, L50, F|194/194"
+
+
+def test_a_boost_earlier_in_the_turn_reaches_the_next_hit():
+    """The snapshot the caller hands us is state from *before* the turn
+    resolved, so across turns it is right and within one it lags. A hit landing
+    after a Swords Dance was scored against stale stages.
+
+    Measured at 82.5% inside the range against 88.9% for hits in turns where
+    nothing moved -- on 23% of all sampled hits.
+    """
+    samples = collect_samples(
+        _log(
+            SWITCH_IN,
+            "|move|p1a: Charizard|Swords Dance|p1a: Charizard",
+            "|-boost|p1a: Charizard|atk|2",
+            "|move|p1a: Charizard|Tackle|p2a: Garchomp",
+            "|-damage|p2a: Garchomp|150/194",
+        ),
+        LOOKUP,
+    )
+    assert len(samples) == 1
+    assert samples[0].attacker.boosts.attack == 2
+
+
+def test_a_self_lowering_move_does_not_weaken_its_own_hit():
+    """Close Combat drops the user's defences *after* it lands. Reading the
+    stages at flush time instead of at the `|move|` line would apply the drop
+    to the hit that caused it."""
+    samples = collect_samples(
+        _log(
+            SWITCH_IN,
+            "|move|p1a: Charizard|Close Combat|p2a: Garchomp",
+            "|-damage|p2a: Garchomp|150/194",
+            "|-unboost|p1a: Charizard|def|1",
+        ),
+        LOOKUP,
+    )
+    assert len(samples) == 1
+    assert samples[0].attacker.boosts.defense == 0
+
+
+def test_an_intimidate_on_the_way_in_reaches_the_hit_after_it():
+    samples = collect_samples(
+        _log(
+            SWITCH_IN,
+            "|-unboost|p1a: Charizard|atk|1",
+            "|move|p1a: Charizard|Tackle|p2a: Garchomp",
+            "|-damage|p2a: Garchomp|150/194",
+        ),
+        LOOKUP,
+    )
+    assert len(samples) == 1
+    assert samples[0].attacker.boosts.attack == -1
+
+
+def test_the_defenders_stages_move_too():
+    samples = collect_samples(
+        _log(
+            SWITCH_IN,
+            "|-boost|p2a: Garchomp|def|2",
+            "|move|p1a: Charizard|Tackle|p2a: Garchomp",
+            "|-damage|p2a: Garchomp|150/194",
+        ),
+        LOOKUP,
+    )
+    assert len(samples) == 1
+    assert samples[0].defender.boosts.defense == 2
+
+
+def test_stages_do_not_carry_across_chunks():
+    """The next chunk's snapshot already includes them, so counting them again
+    would double them."""
+    collector = DamageCollector()
+    collector.feed(
+        _log(
+            SWITCH_IN,
+            "|move|p1a: Charizard|Swords Dance|p1a: Charizard",
+            "|-boost|p1a: Charizard|atk|2",
+        ),
+        LOOKUP,
+    )
+    samples = collector.feed(
+        _log(
+            SWITCH_IN,
+            "|move|p1a: Charizard|Tackle|p2a: Garchomp",
+            "|-damage|p2a: Garchomp|150/194",
+        ),
+        LOOKUP,
+    )
+    assert len(samples) == 1
+    assert samples[0].attacker.boosts.attack == 0
