@@ -47,6 +47,46 @@ PARALYSIS_MULTIPLIER = 0.5
 PARALYSIS = "par"
 
 
+# Abilities that double Speed under their own weather. The engine reads
+# `effectiveWeather()`, so each names every weather that counts as its own --
+# the primal pair included, which are not in Reg M-B but cost nothing to list
+# and would be wrong by omission if they ever arrive.
+SPEED_DOUBLING_WEATHER: dict[str, frozenset[str]] = {
+    "chlorophyll": frozenset({"sunnyday", "desolateland"}),
+    "swiftswim": frozenset({"raindance", "primordialsea"}),
+    "sandrush": frozenset({"sandstorm"}),
+    "slushrush": frozenset({"hail", "snowscape"}),
+}
+SPEED_DOUBLED = 2
+
+# Unburden doubles Speed once its holder's item is gone, and stays on until the
+# Pokemon leaves the field. The engine hangs it off a volatile added when the
+# item goes, then checks `!pokemon.item` -- so having *had* an item is not
+# enough, it has to be gone now.
+UNBURDEN = "unburden"
+
+# **Speed Boost is deliberately absent.** It raises the stat with
+# `this.boost({spe: 1})`, which announces itself as an ordinary `|-boost|`
+# line, and boosts are already tracked on both sides. It needs no per-turn
+# counter here; one would double-count it.
+
+
+def speed_ability_multiplier(
+    ability: str | None,
+    *,
+    weather: str | None = None,
+    holds_item: bool = True,
+) -> int:
+    """What the holder's ability does to its Speed."""
+    if not ability:
+        return 1
+    if weather and weather in SPEED_DOUBLING_WEATHER.get(ability, frozenset()):
+        return SPEED_DOUBLED
+    if ability == UNBURDEN and not holds_item:
+        return SPEED_DOUBLED
+    return 1
+
+
 def effective_speed(
     speed: int,
     *,
@@ -54,6 +94,9 @@ def effective_speed(
     tailwind: bool = False,
     paralysed: bool = False,
     item: str | None = None,
+    ability: str | None = None,
+    weather: str | None = None,
+    holds_item: bool = True,
 ) -> int:
     """Speed as the engine actually orders on it.
 
@@ -67,9 +110,17 @@ def effective_speed(
     `item` is a Showdown id: Choice Scarf multiplies by 1.5 and Iron Ball by
     0.5. Scarf was the largest single term in the turn-order residual on
     item-holding teams.
+
+    `ability` and `weather` together cover the four that double Speed under
+    their own weather, and `holds_item` covers Unburden. All of them are
+    `onModifySpe` handlers like Tailwind and the items, so they multiply in
+    alongside rather than before or after.
     """
     value = apply_boost(speed, boost_stage)
     value = int(value * speed_multiplier(item))
+    value *= speed_ability_multiplier(
+        ability, weather=weather, holds_item=holds_item
+    )
     if tailwind:
         value *= TAILWIND_MULTIPLIER
     if paralysed:

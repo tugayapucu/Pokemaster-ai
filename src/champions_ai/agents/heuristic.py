@@ -772,6 +772,9 @@ class HeuristicAgent(Agent):
             tailwind=TAILWIND in observation.own_side.side_conditions,
             paralysed=attacker.status == PARALYSIS,
             item=attacker.current_item,
+            ability=attacker.current_ability,
+            weather=observation.weather,
+            holds_item=attacker.current_item is not None,
         )
         their_tailwind = TAILWIND in observation.opponent_side.side_conditions
 
@@ -793,6 +796,11 @@ class HeuristicAgent(Agent):
                 tailwind=their_tailwind,
                 paralysed=observed.status == PARALYSIS,
                 item=observed.revealed_item,
+                # A Mega forme has one possible ability, so this is often
+                # known without ever having watched it fire.
+                ability=self._known_ability(observed),
+                weather=observation.weather,
+                holds_item=observed.may_hold_item,
             )
             chance = min(
                 chance,
@@ -1589,6 +1597,9 @@ class HeuristicAgent(Agent):
                 tailwind=tailwind,
                 paralysed=mon.status == PARALYSIS,
                 item=mon.current_item,
+                ability=mon.current_ability,
+                weather=observation.weather,
+                holds_item=mon.current_item is not None,
             )
 
         if TRICK_ROOM in observation.field_conditions:

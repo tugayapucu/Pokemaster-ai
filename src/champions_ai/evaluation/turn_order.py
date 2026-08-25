@@ -51,6 +51,10 @@ class OrderSample:
     # Tailwind is per side, so each Pokemon carries its own.
     first_tailwind: bool = False
     second_tailwind: bool = False
+    # Four abilities double Speed under their own weather, so the harness has
+    # to know what is overhead -- it did not, which is why they could not be
+    # measured before they were modelled.
+    weather: str | None = None
 
     def predict(self, dex: Dex) -> float:
         """Our probability that the one who actually went first would.
@@ -71,6 +75,9 @@ class OrderSample:
                 tailwind=self.first_tailwind,
                 paralysed=self.first.status == PARALYSIS,
                 item=self.first.current_item,
+                ability=self.first.current_ability,
+                weather=self.weather,
+                holds_item=self.first.current_item is not None,
             ),
             move_priority(
                 dex.get_move(self.second_move),
@@ -83,6 +90,9 @@ class OrderSample:
                 tailwind=self.second_tailwind,
                 paralysed=self.second.status == PARALYSIS,
                 item=self.second.current_item,
+                ability=self.second.current_ability,
+                weather=self.weather,
+                holds_item=self.second.current_item is not None,
             ),
             trick_room=self.trick_room,
         )
@@ -123,6 +133,7 @@ class OrderCollector:
     def __init__(self) -> None:
         self.trick_room = False
         self.tailwind: dict[str, bool] = {"p1": False, "p2": False}
+        self.weather: str | None = None
 
     def feed(
         self,
@@ -152,6 +163,8 @@ class OrderCollector:
                 self.trick_room = True
             elif tag == "-fieldend" and to_id(args[0].split(":")[-1]) == "trickroom":
                 self.trick_room = False
+            elif tag == "-weather":
+                self.weather = None if args[0] == "none" else to_id(args[0])
             elif tag in ("-sidestart", "-sideend"):
                 side = args[0].split(":")[0]
                 if to_id(args[1].split(": ")[-1]) == TAILWIND and side in self.tailwind:
@@ -164,8 +177,8 @@ class OrderCollector:
         samples.extend(self._pairs(acted, active_lookup, at_turn_start))
         return samples
 
-    def _field_state(self) -> tuple[bool, dict[str, bool]]:
-        return self.trick_room, dict(self.tailwind)
+    def _field_state(self) -> tuple[bool, dict[str, bool], str | None]:
+        return self.trick_room, dict(self.tailwind), self.weather
 
     def _pairs(self, acted, active_lookup, field_state) -> list[OrderSample]:
         """Every ordered pair from one turn's actions.
@@ -174,7 +187,7 @@ class OrderCollector:
         before its turn came never appears -- so the list is the actions that
         happened, not the actions that were chosen.
         """
-        trick_room, tailwind = field_state
+        trick_room, tailwind, weather = field_state
         samples = []
         for position, (ident, move_id) in enumerate(acted):
             for later_ident, later_move in acted[position + 1 :]:
@@ -194,6 +207,7 @@ class OrderCollector:
                         trick_room=trick_room,
                         first_tailwind=tailwind.get(split_ident(ident)[0], False),
                         second_tailwind=tailwind.get(split_ident(later_ident)[0], False),
+                        weather=weather,
                     )
                 )
         return samples

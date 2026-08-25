@@ -33,16 +33,7 @@ than disappearing.
 
 ## Now
 
-### 1. Speed Boost and the weather Speed abilities
-
-What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
-Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
-Speed Boost needs a per-turn counter.
-
-Turn order currently reads **97.7%** on random teams, so this is a small
-remainder rather than a gap.
-
-### 2. Mega Sol and Contrary — genuinely unmodelled, well sampled
+### 1. Mega Sol and Contrary — genuinely unmodelled, well sampled
 
 ```
 Mega Sol   n=215   55.3% accuracy   acts as sun for damage (Meganium-Mega)
@@ -55,14 +46,14 @@ merits. Contrary is the more interesting of the two: it inverts every stat
 change, so a Close Combat *raises* the user's defences, and nothing in the
 model expects that.
 
-### 3. Whether the agent should Mega at all
+### 2. Whether the agent should Mega at all
 
 Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
 non-Mega of the same move score identically and the choice falls to
 enumeration order. Deliberately last — building the judgement before the model
 can price a Mega correctly is the mistake 0013 already paid for.
 
-### 4. The support moves that are still unpriced, and why
+### 3. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -92,6 +83,33 @@ ability moves above.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~The weather Speed abilities~~ — done 2026-08-25
+
+Chlorophyll, Swift Swim, Sand Rush and Slush Rush double Speed under their own
+weather, and Unburden does it once the holder's item is gone. Measured on
+identical pairs:
+
+```
+before   15673/16322 = 97.0%    339 backwards
+after    15807/16322 = 97.8%    210 backwards   (-38%)
+```
+
+**The harness could not have measured these before.** `OrderCollector` tracked
+Trick Room and Tailwind and never looked at the weather, so a Chlorophyll user
+in sun was indistinguishable from one on a clear field. It tracks weather now.
+
+Two corrections to this item as it was written:
+
+- **Speed Boost needs nothing.** It raises the stat with `this.boost({spe: 1})`,
+  which announces itself as an ordinary `|-boost|` line, and boosts are already
+  tracked on both sides. A per-turn counter would double-count it.
+- **Protosynthesis and Quark Drive are out of scope** — zero species in this
+  dex have either, so they were never candidates.
+
+Remaining, and not chased: snowscape pairs read 96.6% (n=3649) against 98.1%
+on a clear field (n=12581). Slush Rush is one species in this dex, so that gap
+is something else.
 
 ### ~~Make the terrain rules consult `is_grounded`~~ — done 2026-08-25
 
