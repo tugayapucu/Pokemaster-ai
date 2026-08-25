@@ -275,3 +275,47 @@ def test_blaze_really_is_a_pinch_ability():
     ember = _bond_move("ember", type="Fire", category="Special", base_power=40)
     assert attack_multiplier("blaze", ember, hp_fraction=1.0) == 1.0
     assert attack_multiplier("blaze", ember, hp_fraction=0.2) == 1.5
+
+
+def test_skill_link_narrows_the_predicted_range_not_just_its_centre():
+    """The point of a certainty is that it removes uncertainty.
+
+    The first version of this set the expected hit count and left `hit_range`
+    alone, so a Pokemon that always lands five hits still carried a
+    two-to-five prediction -- wide enough to be nearly unfalsifiable. The
+    commit message claimed the range was narrowed; the code had not done it.
+    """
+    from champions_ai.dex import BaseStats, Dex, SpeciesInfo, TypeChart
+    from champions_ai.mechanics.damage import estimate_damage
+
+    bullet_seed = MoveInfo(
+        move_id="bulletseed", name="Bullet Seed", type="Grass",
+        category="Physical", base_power=25, accuracy=100, priority=0,
+        target="normal", multihit=(2, 5),
+    )
+    types = ("Grass", "Normal")
+    species = SpeciesInfo(
+        species_id="breloom", name="Breloom", types=("Grass",),
+        base_stats=BaseStats(hp=60, attack=130, defense=80,
+                             special_attack=60, special_defense=60, speed=70),
+    )
+    dex = Dex(
+        species={species.species_id: species},
+        moves={bullet_seed.move_id: bullet_seed},
+        types=types,
+        type_chart=TypeChart(multipliers={a: dict.fromkeys(types, 1.0) for a in types}),
+    )
+
+    def estimate(ability):
+        return estimate_damage(
+            dex, bullet_seed, attacker=species, attack_stat=150,
+            defender=species, defense_stat=100, defender_hp=400,
+            doubles=False, attacker_ability=ability,
+        )
+
+    linked = estimate("skilllink")
+    rolled = estimate(None)
+    assert linked.maximum - linked.minimum < rolled.maximum - rolled.minimum
+    # ...and it sits at the top, because five hits is the most it could roll.
+    assert linked.maximum == rolled.maximum
+    assert linked.minimum > rolled.minimum

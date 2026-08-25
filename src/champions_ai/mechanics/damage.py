@@ -506,6 +506,14 @@ def estimate_damage(
         return max(1, damage)
 
     low_hits, high_hits = hit_range(move)
+    # Skill Link removes the roll, so it has to reach the *bounds* and not only
+    # the expected count. Setting the average alone left the range spanning two
+    # to five hits for a Pokemon that always lands five -- a claim wide enough
+    # to be nearly unfalsifiable, which is the opposite of what a certainty
+    # should do to a prediction.
+    forced_hits = ability_rules.linked_hits(attacker_ability, move)
+    if forced_hits is not None:
+        low_hits = high_hits = forced_hits
     if _splits_hits(move, doubles, opponents):
         low_hits = high_hits = 1
     low = rolled(MIN_ROLL_PERCENT)
@@ -522,12 +530,10 @@ def estimate_damage(
 
     if _splits_hits(move, doubles, opponents):
         hits = 1.0
+    elif forced_hits is not None:
+        hits = float(forced_hits)
     else:
-        # Skill Link makes the count certain rather than merely higher, which
-        # matters twice over: the average rises *and* the predicted range stops
-        # carrying the hit-count uncertainty that dominates it.
-        forced = ability_rules.linked_hits(attacker_ability, move)
-        hits = float(forced) if forced is not None else expected_hits(move)
+        hits = expected_hits(move)
     minimum = max(1, int(low * low_hits * crit))
     maximum = max(1, int(high * high_hits * crit))
     expected = average_hit * hits * crit * crit_lift

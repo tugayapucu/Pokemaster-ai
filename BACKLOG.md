@@ -287,18 +287,52 @@ engine has no HP condition — Pyroar-Mega 65.2% → 86.4% on identical hits) an
 **Skill Link** (engine-correct, but its contribution here is *not* demonstrated
 — Heracross never appeared among the worst by accuracy).
 
-### 1. Measure the width of our predictions, not the centre
+### ~~1. Measure the width of our predictions~~ — refuted too, 2026-08-25
 
-Three explanations are now eliminated: Mega field effects (0016), a broad
-systematic bias (the control arm carries the same ±3-5% background), and
-per-forme damage errors (0017). What survives is that the gap is in the
-**range** rather than the centre — our predicted interval is wrong in a way a
-median cannot see. Skill Link is an example of the shape, if not the size: it
-does not merely raise the average, it deletes the uncertainty.
+The interval is not too narrow. Measured on 12,507 hits across both arms:
 
-So: compare the *width* of our predicted intervals against the engine's actual
-spread, per move class. That is a different measurement from anything run so
-far, and every multiplier-hunting pass has now come back negative.
+```
+                        never Mega        always Mega
+inside the interval       91.3%             84.4%
+fell below                 4.7%              8.5%
+fell above                 4.0%              7.1%
+median miss, below        1.36 widths       1.06 widths
+median miss, above        2.50 widths       2.22 widths
+within half a width        6-8%             11-21%
+```
+
+A too-narrow interval puts misses *just* outside. These land one to two and a
+half interval-widths out, and near-symmetrically — so the failures are a
+minority of hits being **badly** wrong in both directions, not a majority
+being marginally wrong.
+
+**Fixed on the way:** Skill Link narrowed only the expected count and left
+`hit_range` alone, so a Pokemon that always lands five hits still carried a
+two-to-five prediction. The previous commit's message claimed the range was
+narrowed and the code had not done it.
+
+**Four hypotheses are now eliminated** for the Mega gap: field effects (0016),
+a broad systematic bias (the control arm carries the same background),
+per-forme damage errors (0017), and interval width (here). What is left is that
+a *minority of specific hits* are badly wrong, roughly as often high as low.
+
+### 1. Spread moves are eight points worse, in both arms
+
+A new finding, and independent of Mega — the gap is the same size with Mega off:
+
+```
+              never Mega        always Mega
+ordinary       92.5%             85.7%
+spread         84.9%  (-7.6)     77.4%  (-8.3)
+```
+
+n≈1,700 spread hits. Not the cause of the Mega gap (which hits both classes
+about equally) but a real, general, well-sampled defect that predates it.
+
+The obvious cause is already handled — `DamageSample.predict` passes
+`doubles=False` when a spread move reached only one target, so the 0.75
+reduction is correctly skipped there. So it is something else, and worth its
+own pass.
 
 ### 2. Three that are worth doing on their own merits
 
@@ -444,6 +478,10 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **Where a miss lands tells you which bug it is.** Misses clustered just
+  outside the interval mean it is too narrow; misses one to two widths out
+  mean specific hits carry a multiplier you do not model. Measuring *how far*
+  wrong, in units of the interval, separated those in one run.
 - **Bias and accuracy are different questions.** Ranking suspects by median
   ratio is blind to any effect that is conditional in the model and
   unconditional in the game: Pyroar-Mega read a perfect 1.003 median at 65%
