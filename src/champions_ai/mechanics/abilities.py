@@ -354,3 +354,39 @@ def abilities_after(
     if move_id == SKILL_SWAP:
         return theirs, ours
     return ours, theirs
+
+
+# --- Parental Bond, which is a second hit rather than a multiplier ----------
+#
+# Kangaskhan-Mega strikes twice with most single-target moves. The engine does
+# not treat this as a damage modifier -- it sets `move.multihit = 2` and then
+# scales the *second* hit in `modifyDamage`:
+#
+#     const bondModifier = this.battle.gen > 6 ? 0.25 : 0.5;
+#
+# so in this generation the pair comes to 1.25x, not the 1.5x the older games
+# gave. Measured at **1.200 across 92 hits** before being written down, which
+# is what pointed at it in the first place.
+#
+# The harness accumulates every hit of a move into one sample, so a single
+# multiplier is the right shape here: both hits land on the same target.
+PARENTAL_BOND = "parentalbond"
+PARENTAL_BOND_SECOND_HIT = 0.25
+# The engine's own exclusions, from `onPrepareHit`: a move that already hits
+# several times, one still charging, and the handful flagged out explicitly.
+PARENTAL_BOND_EXEMPT_FLAGS = frozenset(
+    {"noparentalbond", "charge", "futuremove"}
+)
+
+
+def extra_hit_multiplier(
+    ability: str | None, move: MoveInfo, *, is_spread: bool
+) -> float:
+    """What a second, weaker strike adds -- 1.0 when there is not one."""
+    if ability != PARENTAL_BOND:
+        return 1.0
+    if move.category == "Status" or move.multihit:
+        return 1.0
+    if is_spread or PARENTAL_BOND_EXEMPT_FLAGS & set(move.flags):
+        return 1.0
+    return 1.0 + PARENTAL_BOND_SECOND_HIT

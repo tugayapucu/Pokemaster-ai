@@ -21,6 +21,7 @@ from champions_ai.mechanics.abilities import (
     attack_multiplier,
     base_power_multiplier,
     defence_multiplier,
+    extra_hit_multiplier,
     rewritten_type,
     stab_multiplier,
     taken_multiplier,
@@ -160,3 +161,60 @@ def test_thick_fat_halves_the_two_types_it_names():
 def test_fur_coat_only_thickens_against_physical():
     assert defence_multiplier("furcoat", _move()) == 2.0
     assert defence_multiplier("furcoat", _move(category="Special")) == 1.0
+
+
+# --- Parental Bond -------------------------------------------------------
+
+
+def _bond_move(move_id="crunch", **kwargs):
+    fields = dict(
+        move_id=move_id, name=move_id.title(), type="Dark", category="Physical",
+        base_power=80, accuracy=100, priority=0, target="normal",
+    )
+    fields.update(kwargs)
+    return MoveInfo(**fields)
+
+
+def test_parental_bond_adds_a_quarter_not_a_half():
+    """The engine scales the *second* hit, and in this generation by 0.25:
+
+        const bondModifier = this.battle.gen > 6 ? 0.25 : 0.5;
+
+    so the pair comes to 1.25x, not the 1.5x the older games gave. Measured at
+    1.200 across 92 hits before being written down.
+    """
+    assert extra_hit_multiplier(
+        "parentalbond", _bond_move(), is_spread=False
+    ) == 1.25
+
+
+def test_parental_bond_leaves_status_moves_alone():
+    assert extra_hit_multiplier(
+        "parentalbond", _bond_move(category="Status", base_power=0, accuracy=None),
+        is_spread=False,
+    ) == 1.0
+
+
+def test_parental_bond_does_not_stack_with_a_multi_hit_move():
+    assert extra_hit_multiplier(
+        "parentalbond", _bond_move(multihit=[2, 5]), is_spread=False
+    ) == 1.0
+
+
+def test_parental_bond_does_not_apply_to_a_spread_move():
+    """`move.spreadHit` in the engine's `onPrepareHit`."""
+    assert extra_hit_multiplier(
+        "parentalbond", _bond_move(target="allAdjacentFoes"), is_spread=True
+    ) == 1.0
+
+
+def test_parental_bond_respects_the_engines_flags():
+    for flag in ("noparentalbond", "charge", "futuremove"):
+        assert extra_hit_multiplier(
+            "parentalbond", _bond_move(flags=frozenset({flag})), is_spread=False
+        ) == 1.0
+
+
+def test_anything_else_gets_one_hit():
+    assert extra_hit_multiplier("hugepower", _bond_move(), is_spread=False) == 1.0
+    assert extra_hit_multiplier(None, _bond_move(), is_spread=False) == 1.0

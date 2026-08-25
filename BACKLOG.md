@@ -240,24 +240,40 @@ already produced plausible-looking numbers: `active_by_ident` silently dropped
 every Mega'd Pokemon's hits, and `TeamPool.generated` was unseeded so two runs
 drew different teams.
 
-### 1. The field effects a Mega brings, which is where the loss actually is
+### ~~1. The field effects a Mega brings~~ — refuted 2026-08-25
 
-Something a Mega puts on the field degrades prediction for **everyone**, and it
-is worth more than three times what the Mega formes' own stats and typing are.
-In likely order:
+Experiment 0016. Bystander hits are marginally **better** with a Mega on the
+field, in both seeds (88.8% vs 86.7%, and 84.9% vs 83.9%). Weather setters,
+auras and Intimidate are still unmodelled and still real mechanics — they are
+just not the explanation for this gap.
+
+What the test found instead: the two arms are **identical through turn 3**
+(89.0% vs 89.2%) and then the Mega arm loses ~11 points and never recovers,
+with near-identical hit counts per turn band. So it is something a Mega leaves
+behind, not a mix effect and not the moment of evolving.
+
+Following that residual found **Parental Bond**, now implemented: the engine
+scales the second hit by 0.25 in this generation, so the pair is **1.25x**, not
+the 1.5x this backlog had written down. Measured at 1.200 over 92 hits first.
+Mismatches from turn 3 on fell 449 -> 391 on identical samples, and
+Kangaskhan-Mega, Crunch and Sucker Punch all left the worst-offenders list.
+
+### 1. The rest of the eleven points
+
+Parental Bond was the largest single contributor and does not account for the
+gap. What is left is a **broad ~3-4% over-prediction across many attackers**
+(medians clustering at 0.95-0.97) rather than one ability.
+
+Two leads with real magnitude and samples too thin to act on:
 
 ```
-Drought, Sand Stream, Snow Warning, Electric Surge   weather/terrain for all
-Fairy Aura (Floette-Mega)      every Fairy move x1.33, both sides
-Intimidate (Manectric-Mega, Scrafty-Mega)  fires on the forme change
+Ampharos   n=14  median 1.650    Mega Ampharos has Mold Breaker, unmodelled
+Ditto      n=12  median 1.591    Imposter copies the target; we use Ditto's stats
 ```
 
-First job is to separate them — the weather split from one run was not clean
-enough to say which dominates.
-
-**The holder-only abilities are the smaller half**, which inverts what this
-backlog assumed a day ago: Parental Bond (×1.5 in effect), Skill Link, Protean
-and Mold Breaker can only touch hits the Mega is party to. Worth doing, second.
+**Widen the sample before implementing either.** A weak signal implemented as
+a strong one has already cost this project once (0013), and n=14 is thinner
+than anything that has been acted on here.
 
 ### 2. Whether the agent should Mega at all
 
@@ -389,6 +405,11 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **Name where the loss *is*, not where it is not.** 0015 measured that the
+  loss fell on "hits that do not involve a Mega" and let that phrase become
+  "hits affected by a Mega's field presence" without a measurement in between.
+  0016 tested it directly and refuted it. An attribution inferred by
+  elimination is a hypothesis, not a result.
 - **An unseeded pool is not a measurement.** Two runs of the Mega comparison
   disagreed in direction because `TeamPool.generated` redrew the teams each
   time, and that swing was larger than the effect. Seed anything whose number

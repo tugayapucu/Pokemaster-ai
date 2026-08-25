@@ -452,6 +452,16 @@ def estimate_damage(
     # number that gets rolled rather than modifiers on the result.
     if doubles and is_spread_move(move):
         base = modify(base, SPREAD_MULTIPLIER)
+
+    # Parental Bond adds a second, weaker strike rather than scaling the first.
+    # Both land on the same target and the harness accumulates them into one
+    # sample, so it belongs here as a multiplier on the pair.
+    base = modify(
+        base,
+        ability_rules.extra_hit_multiplier(
+            attacker_ability, move, is_spread=doubles and is_spread_move(move)
+        ),
+    )
     if weather_multiplier != 1.0:
         base = modify(base, weather_multiplier)
 

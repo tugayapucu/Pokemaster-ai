@@ -1,5 +1,12 @@
 # Experiment 0015 — Mega costs seven points, and not where expected
 
+> **Corrected by [experiment 0016](0016-the-field-effect-hypothesis-was-wrong.md), 2026-08-25.**
+> The measurements below stand. The *explanation* offered for them — that
+> field effects from Mega abilities degrade prediction for bystanders — was
+> tested directly and **refuted**: bystander hits are marginally *better* with
+> a Mega on the field, in both seeds. Read the conclusions here as the
+> question, not the answer.
+
 **Date:** 2026-08-25
 **Result: enabling Mega Evolution costs the damage model about seven points, and 75–85% of that loss is on hits that do not involve a Mega at all.** The Mega'd Pokémon are predicted roughly as well as anything else. What breaks is everything *around* them — which points the follow-up work at the field effects Mega abilities create, not at the Mega formes' stats or typing.
 

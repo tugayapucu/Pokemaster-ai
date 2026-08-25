@@ -2,6 +2,7 @@ from champions_ai.mechanics.abilities import (
     ABILITY_MOVES,
     abilities_after,
     ability_move_succeeds,
+    extra_hit_multiplier,
 )
 from champions_ai.mechanics.base_power import dynamic_base_power
 from champions_ai.mechanics.damage import (
@@ -86,6 +87,7 @@ __all__ = [
     "apply_boost",
     "ABILITY_MOVES",
     "abilities_after",
+    "extra_hit_multiplier",
     "ability_move_succeeds",
     "assumed_attacks",
     "BORROWING_MOVES",
