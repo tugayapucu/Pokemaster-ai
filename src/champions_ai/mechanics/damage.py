@@ -30,7 +30,7 @@ from champions_ai.mechanics.items import (
     survives_a_knockout,
 )
 from champions_ai.mechanics.move_type import effective_type
-from champions_ai.mechanics.typing import effective_types
+from champions_ai.mechanics.typing import effective_types, is_grounded
 
 T = TypeVar("T")
 
@@ -346,6 +346,9 @@ def estimate_damage(
     attacker_status: str | None = None,
     defender_status: str | None = None,
     defender_types: tuple[str, ...] | None = None,
+    # Gravity drags everything down, so footing cannot be decided from a
+    # Pokemon's own type and item alone.
+    field_conditions: tuple[str, ...] = (),
 ) -> DamageEstimate:
     """Estimate a single hit's damage range.
 
@@ -368,8 +371,22 @@ def estimate_damage(
     # be read on the row the move will *actually* have. Weather Ball in sun is
     # a Fire move, which is super effective against a Grass type the chart
     # would otherwise have called neutral.
+    # Footing decides every terrain rule, and the two sides are asked
+    # separately because the rules disagree about whose feet matter: Rising
+    # Voltage reads the *target's*, everything else the attacker's.
+    attacker_grounded = is_grounded(
+        effective_types(attacker.types, attacker_volatiles),
+        ability=attacker_ability,
+        item=attacker_item,
+        volatiles=attacker_volatiles,
+        field_conditions=field_conditions,
+    )
     actual_type = effective_type(
-        move, attacker=attacker, weather=weather, terrain=terrain
+        move,
+        attacker=attacker,
+        weather=weather,
+        terrain=terrain,
+        attacker_grounded=attacker_grounded,
     )
     # An -ate ability rewrites the move's type outright, which changes both
     # the chart row and whether STAB applies.

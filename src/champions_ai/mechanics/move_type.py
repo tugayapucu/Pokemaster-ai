@@ -59,11 +59,15 @@ def effective_type(
     attacker: SpeciesInfo | None = None,
     weather: str | None = None,
     terrain: str | None = None,
+    attacker_grounded: bool = True,
 ) -> str:
     """The type this move will actually have when it lands.
 
     Safe to call for every move: anything without a rule returns its own type,
     so callers need not know which four are special.
+
+    `attacker_grounded` matters only to Terrain Pulse, and defaults to True so
+    the common case is right for a caller that does not track footing.
     """
     if not move.modifies_type:
         return move.type
@@ -72,9 +76,11 @@ def effective_type(
         return WEATHER_BALL_TYPES.get(weather or "", move.type)
 
     if move.move_id == TERRAIN_PULSE:
-        # The engine requires the user to be grounded, which we do not model:
-        # a Flying-type or Levitate user keeps Normal and this will say
-        # otherwise.
+        # `onModifyType(move, pokemon) { if (!pokemon.isGrounded()) return; }`
+        # -- a Flying type or Levitate user is not standing on the terrain, so
+        # the move stays Normal for it.
+        if not attacker_grounded:
+            return move.type
         return TERRAIN_PULSE_TYPES.get(terrain or "", move.type)
 
     if move.move_id == RAGING_BULL and attacker is not None:

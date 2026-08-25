@@ -73,6 +73,7 @@ from champions_ai.mechanics import (
     estimate_stats,
     gains_from_repeating,
     instruct_repeats,
+    is_grounded,
     is_removable,
     matchup,
     move_priority,
@@ -511,6 +512,26 @@ class HeuristicAgent(Agent):
                 move,
                 attacker=attacker_species,
                 defender=defender_species,
+                # Terrain bonuses need footing, and the two sides are asked
+                # separately because Rising Voltage reads the target's while
+                # everything else reads ours.
+                attacker_grounded=is_grounded(
+                    effective_types(
+                        attacker_species.types,
+                        tuple(attacker.volatile_conditions),
+                    ),
+                    ability=attacker.current_ability,
+                    item=attacker.current_item,
+                    volatiles=tuple(attacker.volatile_conditions),
+                    field_conditions=tuple(observation.field_conditions),
+                ),
+                defender_grounded=is_grounded(
+                    effective_types(defender_species.types, target.volatiles),
+                    ability=target.ability,
+                    item=target.item,
+                    volatiles=target.volatiles,
+                    field_conditions=tuple(observation.field_conditions),
+                ),
                 attacker_hp_fraction=attacker.hp_fraction,
                 attacker_speed=(attacker.computed_stats or {}).get("spe"),
                 attacker_holds_item=attacker.current_item is not None,
@@ -557,6 +578,9 @@ class HeuristicAgent(Agent):
             # A Roost strips the Flying type for the turn, on either side.
             attacker_volatiles=tuple(attacker.volatile_conditions),
             defender_volatiles=target.volatiles,
+            # Gravity drags everything down, so footing is not decidable from
+            # a Pokemon's own type and item alone.
+            field_conditions=tuple(observation.field_conditions),
             # Ours is in our own request; theirs is None until it shows itself,
             # and an unknown ability is treated as doing nothing rather than
             # as an invented one.

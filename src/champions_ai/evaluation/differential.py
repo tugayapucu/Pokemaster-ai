@@ -32,7 +32,9 @@ from champions_ai.mechanics import (
     apply_boost,
     attacking_side,
     dynamic_base_power,
+    effective_types,
     estimate_damage,
+    is_grounded,
     is_removable,
 )
 from champions_ai.simulator.tracker import TERRAINS, split_ident, to_id
@@ -139,6 +141,27 @@ class DamageSample:
             # the formula when the formula was fine.
             base_power=dynamic_base_power(
                 move,
+                # Every terrain bonus is gated on footing, and the two sides
+                # are asked separately because the rules disagree about whose
+                # feet matter: Rising Voltage reads the target's.
+                attacker_grounded=is_grounded(
+                    effective_types(
+                        dex.get_species(self.attacker.pokemon_set.species).types,
+                        tuple(self.attacker.volatile_conditions),
+                    ),
+                    ability=self.attacker.current_ability,
+                    item=self.attacker.current_item,
+                    volatiles=tuple(self.attacker.volatile_conditions),
+                ),
+                defender_grounded=is_grounded(
+                    effective_types(
+                        dex.get_species(self.defender.pokemon_set.species).types,
+                        tuple(self.defender.volatile_conditions),
+                    ),
+                    ability=self.defender.current_ability,
+                    item=self.defender.current_item,
+                    volatiles=tuple(self.defender.volatile_conditions),
+                ),
                 attacker=dex.get_species(self.attacker.pokemon_set.species),
                 defender=dex.get_species(self.defender.pokemon_set.species),
                 attacker_hp_fraction=self.attacker.hp_fraction,

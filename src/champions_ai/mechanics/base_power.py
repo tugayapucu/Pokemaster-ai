@@ -121,9 +121,14 @@ SOLAR_WEAKENING_WEATHER = frozenset(
 )
 SOLAR_WEAKENED_MULTIPLIER = 0.5
 
-# A terrain raises moves of its own type by 1.3 -- the engine's [5325, 4096].
-# Only for a grounded user, which we do not model: a Flying-type or Levitate
-# user gets the bonus here and should not.
+# A terrain raises moves of its own type by 1.3 -- the engine's [5325, 4096]
+# -- and only for a **grounded attacker**:
+#
+#     if (move.type === 'Electric' && attacker.isGrounded() && ...) {
+#         return this.chainModify([5325, 4096]);
+#
+# A terrain is something you stand on, so a Flying type or a Levitate user
+# gets nothing from it.
 TERRAIN_BOOSTED_TYPES: dict[str, str] = {
     "electricterrain": "Electric",
     "grassyterrain": "Grass",
@@ -132,11 +137,21 @@ TERRAIN_BOOSTED_TYPES: dict[str, str] = {
 TERRAIN_BOOST_MULTIPLIER = 1.3
 
 # Two moves that key off a terrain rather than sharing its type.
+# Both check `source.isGrounded()`, so both follow the attacker.
 TERRAIN_SPECIFIC_MOVES: dict[str, str] = {
     "expandingforce": "psychicterrain",
     "mistyexplosion": "mistyterrain",
 }
 TERRAIN_SPECIFIC_MULTIPLIER = 1.5
+
+# Rising Voltage is the odd one out and worth naming for it: every other
+# terrain rule here reads the *attacker's* footing, and this one reads the
+# **target's** --
+#
+#     if (this.field.isTerrain('electricterrain') && target.isGrounded())
+#
+# so a Levitating attacker still doubles it, and a Flying target still escapes.
+RISING_VOLTAGE = "risingvoltage"
 
 # Left alone on purpose, and each for a stated reason:
 #   Fickle Beam  doubles 30% of the time, so it is a coin flip, not a fact
@@ -165,6 +180,11 @@ def dynamic_base_power(
     fainted_allies: int = 0,
     terrain: str | None = None,
     weather: str | None = None,
+    # A terrain is something you stand on: every bonus below is gated on the
+    # right Pokemon being on the ground. Both default to True so a caller that
+    # does not know gets the common case rather than silently losing them.
+    attacker_grounded: bool = True,
+    defender_grounded: bool = True,
 ) -> int:
     """The base power this move would actually have, given the situation.
 
@@ -194,6 +214,7 @@ def dynamic_base_power(
         defender_status=defender_status,
         fainted_allies=fainted_allies,
         terrain=terrain,
+        defender_grounded=defender_grounded,
     )
     return max(
         1,
@@ -206,6 +227,7 @@ def dynamic_base_power(
                 defender_item_removable=defender_item_removable,
                 terrain=terrain,
                 weather=weather,
+                attacker_grounded=attacker_grounded,
             )
         ),
     )
@@ -219,12 +241,17 @@ def conditional_multiplier(
     defender_item_removable: bool = False,
     terrain: str | None = None,
     weather: str | None = None,
+    attacker_grounded: bool = True,
 ) -> float:
     """What the situation multiplies this move's base power by.
 
     Separate from the value above because it is a different engine hook and a
     different question: not "what power does this move have" but "what is
     happening that changes it".
+
+    `attacker_grounded` gates every terrain bonus, because a terrain is
+    something you stand on. It defaults to True so a caller that does not know
+    gets the common case rather than silently losing the bonus for everyone.
     """
     move_id = move.move_id
     multiplier = 1.0
@@ -237,14 +264,18 @@ def conditional_multiplier(
         multiplier *= POISON_DOUBLED_MULTIPLIER
     if move_id in SOLAR_MOVES and weather in SOLAR_WEAKENING_WEATHER:
         multiplier *= SOLAR_WEAKENED_MULTIPLIER
-    if TERRAIN_BOOSTED_TYPES.get(terrain or "") == move.type:
+    if attacker_grounded and TERRAIN_BOOSTED_TYPES.get(terrain or "") == move.type:
         multiplier *= TERRAIN_BOOST_MULTIPLIER
     # `terrain is not None` first: without it this is `None == None` for
     # every ordinary move on a bare field, and multiplies all of them.
     # Weather Ball doubles in any weather, on top of changing its type.
     if move_id == WEATHER_BALL and weather:
         multiplier *= WEATHER_BALL_MULTIPLIER
-    if terrain is not None and TERRAIN_SPECIFIC_MOVES.get(move_id) == terrain:
+    if (
+        attacker_grounded
+        and terrain is not None
+        and TERRAIN_SPECIFIC_MOVES.get(move_id) == terrain
+    ):
         multiplier *= TERRAIN_SPECIFIC_MULTIPLIER
 
     return multiplier
@@ -263,6 +294,7 @@ def _base_value(
     defender_status: str | None,
     fainted_allies: int,
     terrain: str | None,
+    defender_grounded: bool = True,
 ) -> int:
     """The move's power before the situation scales it."""
     move_id = move.move_id
@@ -290,8 +322,12 @@ def _base_value(
     if move_id == "lastrespects":
         return static + LAST_RESPECTS_STEP * max(0, fainted_allies)
 
-    if move_id == "risingvoltage":
-        return static * 2 if terrain == ELECTRIC_TERRAIN else static
+    if move_id == RISING_VOLTAGE:
+        # The *target's* footing, not the user's -- see the note by the
+        # constant. Getting this backwards would be invisible in ordinary play
+        # and wrong exactly where it matters.
+        grounded = terrain == ELECTRIC_TERRAIN and defender_grounded
+        return static * 2 if grounded else static
 
     # --- moves that carry no static power at all ---
 

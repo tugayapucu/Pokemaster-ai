@@ -33,22 +33,7 @@ than disappearing.
 
 ## Now
 
-### 1. Make the terrain rules consult `is_grounded`
-
-`is_grounded` exists now but nothing calls it. Five rules still apply to
-Flying types and Levitate users that should be exempt:
-
-```
-Terrain Pulse       only changes type for a grounded user
-Rising Voltage      only doubles against a grounded target
-Expanding Force     only boosted for a grounded user
-Misty Explosion     same
-the terrain damage bonuses (Electric, Grassy, Psychic)   same
-```
-
-Cheap, and it is the last of the terrain work.
-
-### 2. Speed Boost and the weather Speed abilities
+### 1. Speed Boost and the weather Speed abilities
 
 What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
 Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
@@ -57,7 +42,7 @@ Speed Boost needs a per-turn counter.
 Turn order currently reads **97.7%** on random teams, so this is a small
 remainder rather than a gap.
 
-### 3. Mega Sol and Contrary — genuinely unmodelled, well sampled
+### 2. Mega Sol and Contrary — genuinely unmodelled, well sampled
 
 ```
 Mega Sol   n=215   55.3% accuracy   acts as sun for damage (Meganium-Mega)
@@ -70,14 +55,14 @@ merits. Contrary is the more interesting of the two: it inverts every stat
 change, so a Close Combat *raises* the user's defences, and nothing in the
 model expects that.
 
-### 4. Whether the agent should Mega at all
+### 3. Whether the agent should Mega at all
 
 Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
 non-Mega of the same move score identically and the choice falls to
 enumeration order. Deliberately last — building the judgement before the model
 can price a Mega correctly is the mistake 0013 already paid for.
 
-### 5. The support moves that are still unpriced, and why
+### 4. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -107,6 +92,35 @@ ability moves above.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~Make the terrain rules consult `is_grounded`~~ — done 2026-08-25
+
+`is_grounded` had been written, exported, and called by nothing. It now has
+five callers, and the five rules no longer hand terrain bonuses to Flying
+types and Levitate users:
+
+```
+electricterrain  if (move.type === 'Electric' && attacker.isGrounded())
+expandingforce   if (isTerrain('psychicterrain') && source.isGrounded())
+mistyexplosion   if (isTerrain('mistyterrain') && source.isGrounded())
+terrainpulse     onModifyType(move, pokemon) { if (!pokemon.isGrounded()) return; }
+risingvoltage    if (isTerrain('electricterrain') && target.isGrounded())
+```
+
+**Rising Voltage is the odd one out** and the reason to read the engine rather
+than pattern-match: it follows the *target's* footing while every other rule
+follows the attacker's. A Levitating attacker still doubles it; a Flying target
+still escapes it. Getting that backwards would be invisible in ordinary play
+and wrong exactly where it matters.
+
+The test that pins it also caught a wrong expectation of mine: the doubling and
+the Electric Terrain type bonus are separate hooks and **stack**, so a grounded
+attacker into a grounded target gets 70 → 182, not 140.
+
+`estimate_damage` gained `field_conditions`, because Gravity drags everything
+down and footing cannot be decided from a Pokemon's own type and item alone.
+Both flags default to True so a caller that does not track footing keeps the
+common case rather than silently losing the bonus for everyone.
 
 ### ~~Spread moves are eight points worse~~ — done 2026-08-25
 
