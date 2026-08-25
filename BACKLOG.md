@@ -33,140 +33,232 @@ than disappearing.
 
 ## Now
 
-### ~~1. Read the fields we already dump~~ — done 2026-08-24
+### 1. The `-ate` cluster — a bug in code we already have
 
-All six wired. It found a real bug, as this shape of check keeps doing:
-**the four one-hit knockout moves read as status moves** — the *fourth*
-distinct reason a move in this dex can carry a zero base power, after the
-per-hit callbacks, the situational multipliers and the damage callbacks.
-
-`modifies_type` was the other substantial one: Weather Ball, Terrain Pulse,
-Raging Bull and Aura Wheel were all read on the wrong row of the type chart.
-
-Agreement train 45.36 → 45.42%, test 47.06 → **47.25%**. Damage prediction
-holds at ~95% on the control team.
-
-### ~~1. Focus Sash and the knockout claim~~ — done 2026-08-24
-
-**The gap was five times smaller than this said.** Measured against the engine
-first, per the rule 0013 earned: the "guaranteed knockout" claim was already
-right **98.1%** of the time. The 17% figure came from *replay* calibration,
-where the opponent's spread and item are unknown — it was measuring
-hidden-information uncertainty, not the knockout logic.
-
-Both causes of the remaining 1.9% were real and are fixed:
+The worst thing in the whole Mega measurement, and unlike everything else on
+this list it is not a missing feature:
 
 ```
-Focus Sash     leaves the holder on 1 HP, and only from full health.
-               Sturdy is the same as an ability. Focus Band is left out:
-               a 10% chance at any HP is a coin flip, not a certainty.
-Dragon Darts   is multihit 2 *and* smartTarget, so in doubles it fires one
-               dart at each opponent rather than two at one. `smartTarget`
-               was not dumped at all.
+ATK Glalie-Mega    n=136   accuracy 50.7%   Refrigerate  (Normal -> Ice)
+ATK Altaria-Mega   n= 52   accuracy 51.9%   Pixilate     (Normal -> Fairy)
+ATK Feraligatr-Mega n= 82  accuracy 72.0%   Dragonize    (Normal -> Dragon)
 ```
 
-Now **99.0%**, with neither cause left among the survivors.
+**All three are already in `ATE_ABILITIES`.** Coin-flip accuracy on an ability
+we model means the implementation is wrong, not absent — and the engine's rule
+is short enough to check line by line:
 
-### ~~1. Roost, and the Flying type~~ — done 2026-08-24
-
-Roost strips the user's Flying type for the turn, and it explained the whole
-run-to-run swing in the control differential. **That swing was never noise** —
-it was whether the random team drew a Roost user.
-
-```
-before   90.0% ... 95.0%   depending on team composition
-after    96.5%, 97.1%, 98.8% across three runs
-```
-
-Typing and grounding turned out to be one question, so item 5 is folded in
-here: `is_grounded` exists and knows Levitate, Air Balloon, Iron Ball,
-Gravity, Smack Down and Ingrain. The **terrain rules still have to consult
-it** — see item 4.
-
-The same silent bug shape appeared for the third time: `-singleturn` was
-recorded for the opponent and never for us, so our own Roost was invisible.
-Boosts, side conditions, and now single-turn effects.
-
-### ~~1. Abilities~~ — done 2026-08-24
-
-The item said "five support moves need ability tracking". Measuring first
-found something an order of magnitude larger: **abilities were the biggest
-remaining source of damage error in the whole model.**
-
-```
-fully random teams (all abilities and items)     80.1%   ->  92-94%
-items on, abilities inert                        92.5%
-the control (neither)                           96-99%
+```js
+if (move.type === 'Normal' && !noModifyType.includes(move.id) && ...) {
+    move.type = 'Ice';
+    move.typeChangerBoosted = this.effect;
+}
+onBasePower(...) {
+    if (move.typeChangerBoosted === this.effect) return this.chainModify([4915, 4096]);
+}
 ```
 
-Values read off the residual before being written down, as Life Orb was:
-Huge Power 1.950, Hustle 1.472, Tough Claws 1.243, Iron Fist 1.158,
-Adaptability 1.319. Everything else landed inside ±5% of 1.0 — which is **not**
-the same as absent, because the median only catches *unconditional*
-multipliers. A Multiscale that halves damage one hit in five leaves it
-untouched, so the conditional ones are transcribed from the engine instead and
-their test is the harness afterwards.
+Note the ordering: the type changes *first*, then the 1.2x applies only if
+this ability was the thing that changed it. Both the STAB and the
+effectiveness follow from the new type.
 
-Two process notes worth keeping:
+Highest expected value on the list: a known-broken piece of existing code with
+a large measured effect beats another exploratory hunt.
 
-- **Adaptability was missed by the first extraction** because it hangs off
-  `onModifySTAB` rather than any stat hook. A search for one hook shape finds
-  only that shape.
-- **The Dragon Darts split was inert**, and the control harness said so: every
-  mismatch in one run was Dragon Darts over-predicted by exactly 2x. The
-  harness was passing `spread_targets` as the opponent count, and that is 1
-  for a single-target move — which Dragon Darts is, despite reaching both
-  opponents. It now counts what actually landed.
+### 2. Spread moves are eight points worse, in both arms
 
-The **five support moves** the item was originally about — Skill Swap, Role
-Play, Entrainment, Worry Seed, Simple Beam — are still unpriced, and sit with
-the rest in item 1 below.
-
-### ~~1. The rest of the unpriced support moves~~ — mostly done 2026-08-24
-
-Fourteen of the 23 are now priced, in four clusters, each its own commit:
+A new finding, and independent of Mega — the gap is the same size with Mega off:
 
 ```
-borrowing another move   Copycat, Sleep Talk, Instruct           (Spite left)
-rewriting a typing       Soak, Magic Powder, Forest's Curse,
-                         Trick-or-Treat, Reflect Type
-buying an ordering       After You, Quash                  (Ally Switch left)
-denying a retreat        Block, Mean Look
-handing an ability       Skill Swap, Role Play, Entrainment,
-                         Worry Seed, Simple Beam
+              never Mega        always Mega
+ordinary       92.5%             85.7%
+spread         84.9%  (-7.6)     77.4%  (-8.3)
 ```
 
-Not one of them is priced with a new constant. Each reuses a currency that was
-already there — After You is worth the turn our partner would otherwise lose,
-Block is worth exactly what we price our *own* escape at, and the retyping and
-ability moves are worth the difference between two runs of the damage
-estimator. That last trick needed `estimate_damage` to answer "what if they
-were this type instead", which is now an explicit `defender_types` override.
+n≈1,700 spread hits. Not the cause of the Mega gap (which hits both classes
+about equally) but a real, general, well-sampled defect that predates it.
 
-**The corpus cannot judge any of this.** Humans picked one of these fourteen
-**sixteen times in 500 battles** — seven Instructs and nine Soaks, and none of
-the other twelve at all. Agreement moved 45.42% → 45.45% on train and 47.25%
-→ 47.30% on test, 3 up and 0 down, which is neither significant nor meant to
-be. The verification is **29 tests against the engine's own rules** instead:
-`moves.ts` for the failure cases, the move flags already in our dump for what
-refuses to be borrowed, the ability flags for what refuses to be handed
-around, and `trapped: 3` in the type chart for why Ghosts cannot be trapped.
+The obvious cause is already handled — `DamageSample.predict` passes
+`doubles=False` when a spread move reached only one target, so the 0.75
+reduction is correctly skipped there. So it is something else, and worth its
+own pass.
 
-Three things the corpus *did* catch, all in Instruct:
+### 3. Make the terrain rules consult `is_grounded`
 
-- **It is usually not the last move that gets repeated.** Instruct is priority
-  0 and its users are slow, so the ally has already moved by the time it
-  resolves. Reading `last_move` gave the previous turn's move, and it was
-  wrong in all seven human Instructs — twice reporting "nothing to repeat" for
-  a Torkoal that fired an Eruption in that very turn.
-- **Not everything gains from going twice in one turn.** The repeat is
-  immediate, so a second Protect is refused and a second Trick Room undoes the
-  first. Without that rule the best repeat for one ally came out as its
-  Protect, at 310 points for an effect worth nothing.
-- **Instruct's target is `normal`, not `adjacentAlly`.** The engine offers it
-  across the field, which hands the opponent a free attack.
+`is_grounded` exists now but nothing calls it. Five rules still apply to
+Flying types and Levitate users that should be exempt:
 
-### ~~1. Split by team, not only by replay~~ — done 2026-08-24, and the answer was no
+```
+Terrain Pulse       only changes type for a grounded user
+Rising Voltage      only doubles against a grounded target
+Expanding Force     only boosted for a grounded user
+Misty Explosion     same
+the terrain damage bonuses (Electric, Grassy, Psychic)   same
+```
+
+Cheap, and it is the last of the terrain work.
+
+### 4. Speed Boost and the weather Speed abilities
+
+What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
+Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
+Speed Boost needs a per-turn counter.
+
+Turn order currently reads **97.7%** on random teams, so this is a small
+remainder rather than a gap.
+
+### 5. Mega Sol and Contrary — genuinely unmodelled, well sampled
+
+```
+Mega Sol   n=215   55.3% accuracy   acts as sun for damage (Meganium-Mega)
+Contrary   n=108   61.1% accuracy   inverts stat changes   (Staraptor-Mega)
+```
+
+Both are real omissions rather than bugs, both have enough samples to act on,
+and neither is implicated in the Mega gap — they are worth doing on their own
+merits. Contrary is the more interesting of the two: it inverts every stat
+change, so a Close Combat *raises* the user's defences, and nothing in the
+model expects that.
+
+### 6. Whether the agent should Mega at all
+
+Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
+non-Mega of the same move score identically and the choice falls to
+enumeration order. Deliberately last — building the judgement before the model
+can price a Mega correctly is the mistake 0013 already paid for.
+
+### 7. The support moves that are still unpriced, and why
+
+Put last deliberately: every one of these is blocked on something we do not
+track rather than on effort, so the two items above are worth more per hour.
+Kept as an item rather than closed, because "we cannot say" is a claim that
+should be revisited, not a permanent verdict.
+
+| Move | Why |
+|---|---|
+| **Ally Switch** | Its value is dodging an attack aimed at a slot, and which slot they aimed at is exactly what a player cannot see. |
+| **Perish Song** | Cuts both ways. Depends on being ahead and on trapping, neither modelled. A first attempt at a number cost three labels. |
+| **Teatime** | Everything on the field eats its Berry, ours included — and their Berries are the half we cannot see. |
+| **Baton Pass** | Passes boosts to a chosen bench Pokemon. Needs a model of who benefits, which is a matchup question. |
+| **Transform** | Becomes the target. Priceable in principle, but the value is next turn's whole moveset. |
+| **Spite** | PP is not modelled at all, an opponent's is unknowable, and four PP in a five-turn format is rarely what binds. |
+| **Swallow** | Needs a Stockpile counter that nothing tracks. |
+| **Lock-On** | Guarantees next turn's hit. Worth the accuracy gap on a move we have not chosen yet. |
+| **Wish, Healing Wish, Decorate, Magnetic Flux, Guard/Power Split** | Ally-facing or delayed; the arithmetic is easy and the plumbing to reach the right Pokemon is not there yet. |
+
+Three more — **Trick, Switcheroo, Fling** — are priced already, but only once
+the opponent's item has shown itself, which is the same shape as the five
+ability moves above.
+
+---
+
+---
+
+## Done, most recent first
+
+Kept rather than deleted: several of these are refutations, and the
+evidence for *not* doing something is as easy to lose as the evidence for
+doing it.
+
+### ~~Measure the width of our predictions~~ — refuted too, 2026-08-25
+
+The interval is not too narrow. Measured on 12,507 hits across both arms:
+
+```
+                        never Mega        always Mega
+inside the interval       91.3%             84.4%
+fell below                 4.7%              8.5%
+fell above                 4.0%              7.1%
+median miss, below        1.36 widths       1.06 widths
+median miss, above        2.50 widths       2.22 widths
+within half a width        6-8%             11-21%
+```
+
+A too-narrow interval puts misses *just* outside. These land one to two and a
+half interval-widths out, and near-symmetrically — so the failures are a
+minority of hits being **badly** wrong in both directions, not a majority
+being marginally wrong.
+
+**Fixed on the way:** Skill Link narrowed only the expected count and left
+`hit_range` alone, so a Pokemon that always lands five hits still carried a
+two-to-five prediction. The previous commit's message claimed the range was
+narrowed and the code had not done it.
+
+**Four hypotheses are now eliminated** for the Mega gap: field effects (0016),
+a broad systematic bias (the control arm carries the same background),
+per-forme damage errors (0017), and interval width (here). What is left is that
+a *minority of specific hits* are badly wrong, roughly as often high as low.
+
+### ~~The rest of the eleven points~~ — not the Mega formes (0017)
+
+A targeted 19,802-hit measurement across **71 distinct Mega Stone holders**
+(149 of 150 generated teams carry one) settles it:
+
+```
+total misses in the sample:              ~4158
+misses inside the six worst formes:       ~270   (6.5%)
+fixing all six to perfect would give:    +1.36 points
+```
+
+Ninety-three percent of the misses sit in formes that look individually fine.
+No amount of further ability transcription will find this gap.
+
+**Both standing leads were noise.** Ampharos-Mega read 1.650 on n=14 and
+**0.990 on n=61/115**. Implementing on the thin sample, which this list was one
+step from doing, would have added a wrong multiplier and then confirmed it
+against the same thin sample.
+
+**Ranking by bias was the wrong question.** Pyroar-Mega: median 1.003,
+accuracy 65.2%. The gap is measured in accuracy, and a median-based hunt is
+structurally blind to a conditional-in-the-model, unconditional-in-the-game
+effect. Re-ranking by accuracy found the real list immediately.
+
+Fixed: **Fire Mane** (filed as a pinch ability on the strength of its name; the
+engine has no HP condition — Pyroar-Mega 65.2% → 86.4% on identical hits) and
+**Skill Link** (engine-correct, but its contribution here is *not* demonstrated
+— Heracross never appeared among the worst by accuracy).
+
+### ~~The field effects a Mega brings~~ — refuted 2026-08-25
+
+Experiment 0016. Bystander hits are marginally **better** with a Mega on the
+field, in both seeds (88.8% vs 86.7%, and 84.9% vs 83.9%). Weather setters,
+auras and Intimidate are still unmodelled and still real mechanics — they are
+just not the explanation for this gap.
+
+What the test found instead: the two arms are **identical through turn 3**
+(89.0% vs 89.2%) and then the Mega arm loses ~11 points and never recovers,
+with near-identical hit counts per turn band. So it is something a Mega leaves
+behind, not a mix effect and not the moment of evolving.
+
+Following that residual found **Parental Bond**, now implemented: the engine
+scales the second hit by 0.25 in this generation, so the pair is **1.25x**, not
+the 1.5x this backlog had written down. Measured at 1.200 over 92 hits first.
+Mismatches from turn 3 on fell 449 -> 391 on identical samples, and
+Kangaskhan-Mega, Crunch and Sucker Punch all left the worst-offenders list.
+
+### ~~Mega — measured 2026-08-25~~, and the priority was upside down
+
+Experiment 0015. **Enabling Mega costs the damage model about seven points,
+and 75–85% of that loss is on hits that do not involve a Mega at all.**
+
+```
+                    seed 1                 seed 7
+never Mega        93.9% (n= 9991)       91.2% (n=10156)
+always Mega       87.3% (n= 9717)       83.2% (n=10042)
+  involves a Mega 88.3% (n= 1751)       78.6% (n= 1583)
+  no Mega on field 87.0% (n= 7966)      84.0% (n= 8459)
+```
+
+The non-Mega bucket is the stable finding: −6.9 and −7.2 points across two
+seeds on ~8,000 hits each. The Mega bucket is *not* stable (88.3% vs 78.6% on
+~1,700), so nothing is concluded from it.
+
+Getting there needed two measurement bugs fixed first, both of which had
+already produced plausible-looking numbers: `active_by_ident` silently dropped
+every Mega'd Pokemon's hits, and `TeamPool.generated` was unseeded so two runs
+drew different teams.
+
+### ~~Split by team, not only by replay~~ — done 2026-08-24, and the answer was no
 
 **A clean team-level split is impossible on this corpus, and the leakage was
 inflating every reported figure by about four points.** Written up as
@@ -218,191 +310,139 @@ Two things follow, both recorded rather than done:
   order (97.7%) and the knockout claim (99.0%) are measured. Replay agreement
   measures something narrower, and now says so.
 
-### ~~1. Mega — measured 2026-08-25~~, and the priority was upside down
+### ~~The rest of the unpriced support moves~~ — mostly done 2026-08-24
 
-Experiment 0015. **Enabling Mega costs the damage model about seven points,
-and 75–85% of that loss is on hits that do not involve a Mega at all.**
-
-```
-                    seed 1                 seed 7
-never Mega        93.9% (n= 9991)       91.2% (n=10156)
-always Mega       87.3% (n= 9717)       83.2% (n=10042)
-  involves a Mega 88.3% (n= 1751)       78.6% (n= 1583)
-  no Mega on field 87.0% (n= 7966)      84.0% (n= 8459)
-```
-
-The non-Mega bucket is the stable finding: −6.9 and −7.2 points across two
-seeds on ~8,000 hits each. The Mega bucket is *not* stable (88.3% vs 78.6% on
-~1,700), so nothing is concluded from it.
-
-Getting there needed two measurement bugs fixed first, both of which had
-already produced plausible-looking numbers: `active_by_ident` silently dropped
-every Mega'd Pokemon's hits, and `TeamPool.generated` was unseeded so two runs
-drew different teams.
-
-### ~~1. The field effects a Mega brings~~ — refuted 2026-08-25
-
-Experiment 0016. Bystander hits are marginally **better** with a Mega on the
-field, in both seeds (88.8% vs 86.7%, and 84.9% vs 83.9%). Weather setters,
-auras and Intimidate are still unmodelled and still real mechanics — they are
-just not the explanation for this gap.
-
-What the test found instead: the two arms are **identical through turn 3**
-(89.0% vs 89.2%) and then the Mega arm loses ~11 points and never recovers,
-with near-identical hit counts per turn band. So it is something a Mega leaves
-behind, not a mix effect and not the moment of evolving.
-
-Following that residual found **Parental Bond**, now implemented: the engine
-scales the second hit by 0.25 in this generation, so the pair is **1.25x**, not
-the 1.5x this backlog had written down. Measured at 1.200 over 92 hits first.
-Mismatches from turn 3 on fell 449 -> 391 on identical samples, and
-Kangaskhan-Mega, Crunch and Sucker Punch all left the worst-offenders list.
-
-### ~~1. The rest of the eleven points~~ — not the Mega formes (0017)
-
-A targeted 19,802-hit measurement across **71 distinct Mega Stone holders**
-(149 of 150 generated teams carry one) settles it:
+Fourteen of the 23 are now priced, in four clusters, each its own commit:
 
 ```
-total misses in the sample:              ~4158
-misses inside the six worst formes:       ~270   (6.5%)
-fixing all six to perfect would give:    +1.36 points
+borrowing another move   Copycat, Sleep Talk, Instruct           (Spite left)
+rewriting a typing       Soak, Magic Powder, Forest's Curse,
+                         Trick-or-Treat, Reflect Type
+buying an ordering       After You, Quash                  (Ally Switch left)
+denying a retreat        Block, Mean Look
+handing an ability       Skill Swap, Role Play, Entrainment,
+                         Worry Seed, Simple Beam
 ```
 
-Ninety-three percent of the misses sit in formes that look individually fine.
-No amount of further ability transcription will find this gap.
+Not one of them is priced with a new constant. Each reuses a currency that was
+already there — After You is worth the turn our partner would otherwise lose,
+Block is worth exactly what we price our *own* escape at, and the retyping and
+ability moves are worth the difference between two runs of the damage
+estimator. That last trick needed `estimate_damage` to answer "what if they
+were this type instead", which is now an explicit `defender_types` override.
 
-**Both standing leads were noise.** Ampharos-Mega read 1.650 on n=14 and
-**0.990 on n=61/115**. Implementing on the thin sample, which this list was one
-step from doing, would have added a wrong multiplier and then confirmed it
-against the same thin sample.
+**The corpus cannot judge any of this.** Humans picked one of these fourteen
+**sixteen times in 500 battles** — seven Instructs and nine Soaks, and none of
+the other twelve at all. Agreement moved 45.42% → 45.45% on train and 47.25%
+→ 47.30% on test, 3 up and 0 down, which is neither significant nor meant to
+be. The verification is **29 tests against the engine's own rules** instead:
+`moves.ts` for the failure cases, the move flags already in our dump for what
+refuses to be borrowed, the ability flags for what refuses to be handed
+around, and `trapped: 3` in the type chart for why Ghosts cannot be trapped.
 
-**Ranking by bias was the wrong question.** Pyroar-Mega: median 1.003,
-accuracy 65.2%. The gap is measured in accuracy, and a median-based hunt is
-structurally blind to a conditional-in-the-model, unconditional-in-the-game
-effect. Re-ranking by accuracy found the real list immediately.
+Three things the corpus *did* catch, all in Instruct:
 
-Fixed: **Fire Mane** (filed as a pinch ability on the strength of its name; the
-engine has no HP condition — Pyroar-Mega 65.2% → 86.4% on identical hits) and
-**Skill Link** (engine-correct, but its contribution here is *not* demonstrated
-— Heracross never appeared among the worst by accuracy).
+- **It is usually not the last move that gets repeated.** Instruct is priority
+  0 and its users are slow, so the ally has already moved by the time it
+  resolves. Reading `last_move` gave the previous turn's move, and it was
+  wrong in all seven human Instructs — twice reporting "nothing to repeat" for
+  a Torkoal that fired an Eruption in that very turn.
+- **Not everything gains from going twice in one turn.** The repeat is
+  immediate, so a second Protect is refused and a second Trick Room undoes the
+  first. Without that rule the best repeat for one ally came out as its
+  Protect, at 310 points for an effect worth nothing.
+- **Instruct's target is `normal`, not `adjacentAlly`.** The engine offers it
+  across the field, which hands the opponent a free attack.
 
-### ~~1. Measure the width of our predictions~~ — refuted too, 2026-08-25
+### ~~Abilities~~ — done 2026-08-24
 
-The interval is not too narrow. Measured on 12,507 hits across both arms:
-
-```
-                        never Mega        always Mega
-inside the interval       91.3%             84.4%
-fell below                 4.7%              8.5%
-fell above                 4.0%              7.1%
-median miss, below        1.36 widths       1.06 widths
-median miss, above        2.50 widths       2.22 widths
-within half a width        6-8%             11-21%
-```
-
-A too-narrow interval puts misses *just* outside. These land one to two and a
-half interval-widths out, and near-symmetrically — so the failures are a
-minority of hits being **badly** wrong in both directions, not a majority
-being marginally wrong.
-
-**Fixed on the way:** Skill Link narrowed only the expected count and left
-`hit_range` alone, so a Pokemon that always lands five hits still carried a
-two-to-five prediction. The previous commit's message claimed the range was
-narrowed and the code had not done it.
-
-**Four hypotheses are now eliminated** for the Mega gap: field effects (0016),
-a broad systematic bias (the control arm carries the same background),
-per-forme damage errors (0017), and interval width (here). What is left is that
-a *minority of specific hits* are badly wrong, roughly as often high as low.
-
-### 1. Spread moves are eight points worse, in both arms
-
-A new finding, and independent of Mega — the gap is the same size with Mega off:
+The item said "five support moves need ability tracking". Measuring first
+found something an order of magnitude larger: **abilities were the biggest
+remaining source of damage error in the whole model.**
 
 ```
-              never Mega        always Mega
-ordinary       92.5%             85.7%
-spread         84.9%  (-7.6)     77.4%  (-8.3)
+fully random teams (all abilities and items)     80.1%   ->  92-94%
+items on, abilities inert                        92.5%
+the control (neither)                           96-99%
 ```
 
-n≈1,700 spread hits. Not the cause of the Mega gap (which hits both classes
-about equally) but a real, general, well-sampled defect that predates it.
+Values read off the residual before being written down, as Life Orb was:
+Huge Power 1.950, Hustle 1.472, Tough Claws 1.243, Iron Fist 1.158,
+Adaptability 1.319. Everything else landed inside ±5% of 1.0 — which is **not**
+the same as absent, because the median only catches *unconditional*
+multipliers. A Multiscale that halves damage one hit in five leaves it
+untouched, so the conditional ones are transcribed from the engine instead and
+their test is the harness afterwards.
 
-The obvious cause is already handled — `DamageSample.predict` passes
-`doubles=False` when a spread move reached only one target, so the 0.75
-reduction is correctly skipped there. So it is something else, and worth its
-own pass.
+Two process notes worth keeping:
 
-### 2. Three that are worth doing on their own merits
+- **Adaptability was missed by the first extraction** because it hangs off
+  `onModifySTAB` rather than any stat hook. A search for one hook shape finds
+  only that shape.
+- **The Dragon Darts split was inert**, and the control harness said so: every
+  mismatch in one run was Dragon Darts over-predicted by exactly 2x. The
+  harness was passing `spread_targets` as the opponent count, and that is 1
+  for a single-target move — which Dragon Darts is, despite reaching both
+  opponents. It now counts what actually landed.
 
-Independent of the gap above, and all well-sampled:
+The **five support moves** the item was originally about — Skill Swap, Role
+Play, Entrainment, Worry Seed, Simple Beam — are still unpriced, and sit with
+the rest in item 1 below.
 
-```
-Mega Sol      n=215   55.3% accuracy   unmodelled (acts as sun for damage)
-Contrary      n=108   61.1% accuracy   unmodelled (inverts stat changes)
-the -ate cluster      50-52% accuracy  Refrigerate n=136, Pixilate n=52
-```
+### ~~Roost, and the Flying type~~ — done 2026-08-24
 
-The `-ate` cluster is the worst thing in the whole measurement **and involves
-abilities we already model**, so it is a bug rather than an omission — the
-highest-value single item here.
-
-### 3. Whether the agent should Mega at all
-
-Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
-non-Mega of the same move score identically and the choice falls to
-enumeration order. Deliberately last — building the judgement before the model
-can price a Mega correctly is the mistake 0013 already paid for.
-
-### 3. Make the terrain rules consult `is_grounded`
-
-`is_grounded` exists now but nothing calls it. Five rules still apply to
-Flying types and Levitate users that should be exempt:
+Roost strips the user's Flying type for the turn, and it explained the whole
+run-to-run swing in the control differential. **That swing was never noise** —
+it was whether the random team drew a Roost user.
 
 ```
-Terrain Pulse       only changes type for a grounded user
-Rising Voltage      only doubles against a grounded target
-Expanding Force     only boosted for a grounded user
-Misty Explosion     same
-the terrain damage bonuses (Electric, Grassy, Psychic)   same
+before   90.0% ... 95.0%   depending on team composition
+after    96.5%, 97.1%, 98.8% across three runs
 ```
 
-Cheap, and it is the last of the terrain work.
+Typing and grounding turned out to be one question, so item 5 is folded in
+here: `is_grounded` exists and knows Levitate, Air Balloon, Iron Ball,
+Gravity, Smack Down and Ingrain. The **terrain rules still have to consult
+it** — see item 4.
 
-### 4. Speed Boost and the weather Speed abilities
+The same silent bug shape appeared for the third time: `-singleturn` was
+recorded for the opponent and never for us, so our own Roost was invisible.
+Boosts, side conditions, and now single-turn effects.
 
-What is left in the turn-order residual after Choice Scarf. Chlorophyll, Swift
-Swim, Sand Rush and Slush Rush all double Speed under weather we already track;
-Speed Boost needs a per-turn counter.
+### ~~Focus Sash and the knockout claim~~ — done 2026-08-24
 
-Turn order currently reads **97.7%** on random teams, so this is a small
-remainder rather than a gap.
+**The gap was five times smaller than this said.** Measured against the engine
+first, per the rule 0013 earned: the "guaranteed knockout" claim was already
+right **98.1%** of the time. The 17% figure came from *replay* calibration,
+where the opponent's spread and item are unknown — it was measuring
+hidden-information uncertainty, not the knockout logic.
 
-### 5. The support moves that are still unpriced, and why
+Both causes of the remaining 1.9% were real and are fixed:
 
-Put last deliberately: every one of these is blocked on something we do not
-track rather than on effort, so the two items above are worth more per hour.
-Kept as an item rather than closed, because "we cannot say" is a claim that
-should be revisited, not a permanent verdict.
+```
+Focus Sash     leaves the holder on 1 HP, and only from full health.
+               Sturdy is the same as an ability. Focus Band is left out:
+               a 10% chance at any HP is a coin flip, not a certainty.
+Dragon Darts   is multihit 2 *and* smartTarget, so in doubles it fires one
+               dart at each opponent rather than two at one. `smartTarget`
+               was not dumped at all.
+```
 
-| Move | Why |
-|---|---|
-| **Ally Switch** | Its value is dodging an attack aimed at a slot, and which slot they aimed at is exactly what a player cannot see. |
-| **Perish Song** | Cuts both ways. Depends on being ahead and on trapping, neither modelled. A first attempt at a number cost three labels. |
-| **Teatime** | Everything on the field eats its Berry, ours included — and their Berries are the half we cannot see. |
-| **Baton Pass** | Passes boosts to a chosen bench Pokemon. Needs a model of who benefits, which is a matchup question. |
-| **Transform** | Becomes the target. Priceable in principle, but the value is next turn's whole moveset. |
-| **Spite** | PP is not modelled at all, an opponent's is unknowable, and four PP in a five-turn format is rarely what binds. |
-| **Swallow** | Needs a Stockpile counter that nothing tracks. |
-| **Lock-On** | Guarantees next turn's hit. Worth the accuracy gap on a move we have not chosen yet. |
-| **Wish, Healing Wish, Decorate, Magnetic Flux, Guard/Power Split** | Ally-facing or delayed; the arithmetic is easy and the plumbing to reach the right Pokemon is not there yet. |
+Now **99.0%**, with neither cause left among the survivors.
 
-Three more — **Trick, Switcheroo, Fling** — are priced already, but only once
-the opponent's item has shown itself, which is the same shape as the five
-ability moves above.
+### ~~Read the fields we already dump~~ — done 2026-08-24
 
----
+All six wired. It found a real bug, as this shape of check keeps doing:
+**the four one-hit knockout moves read as status moves** — the *fourth*
+distinct reason a move in this dex can carry a zero base power, after the
+per-hit callbacks, the situational multipliers and the damage callbacks.
+
+`modifies_type` was the other substantial one: Weather Ball, Terrain Pulse,
+Raging Bull and Aura Wheel were all read on the wrong row of the type chart.
+
+Agreement train 45.36 → 45.42%, test 47.06 → **47.25%**. Damage prediction
+holds at ~95% on the control team.
+
 
 ## Reviewed externally, 2026-08-24
 
