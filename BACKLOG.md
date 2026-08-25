@@ -33,37 +33,6 @@ than disappearing.
 
 ## Now
 
-### ~~The `-ate` cluster~~ — done 2026-08-25, and it was dead code
-
-`ATE_MULTIPLIER` was applied to `power` **twenty-six lines after** `base` had
-already consumed it:
-
-```python
-base = (2 * level // 5 + 2) * power * attack_stat // ...   # line 449
-...
-if rewritten is not None:
-    power = modify(power, ATE_MULTIPLIER)                   # line 475
-```
-
-So the bonus modified a variable nothing read again. **Refrigerate, Pixilate
-and Dragonize have never once paid it** — a flat 20% under-prediction on every
-Normal move an -ate user throws, well outside a 17.5%-wide interval, and
-diluted in the median because their other moves are unaffected. That is
-exactly the perfect-median/poor-accuracy signature that led here.
-
-```
-ATK Glalie-Mega    50.7% -> 87.5%   (+36.8, identical 136 hits)
-Altaria-Mega and Feraligatr-Mega both leave the worst-26 list entirely
-overall, on this Mega-dense population   79.0% -> 79.5%
-```
-
-**All 1092 tests passed with the bug in place.** The suite tested every piece
--- `rewritten_type` returned "Ice", `stab_multiplier` returned 1.5 -- and
-never checked that the assembled number moved. Unit tests on components cannot
-see a wiring error between them. The regression test added here asserts the
-damage actually changes, and was verified by reverting only `damage.py` and
-watching it fail.
-
 ### 1. Spread moves are eight points worse, in both arms
 
 A new finding, and independent of Mega — the gap is the same size with Mega off:
@@ -156,6 +125,37 @@ ability moves above.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~The `-ate` cluster~~ — done 2026-08-25, and it was dead code
+
+`ATE_MULTIPLIER` was applied to `power` **twenty-six lines after** `base` had
+already consumed it:
+
+```python
+base = (2 * level // 5 + 2) * power * attack_stat // ...   # line 449
+...
+if rewritten is not None:
+    power = modify(power, ATE_MULTIPLIER)                   # line 475
+```
+
+So the bonus modified a variable nothing read again. **Refrigerate, Pixilate
+and Dragonize have never once paid it** — a flat 20% under-prediction on every
+Normal move an -ate user throws, well outside a 17.5%-wide interval, and
+diluted in the median because their other moves are unaffected. That is
+exactly the perfect-median/poor-accuracy signature that led here.
+
+```
+ATK Glalie-Mega    50.7% -> 87.5%   (+36.8, identical 136 hits)
+Altaria-Mega and Feraligatr-Mega both leave the worst-26 list entirely
+overall, on this Mega-dense population   79.0% -> 79.5%
+```
+
+**All 1092 tests passed with the bug in place.** The suite tested every piece
+-- `rewritten_type` returned "Ice", `stab_multiplier` returned 1.5 -- and
+never checked that the assembled number moved. Unit tests on components cannot
+see a wiring error between them. The regression test added here asserts the
+damage actually changes, and was verified by reverting only `damage.py` and
+watching it fail.
 
 ### ~~Measure the width of our predictions~~ — refuted too, 2026-08-25
 
