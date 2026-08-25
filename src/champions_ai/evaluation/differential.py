@@ -141,6 +141,8 @@ class DamageSample:
             # the formula when the formula was fine.
             base_power=dynamic_base_power(
                 move,
+                # Mega Sol makes Solar Beam stop being halved by the weather.
+                attacker_ability=self.attacker.current_ability,
                 # Every terrain bonus is gated on footing, and the two sides
                 # are asked separately because the rules disagree about whose
                 # feet matter: Rising Voltage reads the target's.

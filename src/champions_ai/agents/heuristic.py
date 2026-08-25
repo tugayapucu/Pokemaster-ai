@@ -512,6 +512,8 @@ class HeuristicAgent(Agent):
                 move,
                 attacker=attacker_species,
                 defender=defender_species,
+                # Mega Sol makes Solar Beam stop being halved by the weather.
+                attacker_ability=attacker.current_ability,
                 # Terrain bonuses need footing, and the two sides are asked
                 # separately because Rising Voltage reads the target's while
                 # everything else reads ours.

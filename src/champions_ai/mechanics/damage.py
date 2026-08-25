@@ -371,6 +371,12 @@ def estimate_damage(
     # be read on the row the move will *actually* have. Weather Ball in sun is
     # a Fire move, which is super effective against a Grass type the chart
     # would otherwise have called neutral.
+    # Mega Sol does not set sun, it makes the weather *read* as sun while its
+    # holder is the one acting -- the engine keys that off `activePokemon`, so
+    # the defender's own weather check sees it too. Applied here, before
+    # anything reads `weather`, so every rule below agrees.
+    weather = ability_rules.effective_weather(attacker_ability, weather)
+
     # Footing decides every terrain rule, and the two sides are asked
     # separately because the rules disagree about whose feet matter: Rising
     # Voltage reads the *target's*, everything else the attacker's.

@@ -2,6 +2,7 @@ from champions_ai.mechanics.abilities import (
     ABILITY_MOVES,
     abilities_after,
     ability_move_succeeds,
+    effective_weather,
     extra_hit_multiplier,
     linked_hits,
 )
@@ -88,6 +89,7 @@ __all__ = [
     "apply_boost",
     "ABILITY_MOVES",
     "abilities_after",
+    "effective_weather",
     "extra_hit_multiplier",
     "linked_hits",
     "ability_move_succeeds",

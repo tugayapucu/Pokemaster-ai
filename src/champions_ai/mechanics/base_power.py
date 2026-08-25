@@ -18,6 +18,7 @@ weight move by two whole brackets.
 """
 
 from champions_ai.dex import MoveInfo, SpeciesInfo
+from champions_ai.mechanics.abilities import effective_weather
 
 # Low Kick and Grass Knot: heavier targets take more. Thresholds converted from
 # the engine's hectograms to the kilograms our dex carries.
@@ -185,6 +186,7 @@ def dynamic_base_power(
     # does not know gets the common case rather than silently losing them.
     attacker_grounded: bool = True,
     defender_grounded: bool = True,
+    attacker_ability: str | None = None,
 ) -> int:
     """The base power this move would actually have, given the situation.
 
@@ -202,6 +204,11 @@ def dynamic_base_power(
     `basePowerCallback`. Those multipliers are applied on top of whatever the
     first family works out.
     """
+    # Mega Sol makes the weather read as sun while its holder is acting, and
+    # in this dex that mostly means Solar Beam stops being halved. Applied
+    # here rather than at each call site so there is one source of truth.
+    weather = effective_weather(attacker_ability, weather)
+
     value = _base_value(
         move,
         attacker=attacker,

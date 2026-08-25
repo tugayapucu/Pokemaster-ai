@@ -21,6 +21,7 @@ from champions_ai.mechanics.abilities import (
     attack_multiplier,
     base_power_multiplier,
     defence_multiplier,
+    effective_weather,
     extra_hit_multiplier,
     linked_hits,
     rewritten_type,
@@ -367,3 +368,38 @@ def test_an_ate_ability_actually_raises_the_damage():
     assert refrigerated.maximum > plain.maximum
     # 1.2x on base power, and neither STAB nor effectiveness moves here.
     assert refrigerated.maximum / plain.maximum == pytest.approx(1.2, abs=0.03)
+
+
+# --- Mega Sol ------------------------------------------------------------
+
+
+def test_mega_sol_makes_the_weather_read_as_sun():
+    """It does not *set* sun. The engine returns 'sunnyday' from
+    `Pokemon.effectiveWeather()` while its holder is the one acting, keyed off
+    `activePokemon` -- so the whole calculation sees sun, the defender's own
+    weather check included, and sees the real weather again when anybody else
+    moves."""
+    assert effective_weather("megasol", "snowscape") == "sunnyday"
+    assert effective_weather("megasol", None) == "sunnyday"
+
+
+def test_everything_else_fights_in_the_real_weather():
+    assert effective_weather("chlorophyll", "snowscape") == "snowscape"
+    assert effective_weather(None, "raindance") == "raindance"
+    assert effective_weather(None, None) is None
+
+
+def test_mega_sol_stops_solar_beam_being_halved():
+    """The practical effect in this dex: we halve the solar moves in any
+    weather that is not sun, and snow is everywhere in this format."""
+    from champions_ai.mechanics.base_power import dynamic_base_power
+
+    solar_beam = _bond_move(
+        "solarbeam", type="Grass", category="Special", base_power=120
+    )
+    halved = dynamic_base_power(solar_beam, weather="snowscape")
+    sunny = dynamic_base_power(
+        solar_beam, weather="snowscape", attacker_ability="megasol"
+    )
+    assert halved == 60
+    assert sunny == 120

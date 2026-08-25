@@ -432,3 +432,28 @@ def linked_hits(ability: str | None, move: MoveInfo) -> int | None:
     if isinstance(count, (tuple, list)) and len(count) == 2:
         return int(count[1])
     return None
+
+
+# --- Mega Sol, which makes its holder fight in sunshine ---------------------
+#
+# Meganium-Mega does not *set* sun; it makes the weather read as sun while it
+# is the one acting. The engine does this inside `Pokemon.effectiveWeather()`:
+#
+#     if (this.battle.activePokemon?.hasAbility('megasol') && ...) {
+#         return 'sunnyday';
+#     }
+#
+# Note it keys off `activePokemon`, not the holder -- so the whole calculation
+# sees sun while Meganium-Mega attacks, the *defender's* weather check
+# included, and sees the real weather again when anyone else moves. That is why
+# it showed up on the attacking side only: n=215 at 55.3% accuracy.
+#
+# In this dex the practical effect is mostly Solar Beam, which we halve in any
+# weather that is not sun -- and snow is everywhere in this format.
+MEGA_SOL = "megasol"
+MEGA_SOL_WEATHER = "sunnyday"
+
+
+def effective_weather(ability: str | None, weather: str | None) -> str | None:
+    """The weather this attacker's hit is calculated in."""
+    return MEGA_SOL_WEATHER if ability == MEGA_SOL else weather

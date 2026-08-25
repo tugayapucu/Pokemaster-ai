@@ -33,18 +33,28 @@ than disappearing.
 
 ## Now
 
-### 1. Mega Sol and Contrary — genuinely unmodelled, well sampled
+### 1. The harness cannot see a stat change made earlier in the same turn
+
+`DamageCollector` reads both sides from a snapshot taken *before* the turn
+resolves. Across turns that is right; within one it lags, so a hit that lands
+after a Swords Dance, an Intimidate or a Close Combat is scored against stale
+stages. Measured:
 
 ```
-Mega Sol   n=215   55.3% accuracy   acts as sun for damage (Meganium-Mega)
-Contrary   n=108   61.1% accuracy   inverts stat changes   (Staraptor-Mega)
+a stage changed earlier in the same turn   n=1167   inside 82.5%
+no stage change that turn                  n=3804   inside 88.9%
 ```
 
-Both are real omissions rather than bugs, both have enough samples to act on,
-and neither is implicated in the Mega gap — they are worth doing on their own
-merits. Contrary is the more interesting of the two: it inverts every stat
-change, so a Close Combat *raises* the user's defences, and nothing in the
-model expects that.
+**A 6.4-point gap on 23% of all sampled hits**, which makes it the largest
+single measured defect left and the best explanation on offer for
+Staraptor-Mega: Contrary turns a Close Combat's −1/−1 into +1/+1, so the miss
+is two stages wide rather than one.
+
+It is an *instrument* problem, not a model one -- the same class as
+`active_by_ident` dropping Mega'd Pokemon and the turn-order harness never
+looking at the weather. Both of those made a real effect unmeasurable until
+fixed. The job: track `-boost`/`-unboost` within the chunk and apply them to
+the snapshot before predicting.
 
 ### 2. Whether the agent should Mega at all
 
@@ -83,6 +93,30 @@ ability moves above.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~Mega Sol and Contrary~~ — done 2026-08-25, and only one needed code
+
+**Mega Sol** does not *set* sun. It makes the weather read as sun while its
+holder is acting, and the engine keys that off `activePokemon`, so the whole
+calculation sees sun -- the defender's own weather check included -- and sees
+the real weather again the moment anybody else moves:
+
+```js
+if (this.battle.activePokemon?.hasAbility('megasol') && ...) return 'sunnyday';
+```
+
+In this dex the practical effect is Solar Beam, which we halve in any weather
+that is not sun, and snow is everywhere in this format. Meganium-Mega went from
+55.3% (n=215) to off the worst-offenders list; overall 79.5% → 80.4%.
+
+**Contrary needed nothing at all.** It inverts through `onChangeBoost`, which
+runs *before* the boost is applied and announced -- so the `|-boost|` line
+already carries the inverted value, and boosts have been tracked on both sides
+since the own-side fix. Predicted no change and measured none: Staraptor-Mega
+61.1% → 62.0% with nothing written for it.
+
+Which leaves the question of why Staraptor-Mega is now the worst thing on the
+list, and the answer is the item below.
 
 ### ~~The weather Speed abilities~~ — done 2026-08-25
 
@@ -561,6 +595,11 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **Check the instrument can see the effect before modelling it.** Three
+  times now the harness was blind to the thing being fixed: `active_by_ident`
+  dropped every Mega'd Pokemon, the turn-order collector never read the
+  weather, and the damage collector cannot see a stage change made earlier in
+  the same turn. Verification against a blind instrument is vacuous.
 - **Test the assembled number, not only the pieces.** The -ate bonus was dead
   code for its whole life and 1092 tests were content, because each piece
   behaved and nothing checked that the damage moved. A component suite cannot
