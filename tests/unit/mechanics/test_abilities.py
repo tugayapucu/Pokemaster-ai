@@ -22,6 +22,7 @@ from champions_ai.mechanics.abilities import (
     base_power_multiplier,
     defence_multiplier,
     extra_hit_multiplier,
+    linked_hits,
     rewritten_type,
     stab_multiplier,
     taken_multiplier,
@@ -218,3 +219,59 @@ def test_parental_bond_respects_the_engines_flags():
 def test_anything_else_gets_one_hit():
     assert extra_hit_multiplier("hugepower", _bond_move(), is_spread=False) == 1.0
     assert extra_hit_multiplier(None, _bond_move(), is_spread=False) == 1.0
+
+
+# --- Skill Link ----------------------------------------------------------
+
+
+def test_skill_link_forces_the_maximum_hit_count():
+    """"2-5, averaging 3.167" becomes a flat 5 -- a 1.58x multiplier on those
+    moves, and it also deletes the hit-count uncertainty that dominates our
+    predicted range for them."""
+    bullet_seed = _bond_move(
+        "bulletseed", type="Grass", base_power=25, multihit=(2, 5)
+    )
+    assert linked_hits("skilllink", bullet_seed) == 5
+
+
+def test_skill_link_leaves_a_fixed_multi_hit_move_alone():
+    """Double Kick already always hits twice; there is no roll to remove."""
+    double_kick = _bond_move("doublekick", base_power=30, multihit=2)
+    assert linked_hits("skilllink", double_kick) is None
+
+
+def test_skill_link_does_nothing_to_a_single_hit_move():
+    assert linked_hits("skilllink", _bond_move()) is None
+
+
+def test_without_skill_link_the_count_still_rolls():
+    bullet_seed = _bond_move(
+        "bulletseed", type="Grass", base_power=25, multihit=(2, 5)
+    )
+    assert linked_hits("technician", bullet_seed) is None
+    assert linked_hits(None, bullet_seed) is None
+
+
+def test_fire_mane_is_not_a_pinch_ability():
+    """It was filed with Blaze on the strength of the name. The engine has no
+    HP condition -- `if (move.type === 'Fire') return this.chainModify(1.5)` --
+    so it is x1.5 always, on both attacking stats.
+
+    Caught by Pyroar-Mega reading 65.2% accuracy against a *perfect* median of
+    1.003: the signature of an effect that is conditional in the model and
+    unconditional in the game.
+    """
+    ember = _bond_move("ember", type="Fire", category="Special", base_power=40)
+    assert attack_multiplier("firemane", ember, hp_fraction=1.0) == 1.5
+    assert attack_multiplier("firemane", ember, hp_fraction=0.2) == 1.5
+
+
+def test_fire_mane_still_only_helps_fire_moves():
+    assert attack_multiplier("firemane", _bond_move(), hp_fraction=1.0) == 1.0
+
+
+def test_blaze_really_is_a_pinch_ability():
+    """The contrast that makes the Fire Mane fix meaningful."""
+    ember = _bond_move("ember", type="Fire", category="Special", base_power=40)
+    assert attack_multiplier("blaze", ember, hp_fraction=1.0) == 1.0
+    assert attack_multiplier("blaze", ember, hp_fraction=0.2) == 1.5

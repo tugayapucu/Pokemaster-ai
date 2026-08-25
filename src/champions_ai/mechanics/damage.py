@@ -520,7 +520,14 @@ def estimate_damage(
     # counted twice.
     crit_lift = 1.0 if move.always_crits else 1 + (CRIT_MULTIPLIER - 1) * critical_chance(move)
 
-    hits = 1.0 if _splits_hits(move, doubles, opponents) else expected_hits(move)
+    if _splits_hits(move, doubles, opponents):
+        hits = 1.0
+    else:
+        # Skill Link makes the count certain rather than merely higher, which
+        # matters twice over: the average rises *and* the predicted range stops
+        # carrying the hit-count uncertainty that dominates it.
+        forced = ability_rules.linked_hits(attacker_ability, move)
+        hits = float(forced) if forced is not None else expected_hits(move)
     minimum = max(1, int(low * low_hits * crit))
     maximum = max(1, int(high * high_hits * crit))
     expected = average_hit * hits * crit * crit_lift

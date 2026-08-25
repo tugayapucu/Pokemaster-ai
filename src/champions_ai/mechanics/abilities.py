@@ -39,7 +39,23 @@ PINCH_ABILITIES: dict[str, str] = {
     "torrent": "Water",
     "overgrow": "Grass",
     "swarm": "Bug",
-    "firemane": "Fire",
+}
+
+# Fire Mane looks like a pinch ability and is not one -- it was listed with
+# Blaze here on the strength of the name, and the engine has no HP condition
+# at all:
+#
+#     onModifyAtk(atk, attacker, defender, move) {
+#         if (move.type === 'Fire') return this.chainModify(1.5);
+#     }
+#
+# So it is x1.5 on every Fire move, always, on both attacking stats. Caught by
+# Pyroar-Mega reading 65.2% accuracy against a *perfect* median of 1.003 --
+# the tell that an effect is conditional in the model and unconditional in the
+# game, since its non-Fire moves diluted the bias away while every Fire move
+# above a third of its health was under-predicted.
+TYPE_ATTACK_ABILITIES: dict[str, tuple[str, float]] = {
+    "firemane": ("Fire", 1.5),
 }
 PINCH_FRACTION = 1 / 3
 PINCH_MULTIPLIER = 1.5
@@ -177,6 +193,9 @@ def attack_multiplier(
     multiplier = ATTACK_MULTIPLIERS.get(ability, 1.0)
     if PINCH_ABILITIES.get(ability) == move.type and hp_fraction <= PINCH_FRACTION:
         multiplier *= PINCH_MULTIPLIER
+    typed = TYPE_ATTACK_ABILITIES.get(ability)
+    if typed is not None and typed[0] == move.type:
+        multiplier *= typed[1]
     if ability == GUTS and status and move.category == "Physical":
         multiplier *= STATUS_MULTIPLIER
     if ability == SOLAR_POWER and weather in SUN and move.category == "Special":
@@ -390,3 +409,26 @@ def extra_hit_multiplier(
     if is_spread or PARENTAL_BOND_EXEMPT_FLAGS & set(move.flags):
         return 1.0
     return 1.0 + PARENTAL_BOND_SECOND_HIT
+
+
+# --- Skill Link, which removes the roll rather than raising the average -----
+#
+# Heracross-Mega always lands the maximum number of hits, so Bullet Seed and
+# Pin Missile go from "2-5, averaging 3.167" to a flat 5. That is a **1.58x**
+# multiplier on those moves and, just as importantly, it collapses the range:
+# our predicted spread for a multi-hit move is mostly the hit count, and Skill
+# Link deletes that uncertainty entirely.
+#
+# Measured at 1.069 across 62 hits, which looks small only because most of
+# Heracross's moves are not multi-hit and the median is diluted by them.
+SKILL_LINK = "skilllink"
+
+
+def linked_hits(ability: str | None, move: MoveInfo) -> int | None:
+    """The fixed hit count Skill Link forces, or None if it does not apply."""
+    if ability != SKILL_LINK:
+        return None
+    count = move.multihit
+    if isinstance(count, (tuple, list)) and len(count) == 2:
+        return int(count[1])
+    return None

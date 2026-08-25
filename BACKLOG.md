@@ -258,24 +258,63 @@ the 1.5x this backlog had written down. Measured at 1.200 over 92 hits first.
 Mismatches from turn 3 on fell 449 -> 391 on identical samples, and
 Kangaskhan-Mega, Crunch and Sucker Punch all left the worst-offenders list.
 
-### 1. The rest of the eleven points
+### ~~1. The rest of the eleven points~~ — not the Mega formes (0017)
 
-Parental Bond was the largest single contributor and does not account for the
-gap. What is left is a **broad ~3-4% over-prediction across many attackers**
-(medians clustering at 0.95-0.97) rather than one ability.
-
-Two leads with real magnitude and samples too thin to act on:
+A targeted 19,802-hit measurement across **71 distinct Mega Stone holders**
+(149 of 150 generated teams carry one) settles it:
 
 ```
-Ampharos   n=14  median 1.650    Mega Ampharos has Mold Breaker, unmodelled
-Ditto      n=12  median 1.591    Imposter copies the target; we use Ditto's stats
+total misses in the sample:              ~4158
+misses inside the six worst formes:       ~270   (6.5%)
+fixing all six to perfect would give:    +1.36 points
 ```
 
-**Widen the sample before implementing either.** A weak signal implemented as
-a strong one has already cost this project once (0013), and n=14 is thinner
-than anything that has been acted on here.
+Ninety-three percent of the misses sit in formes that look individually fine.
+No amount of further ability transcription will find this gap.
 
-### 2. Whether the agent should Mega at all
+**Both standing leads were noise.** Ampharos-Mega read 1.650 on n=14 and
+**0.990 on n=61/115**. Implementing on the thin sample, which this list was one
+step from doing, would have added a wrong multiplier and then confirmed it
+against the same thin sample.
+
+**Ranking by bias was the wrong question.** Pyroar-Mega: median 1.003,
+accuracy 65.2%. The gap is measured in accuracy, and a median-based hunt is
+structurally blind to a conditional-in-the-model, unconditional-in-the-game
+effect. Re-ranking by accuracy found the real list immediately.
+
+Fixed: **Fire Mane** (filed as a pinch ability on the strength of its name; the
+engine has no HP condition — Pyroar-Mega 65.2% → 86.4% on identical hits) and
+**Skill Link** (engine-correct, but its contribution here is *not* demonstrated
+— Heracross never appeared among the worst by accuracy).
+
+### 1. Measure the width of our predictions, not the centre
+
+Three explanations are now eliminated: Mega field effects (0016), a broad
+systematic bias (the control arm carries the same ±3-5% background), and
+per-forme damage errors (0017). What survives is that the gap is in the
+**range** rather than the centre — our predicted interval is wrong in a way a
+median cannot see. Skill Link is an example of the shape, if not the size: it
+does not merely raise the average, it deletes the uncertainty.
+
+So: compare the *width* of our predicted intervals against the engine's actual
+spread, per move class. That is a different measurement from anything run so
+far, and every multiplier-hunting pass has now come back negative.
+
+### 2. Three that are worth doing on their own merits
+
+Independent of the gap above, and all well-sampled:
+
+```
+Mega Sol      n=215   55.3% accuracy   unmodelled (acts as sun for damage)
+Contrary      n=108   61.1% accuracy   unmodelled (inverts stat changes)
+the -ate cluster      50-52% accuracy  Refrigerate n=136, Pixilate n=52
+```
+
+The `-ate` cluster is the worst thing in the whole measurement **and involves
+abilities we already model**, so it is a bug rather than an omission — the
+highest-value single item here.
+
+### 3. Whether the agent should Mega at all
 
 Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
 non-Mega of the same move score identically and the choice falls to
@@ -405,6 +444,12 @@ Kept here so the same ground is not covered twice.
 - **A search for one hook shape finds only that shape.** Adaptability was
   missed when abilities were extracted by grepping the stat hooks, because it
   uses `onModifySTAB`. Cross-check an extraction against the measured residual.
+- **Bias and accuracy are different questions.** Ranking suspects by median
+  ratio is blind to any effect that is conditional in the model and
+  unconditional in the game: Pyroar-Mega read a perfect 1.003 median at 65%
+  accuracy. Rank by the metric the gap is measured in (0017).
+- **A thin sample does not become right by being acted on.** Ampharos-Mega
+  read 1.650 on n=14 and 0.990 on n=61. Widen before implementing.
 - **Name where the loss *is*, not where it is not.** 0015 measured that the
   loss fell on "hits that do not involve a Mega" and let that phrase become
   "hits affected by a Mega's field presence" without a measurement in between.
