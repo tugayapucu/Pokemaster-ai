@@ -811,11 +811,11 @@ class HeuristicAgent(Agent):
             except KeyError:
                 continue
             theirs = effective_speed(
-                estimate_stats(species.base_stats, self.assumed_opponent_points)["spe"],
+                self._opponent_stats(species)["spe"],
                 boost_stage=observed.boosts.speed,
                 tailwind=their_tailwind,
                 paralysed=observed.status == PARALYSIS,
-                item=observed.revealed_item,
+                item=self._known_item(observed),
                 # A Mega forme has one possible ability, so this is often
                 # known without ever having watched it fire.
                 ability=self._known_ability(observed),
@@ -1264,7 +1264,7 @@ class HeuristicAgent(Agent):
             attacker_species = self.dex.get_species(attacker.pokemon_set.species)
         except KeyError:
             return 0.0
-        stats = estimate_stats(species.base_stats, self.assumed_opponent_points)
+        stats = self._opponent_stats(species)
         hp = max(1, round(stats["hp"] * observed.hp_percent / 100))
 
         best = 0.0
@@ -1550,7 +1550,7 @@ class HeuristicAgent(Agent):
             species = self.dex.get_species(observed.species)
         except KeyError:
             return 0.0
-        opponent_stats = estimate_stats(species.base_stats, self.assumed_opponent_points)
+        opponent_stats = self._opponent_stats(species)
         hp = max(1, round(opponent_stats["hp"] * observed.hp_percent / 100))
 
         best = 0.0
@@ -1810,9 +1810,7 @@ class HeuristicAgent(Agent):
             except KeyError:
                 species = None
             if species is not None:
-                observed_stats = estimate_stats(
-                    species.base_stats, self.assumed_opponent_points
-                )
+                observed_stats = self._opponent_stats(species)
 
         return score_support_move(
             move,
@@ -1829,7 +1827,7 @@ class HeuristicAgent(Agent):
             # Ours is never hidden from us; theirs is, until it fires.
             attacker_item=self.dex.items.get(attacker.current_item or ""),
             defender_item=(
-                self.dex.items.get(observed.revealed_item or "")
+                self.dex.items.get(self._known_item(observed) or "")
                 if observed is not None
                 else None
             ),
@@ -1859,6 +1857,35 @@ class HeuristicAgent(Agent):
                 if not mon.fainted and index not in observation.own_side.active_slots
             ),
         )
+
+    def _opponent_stats(
+        self, species: SpeciesInfo, *, attacking: str | None = None
+    ) -> dict[str, int]:
+        """What we believe this opponent's stats are.
+
+        **The single point of assumption about the other side.** Stat Points
+        are never published (ADR 0002), so this is a modelling choice rather
+        than a fact: 66 points spread evenly over six stats, which no real team
+        does. Gathered into one method so an experiment can replace it
+        wholesale -- and so Milestone 10 has one thing to improve rather than
+        six call sites to find.
+
+        `attacking` credits the investment to the stat the move actually uses:
+        an opponent swinging a physical move is likely built for it.
+        """
+        if attacking is not None:
+            return assumed_stats(
+                species.base_stats, self.assumed_opponent_points, attacking=attacking
+            )
+        return estimate_stats(species.base_stats, self.assumed_opponent_points)
+
+    def _known_item(self, observed) -> str | None:
+        """The opponent's item, if we have actually seen it.
+
+        The other half of what we do not know about them, and the other thing
+        an experiment needs to be able to replace.
+        """
+        return observed.revealed_item if observed is not None else None
 
     def _known_ability(self, observed) -> str | None:
         """The opponent's ability, if it is actually knowable.
@@ -2157,11 +2184,7 @@ class HeuristicAgent(Agent):
             defending = move.defensive_stat
             # Credit investment to the stat the move actually uses: an
             # opponent swinging a physical move is likely built for it.
-            stats = assumed_stats(
-                species.base_stats,
-                self.assumed_opponent_points,
-                attacking=attacking,
-            )
+            stats = self._opponent_stats(species, attacking=attacking)
             # A Foul Play aimed at us swings with *our* Attack, which is
             # exactly why it is dangerous into our own physical attacker.
             swinging_stats, swinging_boosts = attacking_side(
@@ -2312,7 +2335,7 @@ class HeuristicAgent(Agent):
                 species = self.dex.get_species(observed.species)
             except KeyError:
                 continue
-            estimated = estimate_stats(species.base_stats, self.assumed_opponent_points)
+            estimated = self._opponent_stats(species)
             remaining = max(1, estimated["hp"] * observed.hp_percent // 100)
             return ResolvedTarget(
                 species=species,
@@ -2326,7 +2349,7 @@ class HeuristicAgent(Agent):
                 is_ally=False,
                 index=index,
                 status=observed.status,
-                item=observed.revealed_item,
+                item=self._known_item(observed),
                 ability=self._known_ability(observed),
                 may_hold_item=observed.may_hold_item,
                 at_full_hp=observed.hp_percent >= 100,
