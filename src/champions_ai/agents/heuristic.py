@@ -79,6 +79,7 @@ from champions_ai.mechanics import (
     move_priority,
     moves_first,
     ohko_chance,
+    other_stat,
     retyped_by,
     sleep_talk_candidates,
     spite_removes,
@@ -236,6 +237,9 @@ SWITCH_COST = -25.0
 # High Jump Kick, Axe Kick and Supercell Slam take half the user's maximum HP
 # when they miss. The engine spells it `baseMaxhp / 2`.
 CRASH_DAMAGE_FRACTION = 0.5
+
+# The one special mechanic Reg M-B enables.
+MEGA = "mega"
 
 
 class _BestMove(NamedTuple):
@@ -469,6 +473,14 @@ class HeuristicAgent(Agent):
         borrow is therefore scored by exactly the same arithmetic as if it had
         been picked directly.
         """
+        # A Mega action is the same move thrown by a different Pokemon, so it
+        # is scored as that Pokemon. Everything below -- damage, typing,
+        # ability, speed -- then follows without a special case of its own.
+        if action.special == MEGA and borrow_depth == 0:
+            became = self._mega_form(attacker, attacker_species)
+            if became is not None:
+                attacker_species, attacker = became
+
         if move.move_id in FIRST_TURN_MOVES and attacker.turns_on_field > 1:
             # The engine refuses these outright after the first turn out, and
             # it does so at runtime rather than reporting them as disabled, so
@@ -984,6 +996,59 @@ class HeuristicAgent(Agent):
                 action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",)
             )
         return ScoredAction(action, value * move.hit_chance, tuple(reasons))
+
+    def _mega_form(self, attacker, species: SpeciesInfo):
+        """`attacker` as it would be after Mega Evolving, or None if it cannot.
+
+        Scored as the forme rather than given a bonus, which is the whole
+        point: a Mega is a different Pokemon with different stats, a different
+        ability and sometimes a different typing, and the damage model already
+        knows what all three are worth. Inventing a "Mega is good" constant
+        would be guessing at a number the model can compute.
+
+        Stats are carried across by *ratio* rather than recomputed, so the
+        nature survives: `computed_stats` arrives from the engine with the
+        nature already in it, and the ratio of two point-adjusted bases cancels
+        it on both sides.
+        """
+        stone = self.dex.items.get(attacker.current_item or "")
+        if stone is None or not stone.mega_forme:
+            return None
+        try:
+            forme = self.dex.get_species(stone.mega_forme)
+        except KeyError:
+            return None
+
+        points = attacker.pokemon_set.stats
+        current = attacker.computed_stats or {}
+        before, after = species.base_stats, forme.base_stats
+        stats = dict(current)
+        for key, old_base, new_base, invested in (
+            ("atk", before.attack, after.attack, points.attack),
+            ("def", before.defense, after.defense, points.defense),
+            ("spa", before.special_attack, after.special_attack, points.special_attack),
+            ("spd", before.special_defense, after.special_defense, points.special_defense),
+            ("spe", before.speed, after.speed, points.speed),
+        ):
+            baseline = other_stat(old_base, invested)
+            if key in current and baseline > 0:
+                stats[key] = int(
+                    current[key] * other_stat(new_base, invested) / baseline
+                )
+
+        return forme, attacker.model_copy(
+            update={
+                "computed_stats": stats,
+                # Every Mega forme has exactly one possible ability, so this is
+                # a fact rather than a guess.
+                "current_ability": (
+                    to_id(forme.abilities[0]) if forme.abilities else None
+                ),
+                "pokemon_set": attacker.pokemon_set.model_copy(
+                    update={"species": forme.name}
+                ),
+            }
+        )
 
     def _score_borrowed(
         self,

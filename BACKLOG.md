@@ -33,14 +33,7 @@ than disappearing.
 
 ## Now
 
-### 1. Whether the agent should Mega at all
-
-Still unaddressed: the heuristic never reads `action.special`, so a Mega and a
-non-Mega of the same move score identically and the choice falls to
-enumeration order. Deliberately last — building the judgement before the model
-can price a Mega correctly is the mistake 0013 already paid for.
-
-### 2. The support moves that are still unpriced, and why
+### 1. The support moves that are still unpriced, and why
 
 Put last deliberately: every one of these is blocked on something we do not
 track rather than on effort, so the two items above are worth more per hour.
@@ -70,6 +63,38 @@ ability moves above.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~Whether the agent should Mega at all~~ — done 2026-08-25
+
+It never did. Measured before touching anything: **offered 84 times across 60
+battles, chosen 0 times.** `action.special` was unread, so a Mega and a
+non-Mega of the same move scored identically, and `max` returns the first of
+equal maxima while the enumeration puts `None` first. The mechanic was thrown
+away entirely, in a format where 149 of 150 generated teams carry a stone.
+
+A Mega action is now scored **as the Mega forme** — its stats, its ability, its
+typing — so the damage model decides. No "Mega is good" constant was invented;
+the model already knows what 40 base Attack and a new ability are worth.
+
+```
+paired head-to-head, teams exchanged, 800 battles x 2 seeds
+
+  seed 1   488/800 = 61.0%   (95% CI 57.6%-64.3%)
+  seed 7   474/800 = 59.2%   (95% CI 55.8%-62.6%)
+  pooled   962/1600 = 60.1%  (95% CI 57.7%-62.5%)
+```
+
+**A data fix was needed first.** The bridge dumped
+`Object.keys(entry.megaStone)[0]` — the base species — and threw away the
+value, which is the resulting forme. Charizardite X and Y both read
+"Charizard" and were indistinguishable. Both halves are dumped now.
+
+**A limitation, pinned in a test rather than hidden.** Mega Evolution is free
+and permanent, so it is nearly always right the moment it is offered. This
+scorer only asks what the forme is worth to *this turn's move*, so a turn where
+it adds nothing scores the two equally and the mechanic is declined — 21 of 31
+offers taken rather than 31. Pricing a lasting resource needs a scorer that
+can see past one turn, which a one-turn heuristic cannot.
 
 ### ~~The harness cannot see a stat change made earlier in the same turn~~ — done 2026-08-25
 

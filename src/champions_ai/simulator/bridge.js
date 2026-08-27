@@ -280,8 +280,13 @@ function moveSecondaries(entry) {
 			isBerry: !!entry.isBerry,
 			// Locks its holder into one move, and boosts a stat by 1.5x.
 			isChoice: !!entry.isChoice,
-			// A Mega Stone changes species, stats and ability mid-turn.
+			// A Mega Stone changes species, stats and ability mid-turn. The
+			// engine stores it as { base: resultingForme }, and dumping only
+			// the key threw away the half that says *what it becomes* --
+			// Charizardite X and Y both read "Charizard" and were
+			// indistinguishable. Both halves now.
 			megaStone: entry.megaStone ? Object.keys(entry.megaStone)[0] : null,
+			megaForme: entry.megaStone ? Object.values(entry.megaStone)[0] : null,
 			// Arceus plates carry the type they boost as data rather than code.
 			plateType: entry.onPlate || null,
 			// Thick Club and Light Ball only work for named species.

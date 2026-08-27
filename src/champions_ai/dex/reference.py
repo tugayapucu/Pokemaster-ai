@@ -311,7 +311,10 @@ class ItemInfo(BaseModel, frozen=True):
     # The species this stone Mega Evolves, or None. A Mega changes species,
     # base stats and ability mid-turn, which is why the differential harness
     # excludes them rather than modelling them.
+    # The species this stone evolves, and what it becomes. Two fields because
+    # Charizardite X and Y share the first and differ only in the second.
     mega_stone: str | None = None
+    mega_forme: str | None = None
     # Arceus plates carry the type they boost as data rather than as code.
     plate_type: str | None = None
     # Thick Club and Light Ball work only for the species named here.
@@ -512,6 +515,7 @@ class Dex(BaseModel, frozen=True):
                 is_berry=bool(entry.get("isBerry", False)),
                 is_choice=bool(entry.get("isChoice", False)),
                 mega_stone=entry.get("megaStone") or None,
+                mega_forme=entry.get("megaForme") or None,
                 plate_type=entry.get("plateType") or None,
                 item_user=tuple(entry.get("itemUser") or ()),
             )
