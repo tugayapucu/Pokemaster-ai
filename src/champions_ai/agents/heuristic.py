@@ -985,11 +985,25 @@ class HeuristicAgent(Agent):
             gained, why = computed
             return ScoredAction(action, gained * move.hit_chance, tuple(why))
 
-        value += self._boost_value(move, attacker, observed, on_us, reasons)
-        value += self._status_move_status(move, observed, reasons)
+        # Who actually receives the stages decides whether they are worth
+        # anything. Six moves here hand a *positive* boost to somebody other
+        # than the user -- three to an ally (Decorate, Coaching, Aromatic
+        # Mist) and three to an opponent as a trade (Swagger, Flatter, Spicy
+        # Extract) -- and the old split, "us or them", could express neither.
+        recipient, friendly = self._boost_recipient(
+            observation, slot, action, move, attacker, observed
+        )
+        value += self._boost_value(move, recipient, friendly, reasons)
+        # Everything a move inflicts follows the same rule as its boosts: it
+        # lands on whoever the action names. Aiming Swagger at our own partner
+        # buys the +2 Attack and the confusion, and the confusion is ours.
+        aimed_at_ally = friendly and move.target not in SELF_TARGETS
+        inflicted = self._status_move_status(move, observed, reasons)
+        value += -inflicted if aimed_at_ally else inflicted
         value += self._heal_value(move, attacker, reasons)
         value += self._field_value(move, observation, slot, attacker, reasons)
-        value += self._volatile_value(move, observed, on_us, reasons)
+        landed = self._volatile_value(move, observed, on_us, reasons)
+        value += -landed if aimed_at_ally else landed
 
         if not reasons:
             return ScoredAction(
@@ -1820,38 +1834,63 @@ class HeuristicAgent(Agent):
             return ()
         return effective_types(species.types, tuple(observed.volatile_conditions))
 
-    def _boost_value(self, move, attacker, observed, on_us, reasons) -> float:
+    def _boost_recipient(self, observation, slot, action, move, attacker, observed):
+        """Who the stages land on, and whether that is good for us.
+
+        Three answers, not two. A move can raise our own stats, raise our
+        *partner's* -- Decorate is +2/+2 and one of the strongest things in
+        doubles -- or raise an opponent's, which Swagger and Flatter do
+        deliberately as the price of confusing them.
+        """
+        if move.target in SELF_TARGETS:
+            return attacker, True
+        aimed = action.target
+        if aimed is not None and aimed.side == "ally":
+            index = observation.own_side.active_slots[aimed.slot]
+            if index is not None:
+                partner = observation.own_side.team[index]
+                if not partner.fainted:
+                    return partner, True
+            return None, True
+        return observed, False
+
+    def _boost_value(self, move, recipient, friendly, reasons) -> float:
         """Stat stages the move applies, worth only the headroom that is left.
 
         A stage is capped at six either way, so a second Swords Dance at +5
         buys one stage and a third buys none. That headroom check is most of
         the value here: without it the agent will boost forever.
+
+        Symmetric in who benefits. The old version counted only *rises* on our
+        side and only *drops* on theirs, so a move that hands the opponent a
+        boost -- Swagger's +2 Attack, the price of confusing them -- cost us
+        nothing at all in the model.
         """
         value = 0.0
+        if recipient is None:
+            return value
         for stat, delta in move.boosts.items():
             field = BOOST_FIELDS.get(stat)
             if field is None:
                 continue
-            if on_us:
-                current = getattr(attacker.boosts, field)
-                gained = max(0, min(delta, MAX_STAGE - current))
-                if gained:
-                    value += gained * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
-                    reasons.append(f"raises our {stat} by {gained}")
-                elif delta > 0:
-                    reasons.append(f"our {stat} is already maxed out")
+            current = getattr(recipient.boosts, field)
+            # How much of the change the cap actually allows.
+            if delta >= 0:
+                moved = max(0, min(delta, MAX_STAGE - current))
             else:
-                if observed is None:
-                    continue
-                current = getattr(observed.boosts, field)
-                # Only drops are worth anything on an opponent, and only as
-                # far as they can still fall.
-                dropped = max(0, min(-delta, current - MIN_STAGE))
-                if dropped:
-                    value += dropped * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
-                    reasons.append(f"drops their {stat} by {dropped}")
-                elif delta < 0:
-                    reasons.append(f"their {stat} is already at the floor")
+                moved = -max(0, min(-delta, current - MIN_STAGE))
+            worth = moved * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+            # A rise helps whoever gets it; on their side that is our loss.
+            value += worth if friendly else -worth
+            whose = "our" if friendly else "their"
+            if moved > 0:
+                reasons.append(f"raises {whose} {stat} by {moved}")
+            elif moved < 0:
+                reasons.append(f"drops {whose} {stat} by {-moved}")
+            elif delta > 0:
+                reasons.append(f"{whose} {stat} is already maxed out")
+            elif delta < 0:
+                reasons.append(f"{whose} {stat} is already at the floor")
 
         # A move that lowers its user's own stats while doing something else.
         for stat, delta in move.self_boosts.items():

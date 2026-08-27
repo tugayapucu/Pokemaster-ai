@@ -33,28 +33,39 @@ than disappearing.
 
 ## Now
 
-### 1. The support moves that are still unpriced, and why
+### 1. The support moves that remain unpriced
 
-Put last deliberately: every one of these is blocked on something we do not
-track rather than on effort, so the two items above are worth more per hour.
-Kept as an item rather than closed, because "we cannot say" is a claim that
-should be revisited, not a permanent verdict.
+Down to thirteen, and they split into three honest groups rather than one.
+
+**Blocked on information a player does not have** — these stay unpriced:
 
 | Move | Why |
 |---|---|
-| **Ally Switch** | Its value is dodging an attack aimed at a slot, and which slot they aimed at is exactly what a player cannot see. |
-| **Perish Song** | Cuts both ways. Depends on being ahead and on trapping, neither modelled. A first attempt at a number cost three labels. |
-| **Teatime** | Everything on the field eats its Berry, ours included — and their Berries are the half we cannot see. |
-| **Baton Pass** | Passes boosts to a chosen bench Pokemon. Needs a model of who benefits, which is a matchup question. |
-| **Transform** | Becomes the target. Priceable in principle, but the value is next turn's whole moveset. |
-| **Spite** | PP is not modelled at all, an opponent's is unknowable, and four PP in a five-turn format is rarely what binds. |
-| **Swallow** | Needs a Stockpile counter that nothing tracks. |
-| **Lock-On** | Guarantees next turn's hit. Worth the accuracy gap on a move we have not chosen yet. |
-| **Wish, Healing Wish, Decorate, Magnetic Flux, Guard/Power Split** | Ally-facing or delayed; the arithmetic is easy and the plumbing to reach the right Pokemon is not there yet. |
+| **Ally Switch** | Its value is dodging an attack aimed at a slot, and which slot they aimed at is exactly what cannot be seen. |
+| **Perish Song** | Cuts both ways; depends on being ahead and on trapping. A first attempt at a number cost three labels of agreement. |
+| **Teatime** | Everything eats its Berry, ours included, and theirs are unseen. |
+| **Spite** | An opponent's PP is unknowable, and four PP in a five-turn format is rarely what binds. |
 
-Three more — **Trick, Switcheroo, Fling** — are priced already, but only once
-the opponent's item has shown itself, which is the same shape as the five
-ability moves above.
+**Blocked on plumbing, not on knowledge** — these are the tractable ones, and
+the next person should start here:
+
+```
+Decorate-shaped, now done         (the fix above)
+Swallow       the Stockpile count IS visible -- the engine emits
+              `|-start|...|stockpile1/2/3`, so the volatile is already tracked
+Wish          `slot_condition: "Wish"` is in the dump; a delayed 50% heal
+Guard Split   averaging two stats, and both are available
+Power Split   same
+Magnetic Flux `target: allySide`, +1 Def/SpD to Plus/Minus allies
+Lock-On       worth the accuracy gap on our best inaccurate move
+```
+
+**Blocked on a model we do not have** — Baton Pass and Transform need a view of
+who benefits from what is passed, which is a matchup question rather than a
+turn question.
+
+The honest correction to this item as it stood: it said every one was "blocked
+on something we do not track", and that was true of four of them.
 
 ---
 
@@ -63,6 +74,32 @@ ability moves above.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~The support moves that are still unpriced~~ — worked 2026-08-25
+
+Opening this found something the item did not claim: **six moves were not
+unpriceable, they were scored wrong.** `_boost_value` had two branches, "us"
+and "them", and counted only rises on our side and only drops on theirs. Every
+move that hands a *positive* boost to somebody who is not the user fell
+through:
+
+```
+Decorate       normal        {atk +2, spa +2}    for an ally
+Coaching       adjacentAlly  {atk +1, def +1}    for an ally
+Aromatic Mist  adjacentAlly  {spd +1}            for an ally
+Swagger        normal        {atk +2}            for an opponent
+Flatter        normal        {spa +1}            for an opponent
+Spicy Extract  normal        {atk +2, def -2}    for an opponent
+```
+
+Decorate is one of the strongest support moves in doubles and took the flat
+unknown-support value. Swagger's +2 Attack to an opponent — the price paid for
+the confusion — cost us nothing at all.
+
+Stages are now scored against **whoever receives them**, and whatever the move
+inflicts follows the same rule: aiming Swagger at our own partner buys the
+Attack *and* the confusion, and the confusion is ours. Decorate reads +48 at an
+ally and −48 at an opponent; Swagger is a near-wash either way, mirrored.
 
 ### ~~Whether the agent should Mega at all~~ — done 2026-08-25
 
