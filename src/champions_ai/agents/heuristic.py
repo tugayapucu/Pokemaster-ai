@@ -17,6 +17,7 @@ from itertools import combinations
 from typing import NamedTuple
 
 from champions_ai.agents.base import Agent
+from champions_ai.agents.belief import OpponentBelief
 from champions_ai.agents.currency import (
     DEFENSIVE_STATS,
     LOW_HP_FRACTION,
@@ -355,16 +356,35 @@ class HeuristicAgent(Agent):
         # cannot legally exist. Uniform beats concentrated priors against real
         # damage (0.89x versus 1.14-1.18x), so the shape stays.
         assumed_opponent_points: int = 11,
+        # Inference is opt-in until it has earned its place. Experiment 0018
+        # put the whole ceiling at +4.3 points, so this is a modest effect that
+        # has to be measured rather than assumed.
+        infer_spreads: bool = False,
     ) -> None:
         self.dex = dex
         self.name = name
         self.assumed_opponent_points = assumed_opponent_points
+        self.infer_spreads = infer_spreads
+        self.belief = OpponentBelief(dex) if infer_spreads else None
+        # What the field looked like when we last chose, and what we chose.
+        # Diffing the two is the only way an agent sees damage: it is handed
+        # `Observation`s, never protocol.
+        self._previous: Observation | None = None
+        self._last_action: JointAction | None = None
+
+    def on_battle_start(self) -> None:
+        if self.infer_spreads:
+            self.belief = OpponentBelief(self.dex)
+        self._previous = None
+        self._last_action = None
 
     # ------------------------------------------------------------- selection
 
     def select_action(
         self, observation: Observation, legal_actions: Sequence[JointAction]
     ) -> JointAction:
+        if self.belief is not None:
+            self._learn_from(observation)
         best, best_score = None, float("-inf")
         # Joint actions are products of per-slot choices, so the same slot
         # action recurs many times; scoring it once keeps this linear in the
@@ -381,6 +401,10 @@ class HeuristicAgent(Agent):
                 best, best_score = joint, total
 
         assert best is not None, "legal_actions must not be empty"
+        # Kept so the next turn can diff against it: an agent is handed
+        # `Observation`s, never protocol, so the only way it sees damage is by
+        # comparing what the field looked like when it last chose.
+        self._previous, self._last_action = observation, best
         return best
 
     def explain(
@@ -1858,6 +1882,163 @@ class HeuristicAgent(Agent):
             ),
         )
 
+    # ------------------------------------------------------------- learning
+
+    # A hit big enough that residual damage -- a burn tick, Leftovers, sand --
+    # cannot account for it. Learning from a 3% change would teach the belief
+    # that everything hits like a feather.
+    MIN_LEARNABLE_LOSS = 0.08
+
+    def _learn_from(self, observation: Observation) -> None:
+        """Update what we believe about their spreads, from the last turn.
+
+        **Only unambiguous turns teach anything.** In doubles two of ours
+        attack and two of theirs can lose health, and attributing the wrong
+        damage to the wrong Pokemon is worse than not learning at all -- a
+        wrong belief is acted on with exactly the confidence of a right one.
+        So each direction below refuses to guess when the pairing is not
+        forced.
+        """
+        before, action = self._previous, self._last_action
+        if before is None or action is None or self.belief is None:
+            return
+        self._learn_what_we_dealt(before, observation, action)
+        self._learn_what_we_took(before, observation)
+
+    def _learn_what_we_dealt(self, before, now, action) -> None:
+        """Their defending stat, from what our own attack did.
+
+        Cleanly attributable: we know our move and our target exactly, because
+        we chose them.
+        """
+        attacks = [
+            (slot, act)
+            for slot, act in enumerate(action.slot_actions)
+            if isinstance(act, MoveAction) and act.target is not None
+            and act.target.side == "foe"
+        ]
+        if len(attacks) != 1:
+            return          # two attackers, and the damage cannot be split
+        slot, act = attacks[0]
+        attacker = self._own_active(before, slot)
+        if attacker is None:
+            return
+        try:
+            move = self.dex.get_move(attacker.selectable_moves[act.move_index])
+            attacker_species = self.dex.get_species(attacker.pokemon_set.species)
+        except (KeyError, IndexError):
+            return
+        if not move.is_damaging:
+            return
+
+        hurt = self._who_lost_health(before.opponent_side, now.opponent_side)
+        if len(hurt) != 1:
+            return          # more than one of theirs moved, so who took what?
+        index, lost = hurt[0]
+        seen = now.opponent_side.revealed[index]
+        try:
+            defender = self.dex.get_species(seen.species)
+        except KeyError:
+            return
+        self.belief.note_hit_we_landed(
+            move=move,
+            attacker=attacker_species,
+            attack_stat=self._attack_stat(attacker, move),
+            defender=defender,
+            defender_max_hp=self.belief.of(defender.name).stats(defender)["hp"],
+            fraction_lost=lost,
+            level=now.regulation.level,
+            doubles=now.regulation.game_type == "doubles",
+            weather=now.weather,
+            terrain=now.terrain,
+        )
+
+    def _learn_what_we_took(self, before, now) -> None:
+        """Their attacking stat, from what their attack did to us.
+
+        Harder, because we did not choose it: which of the two attacked, and
+        with what, is not stated. Only taken when exactly one of theirs could
+        have thrown it and exactly one of ours was hit.
+        """
+        live = [
+            index
+            for index in now.opponent_side.active_slots
+            if index is not None and not now.opponent_side.revealed[index].fainted
+        ]
+        if len(live) != 1:
+            return
+        seen = now.opponent_side.revealed[live[0]]
+        fresh = set(seen.revealed_moves) - set(
+            before.opponent_side.revealed[live[0]].revealed_moves
+        ) if live[0] < len(before.opponent_side.revealed) else set()
+        candidates = [m for m in self._as_moves(fresh) if m.is_damaging]
+        if len(candidates) != 1:
+            return          # nothing new, or two new moves and no way to pick
+        move = candidates[0]
+        try:
+            attacker = self.dex.get_species(seen.species)
+        except KeyError:
+            return
+
+        hurt = self._our_losses(before, now)
+        if len(hurt) != 1:
+            return
+        mon, lost = hurt[0]
+        try:
+            defender = self.dex.get_species(mon.pokemon_set.species)
+        except KeyError:
+            return
+        self.belief.note_hit_we_took(
+            move=move,
+            attacker=attacker,
+            defender=defender,
+            defence_stat=apply_boost(
+                (mon.computed_stats or {}).get(move.defensive_stat, 100),
+                mon.boosts.stage(move.defensive_stat),
+            ),
+            our_max_hp=mon.max_hp,
+            fraction_lost=lost,
+            level=now.regulation.level,
+            doubles=now.regulation.game_type == "doubles",
+            weather=now.weather,
+            terrain=now.terrain,
+        )
+
+    def _as_moves(self, ids) -> list[MoveInfo]:
+        found = []
+        for move_id in ids:
+            try:
+                found.append(self.dex.get_move(move_id))
+            except KeyError:
+                continue
+        return found
+
+    def _who_lost_health(self, before_side, now_side):
+        """(index, fraction lost) for opponents that visibly took a hit."""
+        losses = []
+        for index, seen in enumerate(now_side.revealed):
+            if index >= len(before_side.revealed):
+                continue
+            was = before_side.revealed[index].hp_percent
+            lost = (was - seen.hp_percent) / 100
+            if lost >= self.MIN_LEARNABLE_LOSS:
+                losses.append((index, lost))
+        return losses
+
+    def _our_losses(self, before, now):
+        """(Pokemon, fraction lost) for our own side, which we can see exactly."""
+        losses = []
+        for index, mon in enumerate(now.own_side.team):
+            if index >= len(before.own_side.team):
+                continue
+            was = before.own_side.team[index]
+            if was.pokemon_set.species != mon.pokemon_set.species:
+                continue
+            lost = (was.current_hp - mon.current_hp) / max(1, mon.max_hp)
+            if lost >= self.MIN_LEARNABLE_LOSS:
+                losses.append((mon, lost))
+        return losses
+
     def _opponent_stats(
         self, species: SpeciesInfo, *, attacking: str | None = None
     ) -> dict[str, int]:
@@ -1873,6 +2054,8 @@ class HeuristicAgent(Agent):
         `attacking` credits the investment to the stat the move actually uses:
         an opponent swinging a physical move is likely built for it.
         """
+        if self.belief is not None:
+            return self.belief.stats(species)
         if attacking is not None:
             return assumed_stats(
                 species.base_stats, self.assumed_opponent_points, attacking=attacking
