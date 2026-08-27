@@ -335,7 +335,7 @@ Observation
 
 # 7. Long-Term Roadmap
 
-## Where the project actually is (2026-08-18)
+## Where the project actually is (2026-08-25)
 
 A single place to see status, because the per-milestone notes below have grown
 long. Each line links to where the detail lives.
@@ -346,10 +346,13 @@ long. Each line links to where the detail lives.
 |---|---|
 | **Domain model** (§6) | Complete. Immutable, `Observation` is the only path from truth to agent, leak tests verified non-vacuous. |
 | **Simulator bridge** (M1–2) | Showdown `sim` driven headlessly, per-player streams, seeded replay exact, 97.2% protocol coverage. |
-| **Legal actions** (M1) | Engine-reported availability (ADR 0003). Gap: Struggle unmodelled. |
+| **Legal actions** (M1) | Engine-reported availability (ADR 0003). Struggle now handled: a slot the engine expects to act is never offered a pass. |
 | **Baseline agents** (M3) | Random, Heuristic, Search. Heuristic beats Random 96.3%. |
 | **Evaluation harness** (M3) | Teams exchanged per matchup, Wilson intervals, conservative significance. |
-| **Damage model** (M1) | Verified exactly against engine output across 38 non-crit hits. |
+| **Damage model** (M1) | **93.9% of hits inside the predicted range** on random teams against the engine, 86.9% with Mega enabled. Abilities, items, terrain, spread and the -ate rewrites all modelled. |
+| **Turn order** | **97.8%** of ordered pairs correct, counting speed ties as half. |
+| **Knockout claim** | A "guaranteed knockout" actually faints **99.0%** of the time. |
+| **Mega Evolution** | Scored as the forme rather than as a bonus. Worth **60.1%** head-to-head against the agent that never used it (1,600 battles, two seeds). |
 | **Replay pipeline** (M5) | Fetch, filter, choice labels, observation reconstruction, provenance manifests. Usage-terms gate resolved. |
 | **Human-agreement benchmark** (M5) | 1,061 labels from 50 rated games. The first external metric this project has. |
 | **Team Preview** (M13) | Implemented and explainable. Lead ordering measured at 48.4% against a 50% baseline — no signal. |
@@ -369,7 +372,27 @@ lead selection vs human leads     56.6%   vs 50.0% random   NOT significant
 matchup-switch                   REVERTED                  (experiment 0004)
 opponent-knowledge oracle        +0.09%  flat ceiling      (experiment 0005)
 learned linear policy            +4.2% agreement / 32.5% win rate (experiment 0006)
+
+ENGINE GROUND TRUTH (2026-08-25)
+damage, no Mega                  93.9%   inside the predicted range
+damage, Mega enabled             86.9%
+turn order                       97.8%   ties counted as half
+knockout claim                   99.0%   of promised knockouts land
+Mega decision vs never-Mega      60.1%   (1,600 battles, two seeds)
+
+HUMAN AGREEMENT (2026-08-25)
+train                            45.46%
+test                             47.45%
+test, unseen team only           43.56%   <- the honest one, see experiment 0014
 ```
+
+**Quote the third figure, not the second.** The test half is 74% contaminated
+by teams that also appear in training, so "47.45% on test" is the model on
+teams it has largely seen. Agreement on player-sides whose own team never
+appeared in training is four points lower, and that gap is significant
+(experiment 0014). A clean team-level split is *impossible* on this corpus —
+85.4% of replays chain into one connected component — so the leakage is
+reported rather than removed.
 
 At 11,133 labels the agreement interval is **±0.9 points**, which is enough to judge a single scoring change on its own rather than only in aggregate.
 
@@ -380,12 +403,6 @@ The rule that survives is narrower and about power, not arbitration:
 - **agreement is the sensitive instrument** for scoring changes, detecting at p<0.01 what 800 self-play battles could not (experiment 0003);
 - **do not conclude a head-to-head from under ~1,500 battles**, and always run at least two seeds over a pool of ten or more teams. Twice now the first number has been wrong in the same direction.
 
-**The two metrics have now disagreed, both significantly, in opposite directions** (experiment 0004). Matchup-based switching *lowers* human agreement (43.6% → 41.7%, McNemar chi2 = 13.69 against) while *winning* head to head (354-246 over 600 battles). Neither instrument is broken — they measure different things:
-
-- **agreement is the more sensitive detector** for scoring changes, catching at p<0.01 what 800 self-play battles could not (experiment 0003);
-- **head-to-head is the arbiter when they conflict**, because it measures the objective rather than a stand-in for it;
-- a change that moves them oppositely is **interesting, not broken**, and gets recorded rather than resolved by dropping the inconvenient half.
-
 ### Known gaps, in the order the evidence says to fix them
 
 0. **No training signal tied to winning.** Experiment 0005 showed the decision
@@ -394,10 +411,22 @@ The rule that survives is narrower and about power, not arbitration:
    open problem is therefore an objective, not an architecture: self-play, a
    value model, or imitation filtered to positions where the human demonstrably
    came out ahead.
-1. **Move effects are not modelled at all** — see below. The heuristic prices
-   every move as expected damage, so a flinch, a status, a stat drop, recoil
-   and drain are all invisible. This is a *data* gap before it is a scoring
-   gap, and it sits underneath every other item here.
+1. ~~**Move effects are not modelled at all**~~ — **closed 2026-08-25.** The
+   heuristic prices flinches, statuses, stat stages, recoil, drain, field
+   effects and 161 of the 176 status moves. Of the fifteen still on a flat
+   value, eight resolve the moment an ability or item reveals itself; the
+   remaining seven are listed under *Deliberately not done* with the
+   capability each is waiting on.
+
+2. **The instruments have been the bottleneck, not the model.** Twelve
+   separate defects this project has found were data it already had and was
+   not reading — `apply_boost` never called, `revealed_item` unused, terrain
+   never assigned, `is_grounded` never called, the `-ate` bonus applied to a
+   dead variable, a Mega's forme discarded at the dump. Three were *harnesses
+   blind to the thing being measured*: `active_by_ident` silently dropped
+   every Mega'd Pokemon, the turn-order collector never read the weather, and
+   the damage collector could not see a stat change made earlier in the same
+   turn. Each produced confident numbers while measuring nothing.
 2. **Switching — still open, and now honestly so.** Rated humans switch on
    11.5% of decisions and the agent on 2.1%, agreeing on 113 of 1,281 switch
    labels. A matchup-based replacement was built and **reverted** (experiment
@@ -866,6 +895,89 @@ The hypothesis left, recorded and **not acted on**: human switches are plans abo
 
 **The full sweep also re-made two corrections that 0010 had already reverted on principle** — Trick Room back to its degenerate value, Leech Seed back to noise. A sweep maximising training agreement will undo a judgement made for a reason, so fitted values need re-checking against the edge diagnostics every time, not once.
 
+### Mega Evolution, and the day the instruments were the bug (2026-08-25)
+
+The backlog item read "Mega: never scored, never measured". Both halves were
+true, and the second in a stronger sense than intended: **turning Mega on did
+not measure it either.** `active_by_ident` resolved a protocol ident to a
+Pokemon by species name, and a Pokemon that Mega Evolves keeps its ident
+(`p1a: Metagross`) while its set becomes `Metagross-Mega`. The names stop
+agreeing, the lookup returns None, and a failed lookup does not mis-attribute a
+hit — it **drops** it. Every Mega'd Pokemon was silently excluded from the
+sample while the harness looked perfectly healthy.
+
+That set the pattern for the day. Three of the session's findings were
+instruments blind to the effect being measured, and each had already produced
+plausible numbers:
+
+```
+active_by_ident            dropped every Mega'd Pokemon's hits
+OrderCollector             never read the weather, so the four Speed
+                           abilities were unmeasurable
+DamageCollector            could not see a stat change made earlier in the
+                           same turn -- 23% of all sampled hits
+```
+
+**Five hypotheses for the Mega accuracy gap were tested and eliminated**
+before the real causes turned up: field effects from Mega abilities (0016), a
+broad systematic bias (the control arm carries the same background), per-forme
+damage errors (0017 — the six worst formes account for 6.5% of misses), and
+interval width (misses land 1–2.5 widths out, not just outside). What survived
+was a set of specific, findable bugs.
+
+#### What was actually wrong
+
+```
+the -ate base-power bonus      dead code: applied to `power` twenty-six lines
+                               after `base` had consumed it. Refrigerate,
+                               Pixilate and Dragonize never paid it once.
+                               Glalie-Mega 50.7% -> 87.5%
+Fire Mane                      filed as a pinch ability on the strength of its
+                               name; the engine has no HP condition at all.
+                               Pyroar-Mega 65.2% -> 86.4%
+the spread reduction           tested `spread_targets > 1`, but the engine sets
+                               `spreadHit` from targets *selected* and emits
+                               `[spread]` iff that flag is set. A Blizzard that
+                               selected two and hit one still takes the 0.75.
+                               That bucket: 1.8% -> 91.2%
+within-turn stat changes       82.5% -> 87.3% on 23% of hits
+terrain vs footing             `is_grounded` existed and nothing called it
+Parental Bond, Skill Link      unmodelled; Parental Bond is x1.25 in this
+                               generation, not the x1.5 the backlog assumed
+```
+
+#### The methodological rules this earned
+
+- **Check the instrument can see the effect before modelling it.** Verification
+  against a blind harness is vacuous.
+- **Bias and accuracy are different questions.** Pyroar-Mega read a *perfect*
+  median of 1.003 at 65% accuracy — the signature of an effect that is
+  conditional in the model and unconditional in the game. Ranking suspects by
+  median could not see it.
+- **A thin sample does not become right by being acted on.** Ampharos-Mega read
+  1.650 on n=14 and 0.990 on n=61.
+- **Test the assembled number, not only the pieces.** 1,092 tests passed with
+  the `-ate` bonus dead, because each piece behaved and nothing checked that
+  the damage moved.
+- **Where a miss lands tells you which bug it is.** Just outside the interval
+  means it is too narrow; one to two widths out means a missing multiplier.
+- **An unseeded pool is not a measurement.** Two runs of the same comparison
+  disagreed in direction until `TeamPool.generated` took a seed.
+
+#### Also settled
+
+**The train/test split leaks teams, and cannot be fixed** (experiment 0014).
+80 rosters appear in both halves; 74.2% of test-side roster appearances also
+occur in train. Grouping fails because every replay has two rosters and they
+chain — 85.4% of the corpus is one connected component. Splitting the *sides*
+rather than the replays gives 42 usable clean player-sides, and agreement there
+is **43.56%** against 47.45% on the whole test half.
+
+**Mega Evolution was never used by the agent.** Offered 84 times across 60
+battles, chosen 0 times, because `action.special` was unread and `max` returns
+the first of equal maxima. Scoring the forme is worth **60.1%** head-to-head
+over 1,600 battles across two seeds.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
@@ -873,6 +985,37 @@ The hypothesis left, recorded and **not acted on**: human switches are plans abo
 - Anything in §3's out-of-scope list — client automation, matchmaking, botting.
 - A learned model. Baselines first, and the benchmark to judge them by now
   exists.
+- **Team building and team discovery** (Milestone 13). Asked and answered on
+  2026-08-25: *"right now lets not focus on a team and prepare me for variety
+  of teams."* Pulling it forward would jump milestones 6–11.
+
+### Blocked, with what each is waiting on (2026-08-25)
+
+Seven support moves are priced at a flat "unknown" value and will stay there
+until a named capability exists. Recorded here rather than in `BACKLOG.md`,
+which is for work that can start now.
+
+| Move | Waiting on |
+|---|---|
+| **Ally Switch** | Knowing which slot an attack was aimed at. Not observable. |
+| **Perish Song** | A notion of being ahead, plus trapping. A first attempt at a number cost three labels of agreement. |
+| **Teatime** | Seeing the opponents' Berries. |
+| **Spite** | An opponent's PP, which is never published. |
+| **Baton Pass** | A matchup model — who on the bench benefits from what is passed. |
+| **Transform** | The same, plus valuing a whole borrowed moveset. |
+| **Fling** | An item reveal, like Trick and Switcheroo. |
+
+Four of the seven want **opponent modelling** (Milestone 10) and two want a
+**matchup model**. That is the single clearest statement of what the next
+capability buys: it is not one feature, it is the thing four separate dead
+ends are queued behind.
+
+Two more are priced and come out **negative in every state**, which is a
+result rather than a gap: Swallow hands back six defensive stages to heal one
+health bar, and Healing Wish faints its user. Both are left as computed, the
+same call already made for Rest. Neither can see the one case that would
+change the answer — a Pokemon about to be knocked out — because a one-turn
+scorer has no way to express it.
 
 
 ## Milestone 0 — Research, Scope, and Reproducible Skeleton
