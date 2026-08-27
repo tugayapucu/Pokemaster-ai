@@ -33,6 +33,16 @@ than disappearing.
 
 ## Now
 
+**Empty.** Every item raised has been done or ruled out with evidence. The two
+capabilities this list was pointed at — opponent modelling and the support
+moves that depend on it — are closed for now by experiments 0018 and 0019: the
+ceiling is +4.3 points, spreads carry all of it, and inference from damage
+alone recovers too little of it to measure.
+
+What to put here next is a decision rather than a queue, and the candidates
+with their measured sizes are in `PROJECT_PLAN.md` under *The next capability*.
+
+
 **Direction agreed 2026-08-25: opponent modelling.** Not because it is next in
 `PROJECT_PLAN.md` — it is Milestone 10 — but because writing down what is
 blocked made the case. Four of the seven dead-ended support moves want the same
@@ -50,35 +60,6 @@ All of it is the same missing thing: **a belief about what the opponent
 actually has.** In a bring-6/pick-4 format that shows you six Pokemon before
 the battle, the agent currently assumes a neutral average and never updates.
 
-### 1. Infer stat spreads from what the damage already tells us
-
-Item 1 said it is worth **+3.6 points**, and that spreads carry all of it.
-
-Every hit the opponent lands is a constraint on their attacking stat; every hit
-they take is a constraint on their defending one. That is a filter, and the
-project already has the instrument to grade it exactly: **the engine
-differential harness knows both sides' true stats from the requests**, so an
-inferred spread can be scored against the truth rather than against a proxy.
-
-The corpus cannot grade this — Stat Points are never published (ADR 0002) — so
-the engine is not merely the better instrument here, it is the only one.
-
-### ~~Narrow the ability from the species, then from behaviour~~ — dropped
-
-**Measured at ~0 by experiment 0018.** Perfect knowledge of every opponent's
-ability *and* item together moved the win rate by nothing at all. Behavioural
-ability inference would be work spent on the half of this that does not pay.
-
-`_known_ability` keeps the free case it already has — the 119 species with
-exactly one possible ability — because that was a correctness fix rather than
-a bet on value.
-
-### 2. Spend the belief where it changes a decision
-
-`_threat_from`, the knockout claim, and the three item-gated support moves.
-Deliberately last: a belief nothing reads is the twelfth instance of this
-project's most common bug, and the point is not to add a thirteenth.
-
 ---
 
 ## Done, most recent first
@@ -86,6 +67,44 @@ project's most common bug, and the point is not to add a thirteenth.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~Infer stat spreads from the damage~~ — done 2026-08-25. It works and it does not matter
+
+Experiment 0019. The inference is real; the effect is not.
+
+```
+against the true spreads (only the engine can grade this)
+  flat prior (11 everywhere)   mean error 16.0 points
+  inferred from damage         mean error 14.7 points
+
+head-to-head, concentrated pool, 800 battles x 2 seeds
+  pooled   813/1600 = 50.8%   (95% CI 48.4%-53.3%)   p = 0.516
+```
+
+Predicted flat before running — 8% of the distance to truth, against 0018's
++3.6-point ceiling, is roughly +0.3 — and flat is what it is.
+
+**Three structural reasons it cannot easily do better**, all of which would
+have to change together: the observations are scarce (111 stats across 200
+battles, because strict attribution is the only thing keeping wrong beliefs
+out), each one is noisy (±7.5% from the damage roll alone, before an unknown
+item shifts it), and no dataset outside the engine can grade a spread.
+
+One thing worth keeping from the build: the first estimator walked 45% toward
+each observation and **never travelled far enough from its starting guess to
+beat it** (15.4 against a 16.0 prior). Taking the mean of the implied values
+instead roughly doubled the improvement. An estimator can be too timid to be
+worth having.
+
+The code stays, `infer_spreads=False` and named as unused. 0018's ceiling is
+real and a materially better inference could still claim some of it; what is
+dead is *this* inference and the assumption that damage alone is enough.
+
+### ~~Spend the belief where it changes a decision~~ — moot
+
+The belief is not good enough to spend. Reading it into `_threat_from` and the
+knockout claim would propagate a 14.7-point error into two places that
+currently carry a 16.0-point one, for no measurable gain.
 
 ### ~~Measure the ceiling first~~ — done 2026-08-25. It is +4.3, and it is all spreads
 

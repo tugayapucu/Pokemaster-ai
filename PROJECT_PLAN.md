@@ -1043,7 +1043,23 @@ Two things follow, and both correct the case made above:
   *scoped*, not for skipping it — and exactly the thing worth knowing before
   committing a milestone rather than after.
 
-The first run nearly said "flat" for a reason worth keeping: Showdown's
+**Built, and it does not pay (experiment 0019).** Inferring spreads from
+observed damage cuts the error against the truth from 16.0 points to 14.7, and
+wins **50.8%** head-to-head (95% CI 48.4-53.3%, p = 0.516). Predicted flat
+before running -- 8% of the distance to truth, against a +3.6 ceiling, is
+about +0.3 -- and flat is what it measured.
+
+Three structural reasons it cannot easily do better, which would all have to
+change together: the observations are scarce (111 stats across 200 battles,
+because strict attribution is the only thing keeping wrong beliefs out), each
+is noisy (±7.5% from the damage roll alone), and nothing outside the engine can
+grade a spread so there is no larger dataset to fit against.
+
+The code stays opt-in and off, named as unused. The ceiling is real and a
+better inference could still claim some of it; what is dead is inference from
+damage alone.
+
+The first run of the *oracle* nearly said "flat" for a reason worth keeping: Showdown's
 generator gives 49 of every 72 Pokemon `(11, 11, 11, 11, 11, 11)`, which is
 precisely what `assumed_opponent_points = 11` assumes. The agent was already
 right about the entire test population, so the spread half of the oracle was
