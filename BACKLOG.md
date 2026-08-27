@@ -50,33 +50,9 @@ All of it is the same missing thing: **a belief about what the opponent
 actually has.** In a bring-6/pick-4 format that shows you six Pokemon before
 the battle, the agent currently assumes a neutral average and never updates.
 
-### 1. Measure the ceiling first, and let it refute the direction
+### 1. Infer stat spreads from what the damage already tells us
 
-**Experiment 0005 is evidence against this whole plan and must be given a fair
-chance to win.** It measured perfect knowledge of the opponent's *moveset* at
-**+0.09 points of agreement**, and perfect knowledge of their move *this turn*
-made the agent worse.
-
-Two things it did not do, and the difference is the entire case for trying
-again:
-
-- it tested **moveset** knowledge, not **spread, item or ability** — the three
-  that move damage *numbers* rather than which threats exist;
-- it measured **agreement**, which experiment 0014 has since shown is 74%
-  contaminated by teams seen in training and which 0010 and 0013 both caught
-  misleading when pushed.
-
-So: give the agent an oracle for the opponent's spread, item and ability, and
-measure it **head-to-head over ≥1,500 battles across ≥2 seeds** — the
-objective, not the stand-in. Nothing else here starts until that number exists.
-
-**If it comes back flat, this direction is dead and gets written up as such.**
-That is a real possibility and the honest reason to spend a day on the oracle
-before a milestone on the machinery.
-
-### 2. Infer stat spreads from what the damage already tells us
-
-Only if item 1 says it is worth anything.
+Item 1 said it is worth **+3.6 points**, and that spreads carry all of it.
 
 Every hit the opponent lands is a constraint on their attacking stat; every hit
 they take is a constraint on their defending one. That is a filter, and the
@@ -87,15 +63,17 @@ inferred spread can be scored against the truth rather than against a proxy.
 The corpus cannot grade this — Stat Points are never published (ADR 0002) — so
 the engine is not merely the better instrument here, it is the only one.
 
-### 3. Narrow the ability from the species, then from behaviour
+### ~~Narrow the ability from the species, then from behaviour~~ — dropped
 
-`_known_ability` already settles the 119 species with exactly one possible
-ability. The next tier is behavioural: something that outsped us in sun is
-telling us about Chlorophyll, something that took a Fire move badly is telling
-us it is not Heatproof. Cheap, and it feeds damage, turn order and the
-knockout claim at once.
+**Measured at ~0 by experiment 0018.** Perfect knowledge of every opponent's
+ability *and* item together moved the win rate by nothing at all. Behavioural
+ability inference would be work spent on the half of this that does not pay.
 
-### 4. Spend the belief where it changes a decision
+`_known_ability` keeps the free case it already has — the 119 species with
+exactly one possible ability — because that was a correctness fix rather than
+a bet on value.
+
+### 2. Spend the belief where it changes a decision
 
 `_threat_from`, the knockout claim, and the three item-gated support moves.
 Deliberately last: a belief nothing reads is the twelfth instance of this
@@ -108,6 +86,50 @@ project's most common bug, and the point is not to add a thirteenth.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~Measure the ceiling first~~ — done 2026-08-25. It is +4.3, and it is all spreads
+
+Experiment 0018. The oracle knows the opponent's spread, item and ability
+exactly, measured on win rate over 1,600 battles across two seeds.
+
+```
+generator's own spreads     811/1600 = 50.7%   (95% CI 48.2%-53.1%)   flat
+concentrated spreads        869/1600 = 54.3%   (95% CI 51.9%-56.7%)
+difference between arms     z = 2.05,  p = 0.040
+```
+
+**The first run nearly lied, and the reason is worth keeping.** Showdown's
+generator hands out `(11, 11, 11, 11, 11, 11)` to 49 of every 72 Pokemon —
+*exactly* what `assumed_opponent_points = 11` already assumes. The agent was
+already right about the whole test population, so the spread half of the oracle
+was inert and the run silently measured item and ability knowledge alone. The
+pool was the blind instrument this time, not the harness.
+
+Rewriting every spread into a competitive shape (32 into the attacking stat, 32
+into Speed, revalidated through the engine) moved the mean max-min gap from 2.8
+to 32.0 and the answer from flat to significant.
+
+**It decomposes cleanly, and not the way this list assumed:**
+
+```
+item + ability knowledge      ~0 points     the flat arm is 50.7%
+spread knowledge             ~3.6 points    the difference between arms
+everything together          +4.3 points
+```
+
+So `_known_ability` and the item-gated moves — which this backlog cited as the
+motivation — are *not* where the value is. Spread inference is.
+
+**And the honest scale**, on the same instrument and the same bar:
+
+```
+scoring the Mega forme (one afternoon)      +10.1 points
+perfect opponent knowledge (a milestone)     +4.3 points
+```
+
+The entire ceiling is less than half of what one afternoon's mechanical fix
+delivered. Worth doing, worth doing *scoped*, and worth having measured before
+committing rather than after.
 
 ### ~~The support moves that remain unpriced~~ — done 2026-08-25
 

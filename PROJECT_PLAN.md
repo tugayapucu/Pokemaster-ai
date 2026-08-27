@@ -1019,10 +1019,35 @@ again:
   0013 both caught agreement misleading when leaned on. Head-to-head is the
   objective; agreement is a stand-in for it.
 
-So the first item is an **oracle measured on win rate**, over ≥1,500 battles
-across ≥2 seeds — the bar this project already holds strength claims to. If
-that comes back flat, the direction is dead and gets written up as a second
-refutation rather than pursued.
+So the first item was an **oracle measured on win rate**, over 1,600 battles
+across two seeds. **Run 2026-08-25, experiment 0018: the ceiling is +4.3
+points, and essentially all of it is stat spreads.**
+
+```
+generator's own spreads     811/1600 = 50.7%   (95% CI 48.2%-53.1%)   flat
+concentrated spreads        869/1600 = 54.3%   (95% CI 51.9%-56.7%)
+difference between arms     z = 2.05,  p = 0.040
+
+item + ability knowledge      ~0 points
+spread knowledge             ~3.6 points
+```
+
+Two things follow, and both correct the case made above:
+
+- **Item and ability knowledge is worth nothing measurable.** `_known_ability`
+  and the item-gated support moves were cited as motivation and are not where
+  the value is. Only spread inference is.
+- **The whole ceiling is modest.** Scoring the Mega forme, one afternoon's
+  work on the same instrument and the same bar, was worth +10.1 points.
+  Perfect opponent knowledge is worth +4.3. That is an argument for doing this
+  *scoped*, not for skipping it — and exactly the thing worth knowing before
+  committing a milestone rather than after.
+
+The first run nearly said "flat" for a reason worth keeping: Showdown's
+generator gives 49 of every 72 Pokemon `(11, 11, 11, 11, 11, 11)`, which is
+precisely what `assumed_opponent_points = 11` assumes. The agent was already
+right about the entire test population, so the spread half of the oracle was
+inert. **The blind instrument was the population that time, not the harness.**
 
 That ordering is the project's own standing rule applied to itself: *check the
 size of a gap before trying to close it.* It has been right twice — target
