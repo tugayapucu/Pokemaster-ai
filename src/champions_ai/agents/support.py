@@ -112,6 +112,66 @@ ITEM_SWAPS = frozenset({"trick", "switcheroo"})
 RECYCLE = "recycle"
 TEATIME = "teatime"
 
+# --- moves that were "blocked on plumbing" rather than on knowledge --------
+#
+# The backlog carried these as unpriceable. They were not: every one of them
+# reads state the tracker already holds, and the work was passing it in.
+
+# Swallow eats the Stockpile it was saving. The engine announces each layer as
+# `|-start|...|stockpile1` and up, so the count is an ordinary tracked
+# volatile -- and the layers are also what the healing scales with.
+SWALLOW = "swallow"
+STOCKPILE_HEAL = {1: 0.25, 2: 0.5, 3: 1.0}
+# Stockpile raised Defense and Special Defense by one per layer on the way up,
+# and Swallow gives all of it back. Healing that costs two stages is a
+# different move from healing that does not -- and once that price is counted,
+# **Swallow comes out negative in every state we can price**, because six
+# defensive stages are worth more here than one health bar.
+#
+# Left as computed rather than tuned into positivity, for the same reason Rest
+# is: Stockpile is a fringe line in VGC doubles and the number is saying so.
+# The one case the currency cannot see is a Pokemon about to be knocked out,
+# where stages it will not live to use are worth nothing -- a one-turn scorer
+# has no way to express that, and inventing a discount to paper over it would
+# be worse than the honest negative.
+STOCKPILE_STAGES_LOST = 2
+
+# Wish heals half the *wisher's* maximum HP, at the end of the following turn,
+# to whoever is standing in the slot by then. Priced as the healing it will
+# most likely deliver -- usually to the same Pokemon -- with the delay stated
+# rather than discounted by an invented factor.
+WISH = "wish"
+WISH_FRACTION = 0.5
+
+# Guard Split and Power Split average two stats between the pair. That is a
+# pure transfer: whatever we gain, they lose, so it is worth doing exactly when
+# theirs are higher than ours.
+STAT_SPLITS: dict[str, tuple[str, ...]] = {
+    "guardsplit": ("def", "spd"),
+    "powersplit": ("atk", "spa"),
+}
+
+# Magnetic Flux buffs only allies with Plus or Minus, and fails outright when
+# there are none -- `if (!targets.length) return false`.
+# Healing Wish faints its user to send in a replacement at full health and
+# free of status. Priced as exactly that trade -- the health somebody on the
+# bench gets back, minus the health we throw away making it -- which makes it
+# right in the one situation it is actually played: the user is nearly dead
+# anyway and somebody worth more is hurt.
+HEALING_WISH = "healingwish"
+
+MAGNETIC_FLUX = "magneticflux"
+MAGNETIC_FLUX_ABILITIES = frozenset({"plus", "minus"})
+MAGNETIC_FLUX_BOOSTS = {"defense": 1, "special_defense": 1}
+
+# A split moves raw stat *points*, not stages, so it needs its own rate. One
+# stage is worth STAT_STAGE_VALUE of a Pokemon and multiplies a stat by 1.5,
+# so a point is worth roughly a stage divided by half a typical stat -- taken
+# as 100 here, which makes twenty points about a third of a stage. Deliberately
+# modest: this is the one number on the page that is a judgement rather than a
+# reading of the engine.
+SPLIT_POINT_VALUE = STAT_STAGE_VALUE * STAT_STAGE_WEIGHT / 100
+
 # --- keeping something on the field --------------------------------------
 #
 # Trapping is worth exactly what the escape we are denying is worth, so it is
@@ -148,6 +208,22 @@ def _headroom(boosts: Boosts, field: str, delta: int) -> int:
     return -max(0, min(-delta, current - MIN_STAGE))
 
 
+def _stockpile_layers(mon) -> int:
+    """How many Stockpile layers this Pokemon is holding, 0 if none.
+
+    The engine announces them as `stockpile1`, `stockpile2`, `stockpile3`, so
+    the count is already in the tracked volatiles -- the backlog listed this as
+    needing "a Stockpile counter that nothing tracks", and the counter was
+    there all along.
+    """
+    layers = [
+        int(v[-1])
+        for v in mon.volatile_conditions
+        if v.startswith("stockpile") and v[-1].isdigit()
+    ]
+    return max(layers, default=0)
+
+
 def _hp_fraction(mon) -> float:
     return mon.current_hp / max(1, mon.max_hp)
 
@@ -172,6 +248,9 @@ def score_support_move(
     consumed_item: ItemInfo | None = None,
     observed_may_hold_item: bool = True,
     observed_types: tuple[str, ...] = (),
+    attacker_stats: dict[str, int] | None = None,
+    ally_ability: str | None = None,
+    bench_hp_fractions: Sequence[float] = (),
 ) -> tuple[float, list[str]] | None:
     """What this move buys, or None if we genuinely cannot say.
 
@@ -387,6 +466,72 @@ def score_support_move(
         if consumed_item is None:
             return 0.0, ["there is no consumed item to bring back"]
         return ITEM_DENIAL_VALUE, [f"brings back its {consumed_item.name}"]
+
+    if move_id == SWALLOW:
+        layers = _stockpile_layers(attacker)
+        if not layers:
+            return 0.0, ["Swallow needs a Stockpile to eat"]
+        restored = min(STOCKPILE_HEAL[layers], _missing(attacker))
+        # Giving the stages back is part of the price, not a footnote.
+        cost = layers * STOCKPILE_STAGES_LOST * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+        value = restored * SUSTAIN_WEIGHT - cost
+        return value, [
+            f"eats {layers} Stockpile layer(s) to restore ~{restored:.0%} of its HP",
+            f"and hands back the {layers * STOCKPILE_STAGES_LOST} stage(s) it gained",
+        ]
+
+    if move_id == HEALING_WISH:
+        if not bench_hp_fractions:
+            return 0.0, ["nobody is left to send in"]
+        neediest = min(bench_hp_fractions)
+        gained = 1.0 - neediest
+        spent = _hp_fraction(attacker)
+        value = (gained - spent) * SUSTAIN_WEIGHT
+        return value, [
+            f"fully heals somebody sitting on ~{neediest:.0%}",
+            f"at the cost of the ~{spent:.0%} this one still has",
+        ]
+
+    if move_id == WISH:
+        restored = min(WISH_FRACTION, _missing(attacker))
+        if restored <= 0:
+            return 0.0, ["already at full HP, so the Wish would be wasted"]
+        return restored * SUSTAIN_WEIGHT, [
+            f"heals ~{restored:.0%} of a health bar at the end of next turn"
+        ]
+
+    if move_id in STAT_SPLITS:
+        if observed is None or not observed_stats or not attacker_stats:
+            return None
+        gained = 0.0
+        for key in STAT_SPLITS[move_id]:
+            ours, theirs = attacker_stats.get(key), observed_stats.get(key)
+            if ours is None or theirs is None:
+                return None
+            # A pure transfer: the average is what both end up with, so our
+            # gain is exactly their loss.
+            gained += ((ours + theirs) // 2) - ours
+        if gained <= 0:
+            return 0.0, ["our stats are already the better half of the average"]
+        # Counted once, not twice: the same points leaving them and arriving
+        # with us are one movement, and pricing both halves would double it.
+        return gained * SPLIT_POINT_VALUE, [
+            f"averages {' and '.join(STAT_SPLITS[move_id])} with them, "
+            f"worth {gained:.0f} points to us"
+        ]
+
+    if move_id == MAGNETIC_FLUX:
+        if ally is None or ally_ability not in MAGNETIC_FLUX_ABILITIES:
+            return 0.0, ["nobody on our side has Plus or Minus"]
+        gained = sum(
+            _headroom(ally.boosts, field, delta)
+            for field, delta in MAGNETIC_FLUX_BOOSTS.items()
+        )
+        if not gained:
+            return 0.0, ["our ally's defences are already maxed out"]
+        return gained * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT, [
+            f"raises our ally's defences by {gained} stage(s)"
+        ]
 
     if move_id in TRAPPING_MOVES:
         if observed is None:

@@ -33,11 +33,7 @@ than disappearing.
 
 ## Now
 
-### 1. The support moves that remain unpriced
-
-Down to thirteen, and they split into three honest groups rather than one.
-
-**Blocked on information a player does not have** — these stay unpriced:
+### 1. The seven that are genuinely unpriced
 
 | Move | Why |
 |---|---|
@@ -45,27 +41,12 @@ Down to thirteen, and they split into three honest groups rather than one.
 | **Perish Song** | Cuts both ways; depends on being ahead and on trapping. A first attempt at a number cost three labels of agreement. |
 | **Teatime** | Everything eats its Berry, ours included, and theirs are unseen. |
 | **Spite** | An opponent's PP is unknowable, and four PP in a five-turn format is rarely what binds. |
+| **Baton Pass** | Needs a view of who benefits from what is passed — a matchup question, not a turn question. |
+| **Transform** | Becomes the target; the value is next turn's whole moveset. |
+| **Fling** | Priced only once the held item has shown itself, like Trick and Switcheroo. |
 
-**Blocked on plumbing, not on knowledge** — these are the tractable ones, and
-the next person should start here:
-
-```
-Decorate-shaped, now done         (the fix above)
-Swallow       the Stockpile count IS visible -- the engine emits
-              `|-start|...|stockpile1/2/3`, so the volatile is already tracked
-Wish          `slot_condition: "Wish"` is in the dump; a delayed 50% heal
-Guard Split   averaging two stats, and both are available
-Power Split   same
-Magnetic Flux `target: allySide`, +1 Def/SpD to Plus/Minus allies
-Lock-On       worth the accuracy gap on our best inaccurate move
-```
-
-**Blocked on a model we do not have** — Baton Pass and Transform need a view of
-who benefits from what is passed, which is a matchup question rather than a
-turn question.
-
-The honest correction to this item as it stood: it said every one was "blocked
-on something we do not track", and that was true of four of them.
+Four of these want hidden information and will not move without opponent
+modelling. Two want a matchup model. One wants an item reveal.
 
 ---
 
@@ -74,6 +55,47 @@ on something we do not track", and that was true of four of them.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~The support moves that remain unpriced~~ — done 2026-08-25
+
+Seven more priced. **Twenty-two flat down to fifteen**, and of those fifteen,
+eight resolve the moment an ability or item shows itself — leaving **seven**
+genuinely unpriced against **four** groups of reason.
+
+```
+Swallow        the Stockpile count was already a tracked volatile --
+               the engine announces `|-start|...|stockpile1`
+Wish           `slot_condition: "Wish"`, a delayed half-bar heal
+Healing Wish   the health somebody on the bench gets back, minus the
+               health we throw away making it
+Guard Split    averaging two stats: a pure transfer, worth doing exactly
+Power Split    when theirs are higher than ours
+Magnetic Flux  +1 Def/SpD, and only to an ally with Plus or Minus
+Lock-On        the accuracy gap on whichever of our moves stands to gain
+```
+
+**Two come out negative and are left that way.** Swallow hands back six
+defensive stages to heal one health bar; Healing Wish faints its user. Both are
+honest readings of the currency, the same call this project already made for
+Rest — and the one case neither can see is a Pokemon about to be knocked out,
+which a one-turn scorer has no way to express.
+
+**A latent crash was found on the way.** The Struggle fallback added earlier
+today returned `MoveAction(move_index=0)` when every move was spent — and a
+reconstructed replay knows only the moves it actually saw used, so a Pokemon
+can have an empty list and index 0 points at nothing. It never showed against
+the engine, only against replays. Fixed at the source and guarded in the
+scorer.
+
+No regression from rewriting `_boost_value`, which every Swords Dance and Growl
+goes through:
+
+```
+                        before    after
+TRAIN                    45.45%  ->  45.46%
+TEST                     47.30%  ->  47.45%
+TEST, unseen team only   43.13%  ->  43.56%
+```
 
 ### ~~The support moves that are still unpriced~~ — worked 2026-08-25
 

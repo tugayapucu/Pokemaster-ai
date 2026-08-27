@@ -240,6 +240,7 @@ CRASH_DAMAGE_FRACTION = 0.5
 
 # The one special mechanic Reg M-B enables.
 MEGA = "mega"
+LOCK_ON = "lockon"
 
 
 class _BestMove(NamedTuple):
@@ -443,6 +444,11 @@ class HeuristicAgent(Agent):
         if attacker is None:
             return ScoredAction(action, 0.0, ("no active Pokemon",))
 
+        if action.move_index >= len(attacker.selectable_moves):
+            # A reconstructed replay knows only the moves it saw used, so an
+            # index can outrun the list. Neutral rather than a crash: an
+            # unknown move is a gap in the data, not a reason to rank it.
+            return ScoredAction(action, 0.0, ("no move at that index",))
         move_id = attacker.selectable_moves[action.move_index]
         try:
             move = self.dex.get_move(move_id)
@@ -965,6 +971,11 @@ class HeuristicAgent(Agent):
             if retyped is not None:
                 return retyped
 
+        if move.move_id == LOCK_ON:
+            locked = self._score_lock_on(observation, slot, action, attacker)
+            if locked is not None:
+                return locked
+
         if move.move_id in BORROWING_MOVES:
             borrowed = self._score_borrowed(
                 observation, slot, action, move, attacker, borrow_depth
@@ -1010,6 +1021,42 @@ class HeuristicAgent(Agent):
                 action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",)
             )
         return ScoredAction(action, value * move.hit_chance, tuple(reasons))
+
+    def _score_lock_on(self, observation, slot, action, attacker):
+        """Guaranteeing next turn's hit, worth the damage misses cost us now.
+
+        Priced from our own moveset rather than as a flat value: Lock-On is
+        worth a great deal to a Focus Blast and nothing at all to a Pokemon
+        whose moves all land anyway. That is the accuracy gap on whichever
+        move stands to gain most, in the currency damage already uses.
+        """
+        best = 0.0
+        name = None
+        for index, move_id in enumerate(attacker.selectable_moves):
+            try:
+                candidate = self.dex.get_move(move_id)
+            except KeyError:
+                continue
+            # Damaging only, which also keeps this out of its own way: scoring
+            # move index 0 blindly would recurse forever when Lock-On is the
+            # first move in the set.
+            if not candidate.is_damaging or candidate.hit_chance >= 1.0:
+                continue
+            scored = self._score_move(
+                observation, slot, MoveAction(move_index=index, target=action.target)
+            )
+            # What the misses are costing: the move already scores its own
+            # hit chance, so the gap is what perfect accuracy would add back.
+            gap = scored.score * (1.0 / max(0.01, candidate.hit_chance) - 1.0)
+            if gap > best:
+                best, name = gap, candidate.name
+        if name is None:
+            return ScoredAction(
+                action, 0.0, ("every move we have already lands",)
+            )
+        return ScoredAction(
+            action, best, (f"stops our {name} missing next turn",)
+        )
 
     def _mega_form(self, attacker, species: SpeciesInfo):
         """`attacker` as it would be after Mega Evolving, or None if it cannot.
@@ -1798,6 +1845,18 @@ class HeuristicAgent(Agent):
             # trapped at all.
             observed_types=(
                 self._observed_types(observed) if observed is not None else ()
+            ),
+            # Guard Split and Power Split average two stats between the pair,
+            # so both halves have to be on the table.
+            attacker_stats=attacker.computed_stats,
+            # Magnetic Flux only reaches an ally with Plus or Minus.
+            ally_ability=ally.current_ability if ally is not None else None,
+            # Healing Wish sends its healing to whoever comes in next, so the
+            # question is who on the bench needs it most.
+            bench_hp_fractions=tuple(
+                mon.hp_fraction
+                for index, mon in enumerate(observation.own_side.team)
+                if not mon.fainted and index not in observation.own_side.active_slots
             ),
         )
 

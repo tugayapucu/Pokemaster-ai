@@ -155,6 +155,13 @@ def legal_slot_actions(
     # that itself -- `Side.chooseMove`: "Override action and use Struggle if
     # there are no enabled moves with PP". It substitutes Struggle for whatever
     # is chosen, and Struggle needs no target.
+    #
+    # Unless there is no move to name. A reconstructed replay knows only the
+    # moves it actually saw used, so a Pokemon can legitimately have an empty
+    # list -- and `MoveAction(move_index=0)` then points at nothing. Passing is
+    # wrong against a live engine and is the only thing left here.
+    if not pokemon.selectable_moves:
+        return [PassAction()]
     return [MoveAction(move_index=0, target=None)]
 
 
