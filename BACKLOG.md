@@ -33,20 +33,73 @@ than disappearing.
 
 ## Now
 
-### 1. The seven that are genuinely unpriced
+**Direction agreed 2026-08-25: opponent modelling.** Not because it is next in
+`PROJECT_PLAN.md` — it is Milestone 10 — but because writing down what is
+blocked made the case. Four of the seven dead-ended support moves want the same
+capability, and so does everything below:
 
-| Move | Why |
-|---|---|
-| **Ally Switch** | Its value is dodging an attack aimed at a slot, and which slot they aimed at is exactly what cannot be seen. |
-| **Perish Song** | Cuts both ways; depends on being ahead and on trapping. A first attempt at a number cost three labels of agreement. |
-| **Teatime** | Everything eats its Berry, ours included, and theirs are unseen. |
-| **Spite** | An opponent's PP is unknowable, and four PP in a five-turn format is rarely what binds. |
-| **Baton Pass** | Needs a view of who benefits from what is passed — a matchup question, not a turn question. |
-| **Transform** | Becomes the target; the value is next turn's whole moveset. |
-| **Fling** | Priced only once the held item has shown itself, like Trick and Switcheroo. |
+```
+_known_ability          guesses nothing for the 238 species with a choice
+assumed_opponent_points spreads 66 points evenly, which no real team does
+_threat_from            assumes a standard STAB attack from anything unseen
+Trick / Switcheroo /
+  Fling                 priced only once an item has shown itself
+```
 
-Four of these want hidden information and will not move without opponent
-modelling. Two want a matchup model. One wants an item reveal.
+All of it is the same missing thing: **a belief about what the opponent
+actually has.** In a bring-6/pick-4 format that shows you six Pokemon before
+the battle, the agent currently assumes a neutral average and never updates.
+
+### 1. Measure the ceiling first, and let it refute the direction
+
+**Experiment 0005 is evidence against this whole plan and must be given a fair
+chance to win.** It measured perfect knowledge of the opponent's *moveset* at
+**+0.09 points of agreement**, and perfect knowledge of their move *this turn*
+made the agent worse.
+
+Two things it did not do, and the difference is the entire case for trying
+again:
+
+- it tested **moveset** knowledge, not **spread, item or ability** — the three
+  that move damage *numbers* rather than which threats exist;
+- it measured **agreement**, which experiment 0014 has since shown is 74%
+  contaminated by teams seen in training and which 0010 and 0013 both caught
+  misleading when pushed.
+
+So: give the agent an oracle for the opponent's spread, item and ability, and
+measure it **head-to-head over ≥1,500 battles across ≥2 seeds** — the
+objective, not the stand-in. Nothing else here starts until that number exists.
+
+**If it comes back flat, this direction is dead and gets written up as such.**
+That is a real possibility and the honest reason to spend a day on the oracle
+before a milestone on the machinery.
+
+### 2. Infer stat spreads from what the damage already tells us
+
+Only if item 1 says it is worth anything.
+
+Every hit the opponent lands is a constraint on their attacking stat; every hit
+they take is a constraint on their defending one. That is a filter, and the
+project already has the instrument to grade it exactly: **the engine
+differential harness knows both sides' true stats from the requests**, so an
+inferred spread can be scored against the truth rather than against a proxy.
+
+The corpus cannot grade this — Stat Points are never published (ADR 0002) — so
+the engine is not merely the better instrument here, it is the only one.
+
+### 3. Narrow the ability from the species, then from behaviour
+
+`_known_ability` already settles the 119 species with exactly one possible
+ability. The next tier is behavioural: something that outsped us in sun is
+telling us about Chlorophyll, something that took a Fire move badly is telling
+us it is not Heatproof. Cheap, and it feeds damage, turn order and the
+knockout claim at once.
+
+### 4. Spend the belief where it changes a decision
+
+`_threat_from`, the knockout claim, and the three item-gated support moves.
+Deliberately last: a belief nothing reads is the twelfth instance of this
+project's most common bug, and the point is not to add a thirteenth.
 
 ---
 
@@ -731,6 +784,10 @@ Kept here so the same ground is not covered twice.
   were priced this round and humans picked them sixteen times in 500 battles.
   Agreement moved 0.03 points, which says nothing either way. Twenty-nine
   tests against `moves.ts` say something.
+- **Blocked work belongs in the plan, not the backlog.** The seven support
+  moves that cannot be priced are recorded in `PROJECT_PLAN.md` under
+  *Deliberately not done*, with the capability each is waiting on. This file
+  is for work that can start now.
 - **Rarity in the corpus is not unimportance.** The corpus is a measuring
   instrument, not the target.
 - **Check the size of a gap before trying to close it.** Target selection was

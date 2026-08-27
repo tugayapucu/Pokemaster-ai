@@ -978,6 +978,69 @@ battles, chosen 0 times, because `action.special` was unread and `max` returns
 the first of equal maxima. Scoring the forme is worth **60.1%** head-to-head
 over 1,600 battles across two seeds.
 
+### The next capability, and why (decided 2026-08-25)
+
+**Opponent modelling — Milestone 10 — is next.** Agreed with the project owner
+after the engine-correctness work reached a stable point: damage 93.9% on
+random teams, turn order 97.8%, the knockout claim 99.0%, and 161 of 176 status
+moves priced.
+
+The case is not that it is next in this file. It is that writing down what is
+*blocked* made the argument by itself:
+
+```
+four of the seven unpriceable support moves   want opponent modelling
+_known_ability      guesses nothing for the 238 species with a choice
+assumed_opponent_points   spreads 66 points evenly, which no real team does
+_threat_from        assumes a standard STAB attack from anything unseen
+Trick / Switcheroo / Fling   priced only once an item has shown itself
+```
+
+Every one is the same missing thing: a belief about what the opponent has. In a
+bring-6/pick-4 format that shows six Pokemon before the battle, the agent
+assumes a neutral average and never updates.
+
+#### Reconciling this with experiment 0005
+
+0005 is the strongest evidence *against* this direction and is not being
+waved away. It measured perfect knowledge of the opponent's **moveset** at
+**+0.09 points of agreement**, and perfect knowledge of the move they use *this
+turn* made the agent measurably worse. It was run specifically to stop the
+project committing sessions to opponent modelling on the strength of a story.
+
+Two things it did not test, and the difference is the whole case for looking
+again:
+
+- **it tested movesets, not spreads, items or abilities.** Those three move
+  damage *numbers* rather than which threats exist, and they are what the
+  blocked items are actually waiting on.
+- **it measured agreement.** Experiment 0014 has since established that the
+  test half is 74% contaminated by teams also seen in training, and 0010 and
+  0013 both caught agreement misleading when leaned on. Head-to-head is the
+  objective; agreement is a stand-in for it.
+
+So the first item is an **oracle measured on win rate**, over ≥1,500 battles
+across ≥2 seeds — the bar this project already holds strength claims to. If
+that comes back flat, the direction is dead and gets written up as a second
+refutation rather than pursued.
+
+That ordering is the project's own standing rule applied to itself: *check the
+size of a gap before trying to close it.* It has been right twice — target
+selection was 77–80% against a 50% floor rather than "the largest gap", and
+the knockout claim measured 98.1% against an assumed 83%.
+
+#### What is deliberately not next
+
+- **Chasing agreement.** It sits at 43.56% on unseen teams, the corpus cannot
+  measure generalisation to unseen teams at all, and two experiments have
+  caught it misleading. It stays a sensitive detector for scoring changes, not
+  a target.
+- **Team building** (Milestone 13). Asked and answered: the goal is to prepare
+  for a variety of teams rather than to find one.
+- **Closing the remaining Mega gap.** 86.9% against 93.9% with five hypotheses
+  eliminated. Real, but the eliminations were the value and the remainder is
+  now a long tail.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
