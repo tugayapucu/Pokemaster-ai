@@ -53,21 +53,23 @@ found by reading what is already there:
   viable at ~460 forks/sec with verified isolation. It was set aside on a
   premise that stopped being true.
 
-### 1. Give search the evaluator it does not use
+### 1. An evaluator that can price more than HP
 
-0021 makes this the live item. `search.py` scores actions with the heuristic's
-own per-move numbers and **never calls `evaluate_position`** — so experiment
-0001 was not searching over positions, it was re-deriving the heuristic with
-extra steps. That is a better explanation of its inertness than the one it
-recorded (opponent knowledge), which 0005, 0018 and 0019 have all refuted.
+0022 turned this into the live item rather than the follow-on.
 
-Forking is already measured viable: ~460 forks/sec with verified isolation.
+Putting both of search's terms in position-value units is the principled fix,
+and it cannot be done yet: **`evaluate_position` scores only HP and fainting**,
+so Protect, Tailwind, Swords Dance and every other status move price at exactly
+zero. A search maximising it would stop using them.
 
-It may still fail. 0001 stands as a reminder that lookahead has disappointed
-here once, and the honest bar is the usual one — 1,500 battles, two seeds,
-paired.
+So the job is an evaluator that prices a stat stage and a field effect, graded
+the way 0021 graded this one — against who actually won. The weakest cell there
+is the one search depends on: **66.1% on slim advantages**, which is precisely
+where a lookahead compares close positions.
 
-### 2. A learned value model — later, and smaller than it looked
+Only after that is search worth re-opening.
+
+### 2. A learned value model, once there is something to learn against
 
 79.7% is a high floor for a hand-written function, so Milestone 7's headroom
 over it is real but modest. Worth less than giving search an evaluator it
@@ -96,6 +98,44 @@ Fix the docstring either way: it currently cites a refuted claim as settled.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~Give search the evaluator it does not use~~ — tried, and it is not one change (0022)
+
+Two findings, one good and one uncomfortable.
+
+**The lookahead was inert.** `SearchAgent._threats` counted only *revealed*
+damaging moves, so the retaliation term had a **median of exactly zero** across
+404 decisions and changed the chosen action 9.4% of the time. More than half
+the time the search was the heuristic wearing a hat.
+
+0001 diagnosed this correctly and its fix — assume a standard STAB attack from
+an opponent that has revealed nothing — was written into
+`HeuristicAgent._threat_from` and **never applied to the search**. That also
+explains why 0001's recorded reason ("opponent knowledge is the bottleneck")
+sent 0005, 0018 and 0019 all looking for value in opponent knowledge: the
+diagnosis was nearly right and the actionable form of it landed in the wrong
+module.
+
+**Waking it up made the agent significantly worse.**
+
+```
+median |lookahead|   0.0 -> 27.6      decisions changed  9.4% -> 18.2%
+
+seed 1   336/800  = 42.0%
+seed 7   320/800  = 40.0%
+pooled   656/1600 = 41.0%   (95% CI 38.6%-43.4%)   p < 0.0001
+```
+
+Reverted. A baseline nine points worse for an unfixed reason is not a useful
+baseline.
+
+The likely cause is the currency mismatch: `immediate - threat * exposure`
+subtracts position-value units from the heuristic's fitted action score. While
+the threat was zero that was harmless; live, it is a mis-scaled penalty, and
+too large a penalty makes an agent over-buy Protect and switching against a
+threat it is assuming rather than seeing. Same direction as 0005's finding that
+perfect knowledge of their move *this turn* made the agent worse — **correct
+information, wrongly priced, hurts.**
 
 ### ~~Does the position evaluator predict the winner?~~ — yes, 79.7% (0021)
 
