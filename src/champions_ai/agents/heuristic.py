@@ -555,7 +555,7 @@ class HeuristicAgent(Agent):
                 attacker=attacker_species,
                 defender=defender_species,
                 # Mega Sol makes Solar Beam stop being halved by the weather.
-                attacker_ability=attacker.current_ability,
+                attacker_ability=self._own_ability(attacker),
                 # Terrain bonuses need footing, and the two sides are asked
                 # separately because Rising Voltage reads the target's while
                 # everything else reads ours.
@@ -628,7 +628,7 @@ class HeuristicAgent(Agent):
             # Ours is in our own request; theirs is None until it shows itself,
             # and an unknown ability is treated as doing nothing rather than
             # as an invented one.
-            attacker_ability=attacker.current_ability,
+            attacker_ability=self._own_ability(attacker),
             attacker_hp_fraction=attacker.hp_fraction,
             attacker_status=attacker.status,
             defender_status=target.status,
@@ -2038,6 +2038,17 @@ class HeuristicAgent(Agent):
             if lost >= self.MIN_LEARNABLE_LOSS:
                 losses.append((mon, lost))
         return losses
+
+    def _own_ability(self, attacker) -> str | None:
+        """Our own ability, which we always know exactly.
+
+        A method rather than a field read so an experiment can take it away.
+        Abilities are the largest term in damage accuracy ever measured here --
+        80.1% to 92% on random teams -- which makes "an agent that ignores
+        them" the sharpest available test of whether damage accuracy buys
+        games at all.
+        """
+        return attacker.current_ability
 
     def _opponent_stats(
         self, species: SpeciesInfo, *, attacking: str | None = None

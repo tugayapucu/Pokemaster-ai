@@ -33,7 +33,18 @@ than disappearing.
 
 ## Now
 
-**Empty.** Every item raised has been done or ruled out with evidence. The two
+**Empty, and the next direction is now measured rather than argued.**
+Experiment 0020 priced damage accuracy at **~0.23 points of win rate per point
+of accuracy**, which prices out the Mega gap (~1.6 wins for the largest known
+defect, after five eliminated hypotheses) and the rest of the mechanical work.
+
+The largest improvement this project has measured was **+10.1 points from a
+decision the agent was not making** -- it never Mega Evolved -- not from a
+number it had wrong. What the agent *chooses* is now worth more than what it
+*knows*, so the next list should be built from Milestone 7 (a value model) or
+Milestone 11 (search with a learned policy).
+
+Every item previously raised has been done or ruled out with evidence. The two
 capabilities this list was pointed at — opponent modelling and the support
 moves that depend on it — are closed for now by experiments 0018 and 0019: the
 ceiling is +4.3 points, spreads carry all of it, and inference from damage

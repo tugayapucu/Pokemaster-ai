@@ -1082,6 +1082,49 @@ the knockout claim measured 98.1% against an assumed 83%.
   eliminated. Real, but the eliminations were the value and the remainder is
   now a long tail.
 
+### What damage accuracy is worth, and what that settles (2026-08-25)
+
+Experiment 0020. Removing abilities -- the largest accuracy term ever measured
+here, worth **11.9 points** of damage prediction -- costs **2.7 points** of win
+rate (52.7%, 95% CI 50.2-55.1%, p = 0.032).
+
+```
+1 point of damage accuracy  ->  ~0.23 points of win rate
+```
+
+The true rate is lower still: abilities also feed turn order and the
+immunities, so the blinded agent lost more than damage accuracy alone.
+
+That prices everything left in the engine-correctness direction:
+
+```
+closing the Mega gap (7.0 accuracy, five hypotheses eliminated)   ~1.6 wins
+closing multi-hit moves                                           ~0.1
+
+scoring the Mega forme -- a *decision* fix                        +10.1
+perfect opponent knowledge -- a ceiling                            +4.3
+inferring spreads from damage                                      +0.8 (null)
+```
+
+**The Mega gap is priced out.** It is the largest known defect in the damage
+model, it has survived five eliminated hypotheses, and closing it entirely
+would be worth about a point and a half.
+
+**The conclusion is about the project rather than about Mega.** Engine
+correctness is close to exhausted -- damage 93.9%, turn order 97.8%, knockout
+claim 99.0%, 161 of 176 status moves priced -- and what remains converts at
+roughly a fifth of a point per point.
+
+The largest agent improvement ever measured here was **+10.1 points and was
+not an accuracy fix**: the agent never Mega Evolved, because `action.special`
+was unread. A decision it was not making, rather than a number it had slightly
+wrong.
+
+**At this point, what the agent chooses is worth more than what it knows.**
+That is the case for Milestone 7 (a value model) and Milestone 11 (search with
+a learned policy) over any further mechanical work, and it is measured rather
+than asserted.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
