@@ -33,43 +33,61 @@ than disappearing.
 
 ## Now
 
-**Empty, and the next direction is now measured rather than argued.**
-Experiment 0020 priced damage accuracy at **~0.23 points of win rate per point
-of accuracy**, which prices out the Mega gap (~1.6 wins for the largest known
-defect, after five eliminated hypotheses) and the rest of the mechanical work.
+**Direction set by experiment 0020: what the agent chooses is worth more than
+what it knows.** Damage accuracy converts at ~0.23 points of win rate per
+point, which prices out the Mega gap (~1.6) and the rest of the mechanical
+work. The largest improvement ever measured here was +10.1 from a *decision*
+the agent was not making.
 
-The largest improvement this project has measured was **+10.1 points from a
-decision the agent was not making** -- it never Mega Evolved -- not from a
-number it had wrong. What the agent *chooses* is now worth more than what it
-*knows*, so the next list should be built from Milestone 7 (a value model) or
-Milestone 11 (search with a learned policy).
+Two things make this a live direction rather than a fresh guess, and both were
+found by reading what is already there:
 
-Every item previously raised has been done or ruled out with evidence. The two
-capabilities this list was pointed at — opponent modelling and the support
-moves that depend on it — are closed for now by experiments 0018 and 0019: the
-ceiling is +4.3 points, spreads carry all of it, and inference from damage
-alone recovers too little of it to measure.
+- **`evaluate_position` exists, is exported, has unit tests, and has no
+  production caller.** Its own docstring says search needs it and that
+  Milestone 7 replaces it with a learned model. Nothing has ever checked
+  whether it predicts anything.
+- **`search.py`'s stated reason for not doing real search is refuted.** It
+  says *"0001 found search depth is not the bottleneck, opponent knowledge
+  is"* — and 0005, 0018 and 0019 have since measured opponent knowledge at
+  +0.09 agreement, a +4.3 ceiling, and a null. Forking the engine was measured
+  viable at ~460 forks/sec with verified isolation. It was set aside on a
+  premise that stopped being true.
 
-What to put here next is a decision rather than a queue, and the candidates
-with their measured sizes are in `PROJECT_PLAN.md` under *The next capability*.
+### 1. Give search the evaluator it does not use
+
+0021 makes this the live item. `search.py` scores actions with the heuristic's
+own per-move numbers and **never calls `evaluate_position`** — so experiment
+0001 was not searching over positions, it was re-deriving the heuristic with
+extra steps. That is a better explanation of its inertness than the one it
+recorded (opponent knowledge), which 0005, 0018 and 0019 have all refuted.
+
+Forking is already measured viable: ~460 forks/sec with verified isolation.
+
+It may still fail. 0001 stands as a reminder that lookahead has disappointed
+here once, and the honest bar is the usual one — 1,500 battles, two seeds,
+paired.
+
+### 2. A learned value model — later, and smaller than it looked
+
+79.7% is a high floor for a hand-written function, so Milestone 7's headroom
+over it is real but modest. Worth less than giving search an evaluator it
+currently ignores.
+
+The weakest cell is the one search cares most about: **66.1% on slim
+advantages**, which is exactly where a lookahead compares close positions. If a
+learned model is built, that is the number to improve, not the headline.
 
 
-**Direction agreed 2026-08-25: opponent modelling.** Not because it is next in
-`PROJECT_PLAN.md` — it is Milestone 10 — but because writing down what is
-blocked made the case. Four of the seven dead-ended support moves want the same
-capability, and so does everything below:
 
-```
-_known_ability          guesses nothing for the 238 species with a choice
-assumed_opponent_points spreads 66 points evenly, which no real team does
-_threat_from            assumes a standard STAB attack from anything unseen
-Trick / Switcheroo /
-  Fling                 priced only once an item has shown itself
-```
+Only after item 1 says the evaluator is worth maximising.
 
-All of it is the same missing thing: **a belief about what the opponent
-actually has.** In a bring-6/pick-4 format that shows you six Pokemon before
-the battle, the agent currently assumes a neutral average and never updates.
+0001 found one-turn search inert (49.3%, not significant) and blamed opponent
+knowledge. That explanation is dead, so the result needs a better one — the
+likeliest being that the "search" scores actions with the heuristic's own
+per-move numbers rather than evaluating positions, so it never had anything to
+look ahead *with*.
+
+Fix the docstring either way: it currently cites a refuted claim as settled.
 
 ---
 
@@ -78,6 +96,29 @@ the battle, the agent currently assumes a neutral average and never updates.
 Kept rather than deleted: several of these are refutations, and the
 evidence for *not* doing something is as easy to lose as the evidence for
 doing it.
+
+### ~~Does the position evaluator predict the winner?~~ — yes, 79.7% (0021)
+
+```
+turns 1-2   71.0%      slim   (<50)     66.1%
+turns 3-5   81.0%      clear  (50-150)  82.7%
+turns 6-9   85.7%      large  (>150)    86.2%
+overall     79.7%
+```
+
+Well calibrated — monotone in its own confidence, which is the property search
+actually needs and not one a hand-written function was guaranteed to have.
+
+**A bias fixed on the way.** Unrevealed opponents scored 100 while one of ours
+at full health scored 140, so a dead-even turn-one board read **+80 in our
+favour**. A Pokemon that has not been sent out is at full health. Fixing it
+took 77.6% → 79.7%, and slim advantages 59.8% → 66.1%.
+
+**And a flaw in the measurement that would have inverted the conclusion.** The
+first run reported turns 1–2 at 43.7% — worse than a coin flip on n=900 —
+because battles were paired without exchanging teams, so player 0 held one side
+of every matchup. `evaluate` does the exchange by construction; a hand-rolled
+loop has to remember.
 
 ### ~~Infer stat spreads from the damage~~ — done 2026-08-25. It works and it does not matter
 

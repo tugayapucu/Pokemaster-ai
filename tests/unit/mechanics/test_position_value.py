@@ -20,6 +20,11 @@ def _mon(species: str, hp: int = 150, max_hp: int = 150) -> BattlePokemon:
     )
 
 
+def _hidden(species: str) -> BattlePokemon:
+    """One they have not sent out, so the observation cannot see it."""
+    return _mon(species).model_copy(update={"has_been_active": False})
+
+
 def _observation(own_hps=(150, 150, 150, 150), foe_hps=(150, 150, 150, 150),
                  own_slots=(0, 1), foe_slots=(0, 1)) -> Observation:
     own = Side(
@@ -75,3 +80,36 @@ def test_advantage_is_symmetric_between_the_players():
     observation = _observation(foe_hps=(0, 150, 150, 150))
     from_p0 = evaluate_position(observation)
     assert from_p0.own_score > from_p0.opponent_score
+
+
+def test_an_unrevealed_opponent_is_at_full_health():
+    """They have not been sent out, which is precisely why they are unhurt.
+
+    Counting them at `POKEMON_WEIGHT` alone made every unrevealed Pokemon worth
+    40 less than one of ours at full health, so a dead-even turn-one board read
+    as +80 in our favour. A bias rather than noise: it always pointed the same
+    way, and it was largest exactly when the least was known.
+
+    Measured against self-play outcomes: fixing it took the evaluator from
+    77.6% to 79.7% at naming the eventual winner, and slim advantages -- the
+    ones the bias could flip -- from 59.8% to 66.1%.
+    """
+    # The default fixture marks every Pokemon `has_been_active`, so nothing is
+    # unrevealed and the bias cannot show. Two of theirs still on the bench is
+    # the turn-one case that mattered.
+    own = Side(
+        team=tuple(_mon(f"own{i}") for i in range(4)), active_slots=(0, 1)
+    )
+    foe = Side(
+        team=(
+            _mon("foe0"),
+            _mon("foe1"),
+            _hidden("foe2"),
+            _hidden("foe3"),
+        ),
+        active_slots=(0, 1),
+    )
+    state = BattleState(regulation=REGULATION_M_B, turn=1, sides=(own, foe))
+    observation = Observation.from_battle_state(state, player=0)
+    assert observation.opponent_side.unrevealed_count == 2
+    assert evaluate_position(observation).advantage == 0.0

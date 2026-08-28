@@ -59,8 +59,14 @@ def evaluate_position(observation: Observation) -> PositionValue:
             continue
         opponent += POKEMON_WEIGHT + HP_WEIGHT * (observed.hp_percent / 100)
     # Pokemon they have not sent out are still alive and still count, even
-    # though nothing is known about them beyond their existence.
-    opponent += POKEMON_WEIGHT * opponent_side.unrevealed_count
+    # though nothing is known about them beyond their existence -- **and they
+    # are at full health, which is the whole point of not having sent them
+    # out**. Counting them at `POKEMON_WEIGHT` alone made every unrevealed
+    # opponent worth 40 less than one of ours at full health, so an even board
+    # on turn one read as +80 in our favour. It is a bias rather than noise:
+    # it always points the same way, and it is largest exactly when the least
+    # is known.
+    opponent += (POKEMON_WEIGHT + HP_WEIGHT) * opponent_side.unrevealed_count
     opponent -= EMPTY_SLOT_PENALTY * sum(
         1 for slot in opponent_side.active_slots if slot is None
     )
