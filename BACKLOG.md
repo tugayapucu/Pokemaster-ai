@@ -53,7 +53,28 @@ found by reading what is already there:
   viable at ~460 forks/sec with verified isolation. It was set aside on a
   premise that stopped being true.
 
-### 1. An evaluator that can price more than HP
+### 1. Protect, and the rest of the status moves nobody priced
+
+0023 measured the largest single gap against human play, and it is not subtle:
+**Protect is 14.5% of every move choice humans make in the corpus, and the
+agent picks it on roughly 0.2% of its own.** Tailwind, Trick Room, Rage Powder,
+Parting Shot and Fake Out sit in the same position -- priced flat, or priced at
+the unknown-support value.
+
+0023 also says not to expect much, and says why. It priced *offensive* boosts
+properly, moved them from 2.5% to 7.2% of available turns, and won nothing
+(+0.9, 95% CI 48.4-53.3%). Setup turns out to be near break-even here. Protect
+is a different shape of move -- it spends a turn to deny one, rather than to
+compound -- so that null does not transfer, but it is the reason to **measure
+the ceiling before building a price**: how often would a perfectly-timed
+Protect have changed the result? That is answerable by replaying decided
+positions, and it is far cheaper than fitting a number.
+
+The standing rule applies with force here. Humans using Protect 14.5% of the
+time is a ranking signal, not truth, and 0010 and 0013 are both cases where
+following the corpus was the wrong move.
+
+### 2. An evaluator that can price more than HP
 
 0022 turned this into the live item rather than the follow-on.
 
@@ -69,7 +90,7 @@ where a lookahead compares close positions.
 
 Only after that is search worth re-opening.
 
-### 2. A learned value model, once there is something to learn against
+### 3. A learned value model, once there is something to learn against
 
 79.7% is a high floor for a hand-written function, so Milestone 7's headroom
 over it is real but modest. Worth less than giving search an evaluator it
