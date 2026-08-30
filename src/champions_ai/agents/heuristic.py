@@ -30,6 +30,12 @@ from champions_ai.agents.currency import (
     SWITCH_WHEN_WEAKENED_BONUS,
 )
 from champions_ai.agents.support import score_support_move
+from champions_ai.agents.tenure import (
+    OFFENSIVE_STATS,
+    expected_tenure,
+    offensive_boost_value,
+    stage_multiplier,
+)
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo, to_id
 from champions_ai.domain import (
     FIRST_TURN_MOVES,
@@ -150,9 +156,16 @@ FLINCH_WEIGHT = 100.0
 
 # Which targets mean "our side". Boosts land on the move's target, so a Swords
 # Dance and a Growl carry the same field with opposite meanings.
-SELF_TARGETS = frozenset({
-    "self", "adjacentAlly", "adjacentAllyOrSelf", "allies", "allySide", "allyTeam",
-})
+SELF_TARGETS = frozenset(
+    {
+        "self",
+        "adjacentAlly",
+        "adjacentAllyOrSelf",
+        "allies",
+        "allySide",
+        "allyTeam",
+    }
+)
 
 # A screen halves damage for several turns. Priced off the incoming threat the
 # way Protect is, rather than flat: a screen with nothing to block is worth
@@ -407,9 +420,7 @@ class HeuristicAgent(Agent):
         self._previous, self._last_action = observation, best
         return best
 
-    def explain(
-        self, observation: Observation, action: JointAction
-    ) -> tuple[ScoredAction, ...]:
+    def explain(self, observation: Observation, action: JointAction) -> tuple[ScoredAction, ...]:
         """Per-slot scores and reasons for a chosen action."""
         return tuple(
             self.score_slot_action(observation, slot, slot_action)
@@ -461,9 +472,7 @@ class HeuristicAgent(Agent):
             reasons.append(f"{attacker.pokemon_set.species} is weakened")
         return ScoredAction(action, score, tuple(reasons))
 
-    def _score_move(
-        self, observation: Observation, slot: int, action: MoveAction
-    ) -> ScoredAction:
+    def _score_move(self, observation: Observation, slot: int, action: MoveAction) -> ScoredAction:
         attacker = self._own_active(observation, slot)
         if attacker is None:
             return ScoredAction(action, 0.0, ("no active Pokemon",))
@@ -481,9 +490,7 @@ class HeuristicAgent(Agent):
             # Unknown data is a gap to fix, not a reason to prefer or avoid the
             # move, so it scores neutrally rather than silently ranking last.
             return ScoredAction(action, 0.0, (f"no data: {error}",))
-        return self._score_chosen_move(
-            observation, slot, action, move, attacker, attacker_species
-        )
+        return self._score_chosen_move(observation, slot, action, move, attacker, attacker_species)
 
     def _score_chosen_move(
         self,
@@ -522,9 +529,7 @@ class HeuristicAgent(Agent):
             )
 
         if not move.is_damaging:
-            return self._score_status_move(
-                observation, slot, action, move, attacker, borrow_depth
-            )
+            return self._score_status_move(observation, slot, action, move, attacker, borrow_depth)
 
         target = self._resolve_target(observation, slot, action, move)
         if target is None:
@@ -588,12 +593,8 @@ class HeuristicAgent(Agent):
                 # item has left, because the engine announces it. Holding one
                 # is still not enough on its own: a Mega Stone cannot be taken
                 # off the species it evolves, and this dex is full of them.
-                defender_item_removable=self._item_can_be_taken(
-                    target, defender_species
-                ),
-                fainted_allies=sum(
-                    1 for mon in observation.own_side.team if mon.fainted
-                ),
+                defender_item_removable=self._item_can_be_taken(target, defender_species),
+                fainted_allies=sum(1 for mon in observation.own_side.team if mon.fainted),
                 terrain=observation.terrain,
                 weather=observation.weather,
             ),
@@ -667,7 +668,6 @@ class HeuristicAgent(Agent):
         # worse on both halves and *increased* the wrong-target count it was
         # meant to reduce. Humans prefer the more threatening of two opponents
         # only 53.7% of the time, which is barely above a coin flip.
-
 
         if estimate.effectiveness > 1:
             reasons.append(f"super effective ({estimate.effectiveness:g}x)")
@@ -765,8 +765,7 @@ class HeuristicAgent(Agent):
         attacker = self._own_active(observation, slot)
         threat = 1.0
         if attacker is not None and any(
-            stat in DEFENSIVE_STATS and stages < 0
-            for stat, stages in move.self_boosts.items()
+            stat in DEFENSIVE_STATS and stages < 0 for stat, stages in move.self_boosts.items()
         ):
             threat, _, _ = self._incoming_threat(observation, slot, attacker)
 
@@ -905,9 +904,7 @@ class HeuristicAgent(Agent):
         clamped to what is actually available: healing above full is wasted,
         and recoil cannot take more HP than the Pokemon has.
         """
-        if not (
-            move.drain or move.recoil or move.has_crash_damage or move.self_switch
-        ):
+        if not (move.drain or move.recoil or move.has_crash_damage or move.self_switch):
             return 0.0, []
 
         dealt = estimate.average
@@ -940,9 +937,7 @@ class HeuristicAgent(Agent):
             miss = 1.0 - move.hit_chance
             loss = miss * CRASH_DAMAGE_FRACTION
             value -= loss * SUSTAIN_WEIGHT
-            reasons.append(
-                f"and costs half its HP on the {miss:.0%} chance it misses"
-            )
+            reasons.append(f"and costs half its HP on the {miss:.0%} chance it misses")
 
         if move.self_switch and attacker.hp_fraction <= LOW_HP_FRACTION:
             # U-turn, Volt Switch and Flip Turn attack *and* pivot. Getting
@@ -979,9 +974,7 @@ class HeuristicAgent(Agent):
             return self._score_protect(observation, slot, action, move, attacker)
 
         if move.move_id in ABILITY_MOVES:
-            swapped = self._score_ability_move(
-                observation, slot, action, move, attacker
-            )
+            swapped = self._score_ability_move(observation, slot, action, move, attacker)
             if swapped is not None:
                 return swapped
 
@@ -1001,9 +994,7 @@ class HeuristicAgent(Agent):
                 return locked
 
         if move.move_id in BORROWING_MOVES:
-            borrowed = self._score_borrowed(
-                observation, slot, action, move, attacker, borrow_depth
-            )
+            borrowed = self._score_borrowed(observation, slot, action, move, attacker, borrow_depth)
             if borrowed is not None:
                 return borrowed
 
@@ -1028,7 +1019,7 @@ class HeuristicAgent(Agent):
         recipient, friendly = self._boost_recipient(
             observation, slot, action, move, attacker, observed
         )
-        value += self._boost_value(move, recipient, friendly, reasons)
+        value += self._boost_value(move, recipient, friendly, reasons, observation, slot, attacker)
         # Everything a move inflicts follows the same rule as its boosts: it
         # lands on whoever the action names. Aiming Swagger at our own partner
         # buys the +2 Attack and the confusion, and the confusion is ours.
@@ -1041,9 +1032,7 @@ class HeuristicAgent(Agent):
         value += -landed if aimed_at_ally else landed
 
         if not reasons:
-            return ScoredAction(
-                action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",)
-            )
+            return ScoredAction(action, STATUS_MOVE_VALUE, (f"{move.name} is a support move",))
         return ScoredAction(action, value * move.hit_chance, tuple(reasons))
 
     def _score_lock_on(self, observation, slot, action, attacker):
@@ -1075,12 +1064,8 @@ class HeuristicAgent(Agent):
             if gap > best:
                 best, name = gap, candidate.name
         if name is None:
-            return ScoredAction(
-                action, 0.0, ("every move we have already lands",)
-            )
-        return ScoredAction(
-            action, best, (f"stops our {name} missing next turn",)
-        )
+            return ScoredAction(action, 0.0, ("every move we have already lands",))
+        return ScoredAction(action, best, (f"stops our {name} missing next turn",))
 
     def _mega_form(self, attacker, species: SpeciesInfo):
         """`attacker` as it would be after Mega Evolving, or None if it cannot.
@@ -1117,21 +1102,15 @@ class HeuristicAgent(Agent):
         ):
             baseline = other_stat(old_base, invested)
             if key in current and baseline > 0:
-                stats[key] = int(
-                    current[key] * other_stat(new_base, invested) / baseline
-                )
+                stats[key] = int(current[key] * other_stat(new_base, invested) / baseline)
 
         return forme, attacker.model_copy(
             update={
                 "computed_stats": stats,
                 # Every Mega forme has exactly one possible ability, so this is
                 # a fact rather than a guess.
-                "current_ability": (
-                    to_id(forme.abilities[0]) if forme.abilities else None
-                ),
-                "pokemon_set": attacker.pokemon_set.model_copy(
-                    update={"species": forme.name}
-                ),
+                "current_ability": (to_id(forme.abilities[0]) if forme.abilities else None),
+                "pokemon_set": attacker.pokemon_set.model_copy(update={"species": forme.name}),
             }
         )
 
@@ -1164,12 +1143,8 @@ class HeuristicAgent(Agent):
         if move_id == COPYCAT:
             borrowed = copycat_borrows(self._move_or_none(observation.last_move_used))
             if borrowed is None:
-                return ScoredAction(
-                    action, 0.0, ("there is no move for Copycat to copy yet",)
-                )
-            return self._as_borrowed(
-                observation, slot, action, borrowed, attacker, depth, "copies"
-            )
+                return ScoredAction(action, 0.0, ("there is no move for Copycat to copy yet",))
+            return self._as_borrowed(observation, slot, action, borrowed, attacker, depth, "copies")
 
         if move_id == SLEEP_TALK:
             known = [self._move_or_none(i) for i in attacker.selectable_moves]
@@ -1183,9 +1158,7 @@ class HeuristicAgent(Agent):
             # average of them -- not the best of them, which is the mistake
             # that would make Sleep Talk look like a free copy of our best hit.
             scores = [
-                self._as_borrowed(
-                    observation, slot, action, candidate, attacker, depth, "may use"
-                )
+                self._as_borrowed(observation, slot, action, candidate, attacker, depth, "may use")
                 for candidate in candidates
             ]
             mean = sum(scored.score for scored in scores) / len(scores)
@@ -1251,13 +1224,9 @@ class HeuristicAgent(Agent):
         if not ability_move_succeeds(move.move_id, ours=ours, theirs=theirs):
             return ScoredAction(action, 0.0, (f"{move.name} would fail here",))
 
-        after_ours, after_theirs = abilities_after(
-            move.move_id, ours=ours, theirs=theirs
-        )
+        after_ours, after_theirs = abilities_after(move.move_id, ours=ours, theirs=theirs)
         now = self._our_best_hit(observation, slot, observed, ours, theirs)
-        later = self._our_best_hit(
-            observation, slot, observed, after_ours, after_theirs
-        )
+        later = self._our_best_hit(observation, slot, observed, after_ours, after_theirs)
         return ScoredAction(
             action,
             (later - now) * DAMAGE_WEIGHT,
@@ -1274,11 +1243,17 @@ class HeuristicAgent(Agent):
         observed,
         attacker_ability: str | None,
         defender_ability: str | None,
+        offensive_stat: str | None = None,
     ) -> float:
         """Best fraction *this* Pokemon of ours could take off that target.
 
         Only our own slot, unlike the retyping moves: Skill Swap and Role Play
         change what *we* have, so the partner's numbers do not move.
+
+        `offensive_stat` narrows the search to the moves a stat boost would
+        actually help. Swords Dance raises Attack, so pricing it off a special
+        attack -- or off Body Press, which is Physical but swings with Defense
+        -- would credit it with damage it cannot buy.
         """
         attacker = self._own_active(observation, slot)
         if attacker is None:
@@ -1298,6 +1273,8 @@ class HeuristicAgent(Agent):
             except KeyError:
                 continue
             if not candidate.is_damaging:
+                continue
+            if offensive_stat is not None and candidate.offensive_stat != offensive_stat:
                 continue
             estimate = estimate_damage(
                 self.dex,
@@ -1395,8 +1372,7 @@ class HeuristicAgent(Agent):
             action,
             value,
             (
-                f"our {partner.pokemon_set.species} would be knocked out by "
-                f"{source} before moving",
+                f"our {partner.pokemon_set.species} would be knocked out by {source} before moving",
                 f"letting its {best.move.name} through first",
             ),
         )
@@ -1435,9 +1411,7 @@ class HeuristicAgent(Agent):
             partner_species = self.dex.get_species(partner.pokemon_set.species)
         except KeyError:
             return None
-        threat, _, _ = self._threat_from(
-            observed, partner, partner_species, observation
-        )
+        threat, _, _ = self._threat_from(observed, partner, partner_species, observation)
         chance_they_first = 1.0 - self._moves_first(best.move, observation, ally_slot)
         return ScoredAction(
             action,
@@ -1511,9 +1485,7 @@ class HeuristicAgent(Agent):
         if after is None:
             # The engine's own answer: Soak on a Water type fails outright, and
             # so does Trick-or-Treat on anything already part Ghost.
-            return ScoredAction(
-                action, 0.0, (f"{move.name} would fail on {species.name}",)
-            )
+            return ScoredAction(action, 0.0, (f"{move.name} would fail on {species.name}",))
 
         gained = self._best_damage(observation, slot, observed, after) - self._best_damage(
             observation, slot, observed, before
@@ -1543,9 +1515,7 @@ class HeuristicAgent(Agent):
         copied = effective_types(theirs.types, tuple(observed.volatile_conditions))
         after = retyped_by(REFLECT_TYPE, current, copied=copied)
         if after is None:
-            return ScoredAction(
-                action, 0.0, (f"we are already {'/'.join(current)}",)
-            )
+            return ScoredAction(action, 0.0, (f"we are already {'/'.join(current)}",))
         now, _, _ = self._incoming_threat(observation, slot, attacker)
         later, _, _ = self._incoming_threat(observation, slot, attacker, after)
         return ScoredAction(
@@ -1669,10 +1639,7 @@ class HeuristicAgent(Agent):
             return ScoredAction(
                 action,
                 0.0,
-                (
-                    f"nothing {partner_species.name} knows is worth "
-                    f"doing twice in one turn",
-                ),
+                (f"nothing {partner_species.name} knows is worth doing twice in one turn",),
             )
 
         def repeat_value(info: MoveInfo) -> ScoredAction:
@@ -1691,10 +1658,7 @@ class HeuristicAgent(Agent):
                 return ScoredAction(
                     action,
                     0.0,
-                    (
-                        f"{partner_species.name} moves after us and has "
-                        f"nothing to repeat",
-                    ),
+                    (f"{partner_species.name} moves after us and has nothing to repeat",),
                 )
             scored = repeat_value(repeated)
             why = f"our {partner_species.name} uses {repeated.name} again"
@@ -1711,9 +1675,7 @@ class HeuristicAgent(Agent):
         """
         observed = self._observed_target(observation, slot)
         if observed is None:
-            return ScoredAction(
-                MoveAction(move_index=0), 0.0, ("nobody there to instruct",)
-            )
+            return ScoredAction(MoveAction(move_index=0), 0.0, ("nobody there to instruct",))
         try:
             species = self.dex.get_species(attacker.pokemon_set.species)
         except KeyError:
@@ -1725,9 +1687,7 @@ class HeuristicAgent(Agent):
             (f"lets {observed.species} attack again, at our expense",),
         )
 
-    def _ally_acts_first(
-        self, observation: Observation, slot: int, ally_slot: int
-    ) -> bool:
+    def _ally_acts_first(self, observation: Observation, slot: int, ally_slot: int) -> bool:
         """Whether our partner moves before us this turn.
 
         Both are on our side, so tailwind and Trick Room apply to both and this
@@ -1793,9 +1753,7 @@ class HeuristicAgent(Agent):
         scored = self._score_chosen_move(
             observation, slot, action, borrowed, attacker, species, depth + 1
         )
-        return ScoredAction(
-            action, scored.score, (f"{verb} {borrowed.name}", *scored.reasons[:1])
-        )
+        return ScoredAction(action, scored.score, (f"{verb} {borrowed.name}", *scored.reasons[:1]))
 
     def _item_can_be_taken(self, target, species) -> bool:
         """Whether Knock Off would find something it can actually remove.
@@ -1845,9 +1803,7 @@ class HeuristicAgent(Agent):
             weather=observation.weather,
             own_side_conditions=tuple(observation.own_side.side_conditions),
             opponent_side_conditions=tuple(observation.opponent_side.side_conditions),
-            team_statuses=tuple(
-                mon.status for mon in observation.own_side.team if not mon.fainted
-            ),
+            team_statuses=tuple(mon.status for mon in observation.own_side.team if not mon.fainted),
             # Ours is never hidden from us; theirs is, until it fires.
             attacker_item=self.dex.items.get(attacker.current_item or ""),
             defender_item=(
@@ -1856,18 +1812,12 @@ class HeuristicAgent(Agent):
                 else None
             ),
             consumed_item=(
-                self.dex.items.get(observed.consumed_item or "")
-                if observed is not None
-                else None
+                self.dex.items.get(observed.consumed_item or "") if observed is not None else None
             ),
-            observed_may_hold_item=(
-                observed.may_hold_item if observed is not None else True
-            ),
+            observed_may_hold_item=(observed.may_hold_item if observed is not None else True),
             # Trapping needs to know whether they are a Ghost, which cannot be
             # trapped at all.
-            observed_types=(
-                self._observed_types(observed) if observed is not None else ()
-            ),
+            observed_types=(self._observed_types(observed) if observed is not None else ()),
             # Guard Split and Power Split average two stats between the pair,
             # so both halves have to be on the table.
             attacker_stats=attacker.computed_stats,
@@ -1914,11 +1864,10 @@ class HeuristicAgent(Agent):
         attacks = [
             (slot, act)
             for slot, act in enumerate(action.slot_actions)
-            if isinstance(act, MoveAction) and act.target is not None
-            and act.target.side == "foe"
+            if isinstance(act, MoveAction) and act.target is not None and act.target.side == "foe"
         ]
         if len(attacks) != 1:
-            return          # two attackers, and the damage cannot be split
+            return  # two attackers, and the damage cannot be split
         slot, act = attacks[0]
         attacker = self._own_active(before, slot)
         if attacker is None:
@@ -1933,7 +1882,7 @@ class HeuristicAgent(Agent):
 
         hurt = self._who_lost_health(before.opponent_side, now.opponent_side)
         if len(hurt) != 1:
-            return          # more than one of theirs moved, so who took what?
+            return  # more than one of theirs moved, so who took what?
         index, lost = hurt[0]
         seen = now.opponent_side.revealed[index]
         try:
@@ -1968,12 +1917,14 @@ class HeuristicAgent(Agent):
         if len(live) != 1:
             return
         seen = now.opponent_side.revealed[live[0]]
-        fresh = set(seen.revealed_moves) - set(
-            before.opponent_side.revealed[live[0]].revealed_moves
-        ) if live[0] < len(before.opponent_side.revealed) else set()
+        fresh = (
+            set(seen.revealed_moves) - set(before.opponent_side.revealed[live[0]].revealed_moves)
+            if live[0] < len(before.opponent_side.revealed)
+            else set()
+        )
         candidates = [m for m in self._as_moves(fresh) if m.is_damaging]
         if len(candidates) != 1:
-            return          # nothing new, or two new moves and no way to pick
+            return  # nothing new, or two new moves and no way to pick
         move = candidates[0]
         try:
             attacker = self.dex.get_species(seen.species)
@@ -2134,7 +2085,9 @@ class HeuristicAgent(Agent):
             return None, True
         return observed, False
 
-    def _boost_value(self, move, recipient, friendly, reasons) -> float:
+    def _boost_value(
+        self, move, recipient, friendly, reasons, observation, slot, attacker
+    ) -> float:
         """Stat stages the move applies, worth only the headroom that is left.
 
         A stage is capped at six either way, so a second Swords Dance at +5
@@ -2159,7 +2112,24 @@ class HeuristicAgent(Agent):
                 moved = max(0, min(delta, MAX_STAGE - current))
             else:
                 moved = -max(0, min(-delta, current - MIN_STAGE))
-            worth = moved * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
+            worth = None
+            # An offensive rise on the user itself is the one case with a
+            # closed form: it multiplies our own damage for as long as we are
+            # around to deal it. See `tenure` -- the flat price below asks
+            # whether our attack is weak when the trade turns on how long we
+            # last. Everything else (allies, opponents, drops, Speed and the
+            # defensive stats) keeps the flat rate; each is a different
+            # calculation and changing one at a time is the only way to know
+            # which one moved the result.
+            if recipient is attacker and stat in OFFENSIVE_STATS and moved > 0:
+                priced = self._tenure_priced_boost(
+                    observation, slot, attacker, stat, current, moved
+                )
+                if priced is not None:
+                    worth, tenure = priced
+                    reasons.append(f"and should get ~{tenure:.1f} turns to use it")
+            if worth is None:
+                worth = moved * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
             # A rise helps whoever gets it; on their side that is our loss.
             value += worth if friendly else -worth
             whose = "our" if friendly else "their"
@@ -2178,6 +2148,35 @@ class HeuristicAgent(Agent):
                 value += delta * STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
                 reasons.append(f"but costs us {-delta} stage(s) of {stat}")
         return value
+
+    def _tenure_priced_boost(
+        self, observation, slot, attacker, stat, current, moved
+    ) -> tuple[float, float] | None:
+        """What a rise to our own attacking stat buys, and over how many turns.
+
+        `None` when the pieces are not there -- nobody to hit, or no move the
+        boost would help -- so the caller falls back to the flat rate rather
+        than pricing the move at zero. An unknown is a gap in what we can
+        compute, not evidence the move is worthless.
+        """
+        observed = self._observed_target(observation, slot)
+        if observed is None:
+            return None
+        damage = self._our_best_hit(
+            observation,
+            slot,
+            observed,
+            attacker.current_ability,
+            self._known_ability(observed),
+            offensive_stat=stat,
+        )
+        if damage <= 0.0:
+            return None
+        threat, _, _ = self._incoming_threat(observation, slot, attacker)
+        tenure = expected_tenure(attacker.hp_fraction, threat)
+        multiplier = stage_multiplier(current, current + moved)
+        worth = offensive_boost_value(multiplier, damage, tenure) * DAMAGE_WEIGHT
+        return worth, tenure
 
     def _status_move_status(self, move, observed, reasons) -> float:
         """A status the move inflicts, priced exactly as a rider would be."""
@@ -2229,9 +2228,7 @@ class HeuristicAgent(Agent):
                 fraction, _, source = self._incoming_threat(observation, slot, attacker)
                 blocked = fraction * SCREEN_FRACTION_BLOCKED * SCREEN_TURNS
                 value += blocked * SCREEN_WEIGHT
-                reasons.append(
-                    f"halves ~{fraction:.0%} incoming for several turns ({source})"
-                )
+                reasons.append(f"halves ~{fraction:.0%} incoming for several turns ({source})")
             else:
                 value += SIDE_CONDITION_VALUE.get(condition, STATUS_MOVE_VALUE)
                 reasons.append(f"sets {move.side_condition} on our side")
@@ -2423,7 +2420,6 @@ class HeuristicAgent(Agent):
                 continue
         return found
 
-
     # ------------------------------------------------------------- resolution
 
     @staticmethod
@@ -2491,9 +2487,7 @@ class HeuristicAgent(Agent):
                 remaining_hp=max(1, ally.current_hp),
                 defending_stat=apply_boost(
                     stats.get(defending_key, 100),
-                    guard_stage
-                    if guard_stage is not None
-                    else ally.boosts.stage(defending_key),
+                    guard_stage if guard_stage is not None else ally.boosts.stage(defending_key),
                 ),
                 is_ally=True,
                 status=ally.status,
@@ -2504,18 +2498,12 @@ class HeuristicAgent(Agent):
                 volatiles=tuple(ally.volatile_conditions),
                 attacking_stat=None
                 if attacking_key is None
-                else apply_boost(
-                    stats.get(attacking_key, 100), ally.boosts.stage(attacking_key)
-                ),
+                else apply_boost(stats.get(attacking_key, 100), ally.boosts.stage(attacking_key)),
             )
 
         foe_slot = action.target.slot if action.target is not None else None
         opponent = observation.opponent_side
-        candidates = (
-            [foe_slot]
-            if foe_slot is not None
-            else list(range(len(opponent.active_slots)))
-        )
+        candidates = [foe_slot] if foe_slot is not None else list(range(len(opponent.active_slots)))
         for candidate in candidates:
             if candidate >= len(opponent.active_slots):
                 continue
@@ -2553,18 +2541,13 @@ class HeuristicAgent(Agent):
                 # target is not the one using it.
                 attacking_stat=None
                 if attacking_key is None
-                else apply_boost(
-                    estimated[attacking_key], observed.boosts.stage(attacking_key)
-                ),
+                else apply_boost(estimated[attacking_key], observed.boosts.stage(attacking_key)),
             )
         return None
 
-
     # --------------------------------------------------------- team preview
 
-    def select_team_preview(
-        self, preview: TeamPreview, picked_team_size: int
-    ) -> TeamPreviewAction:
+    def select_team_preview(self, preview: TeamPreview, picked_team_size: int) -> TeamPreviewAction:
         """Pick which Pokemon to bring, and in what order, from the matchup.
 
         The first decision of every battle, and the one a player most wants
@@ -2580,9 +2563,7 @@ class HeuristicAgent(Agent):
         picks = self._rank_team_preview(preview, picked_team_size)
         return TeamPreviewAction(picks=picks)
 
-    def _rank_team_preview(
-        self, preview: TeamPreview, picked_team_size: int
-    ) -> tuple[int, ...]:
+    def _rank_team_preview(self, preview: TeamPreview, picked_team_size: int) -> tuple[int, ...]:
         scores = self._matchup_table(preview)
         if not scores:
             return tuple(range(picked_team_size))
@@ -2636,12 +2617,10 @@ class HeuristicAgent(Agent):
     def _score_selection(
         selection: tuple[int, ...], scores: list[list[float]], opponents: int
     ) -> float:
-        coverage = sum(
-            max(scores[index][foe] for index in selection) for foe in range(opponents)
+        coverage = sum(max(scores[index][foe] for index in selection) for foe in range(opponents))
+        average = sum(scores[index][foe] for index in selection for foe in range(opponents)) / max(
+            1, len(selection) * opponents
         )
-        average = sum(
-            scores[index][foe] for index in selection for foe in range(opponents)
-        ) / max(1, len(selection) * opponents)
         return COVERAGE_WEIGHT * coverage + AVERAGE_WEIGHT * average
 
     def explain_team_preview(
