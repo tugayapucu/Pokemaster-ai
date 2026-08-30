@@ -12,3 +12,8 @@ data/replays/
 
 # Cached dex dump, regenerated from the simulator on demand.
 data/dex.json
+
+# Teams harvested from the replay corpus. Derived from unlicensed battle logs,
+# so they inherit the same constraint the logs carry: local research use, never
+# redistributed. Rebuild with `champions_ai.data.harvest` from a local corpus.
+data/harvested_teams.txt
