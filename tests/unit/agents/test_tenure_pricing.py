@@ -85,7 +85,7 @@ def agent() -> HeuristicAgent:
         types=TYPES,
         type_chart=TypeChart(multipliers={"Normal": {"Normal": 1.0}}),
     )
-    return HeuristicAgent(dex)
+    return HeuristicAgent(dex, tenure_boosts=True)
 
 
 def _mon(hp_fraction: float = 1.0) -> BattlePokemon:

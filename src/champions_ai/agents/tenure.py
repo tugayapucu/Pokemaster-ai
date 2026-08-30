@@ -120,10 +120,31 @@ def expected_tenure(hp_fraction: float, incoming_fraction: float) -> float:
     )
 
 
-def offensive_boost_value(multiplier: float, damage_fraction: float, tenure: float) -> float:
+def offensive_boost_value(
+    multiplier: float,
+    damage_fraction: float,
+    tenure: float,
+    target_fraction: float = 1.0,
+) -> float:
     """Health bars a boost buys: larger attacks, for the turns that remain.
 
     Zero at a tenure of one, which is the point -- a boost on the turn you
     faint buys nothing, and the flat price said otherwise.
+
+    Also zero when the attack already knocks the target out. Damage stops
+    paying at the knockout threshold, and a boost's entire product is a bigger
+    number per hit, so that ceiling is exactly where its value goes. Pricing
+    the gain as `(m - 1) * f` without it made the agent turn down a guaranteed
+    knockout on 14.5% of the turns one was available -- it had been offered a
+    kill and preferred to make its next kill larger. Measured, and it cost 4.6
+    points of win rate.
+
+        useful gain per turn  =  min(m * f, hp)  -  min(f, hp)
+
+    which is the full `(m - 1) * f` while the target survives the hit, and
+    nothing once it does not.
     """
-    return (multiplier - 1.0) * max(0.0, damage_fraction) * max(0.0, tenure - 1.0)
+    damage = max(0.0, damage_fraction)
+    target = max(0.0, target_fraction)
+    gain = min(multiplier * damage, target) - min(damage, target)
+    return gain * max(0.0, tenure - 1.0)

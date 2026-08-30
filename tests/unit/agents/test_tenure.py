@@ -21,7 +21,15 @@ from champions_ai.agents.tenure import (
 
 def prefers_setup(stages: int, damage_fraction: float, tenure: float) -> bool:
     """Whether the boost outscores simply attacking, in the agent's own terms."""
-    value = offensive_boost_value(stage_multiplier(0, stages), damage_fraction, tenure)
+    return prefers_setup_against(stages, damage_fraction, tenure, target=1.0)
+
+
+def prefers_setup_against(
+    stages: int, damage_fraction: float, tenure: float, target: float
+) -> bool:
+    value = offensive_boost_value(
+        stage_multiplier(0, stages), damage_fraction, tenure, target_fraction=target
+    )
     return value > damage_fraction
 
 
@@ -58,15 +66,35 @@ class TestBreakEven:
         assert not prefers_setup(1, 0.35, tenure=2.9)
         assert prefers_setup(1, 0.35, tenure=3.1)
 
-    def test_the_decision_does_not_depend_on_how_hard_we_hit(self):
-        """The `f` cancels. This is the entire point of the change.
+    def test_the_decision_ignores_how_hard_we_hit_while_the_target_survives(self):
+        """The `f` cancels -- but only up to the knockout threshold.
 
-        The old flat price made setup a question of whether our attack was
-        weak; the trade it actually represents has no `f` in it.
+        The flat price made setup a question of whether our attack was weak.
+        The trade has no `f` in it *while the boosted hit still leaves the
+        target standing*, which is the range this covers. Past that the
+        cancellation genuinely breaks, and the next test is that case: an
+        earlier version of this file asserted independence at every `f` and
+        was wrong to.
         """
-        for damage in (0.05, 0.2, 0.5, 0.9):
+        for damage in (0.05, 0.2, 0.4):
             assert not prefers_setup(2, damage, tenure=1.9)
             assert prefers_setup(2, damage, tenure=2.1)
+
+    def test_boosting_an_attack_that_already_kills_buys_nothing(self):
+        """Damage past a knockout is wasted, and a boost only makes damage.
+
+        Pricing this as `(m - 1) * f` had the agent decline a guaranteed
+        knockout on 14.5% of the turns one was available, at a cost of 4.6
+        points of win rate.
+        """
+        assert offensive_boost_value(2.0, 0.6, tenure=5.0, target_fraction=0.5) == 0.0
+        assert not prefers_setup_against(2, 0.9, tenure=5.0, target=1.0)
+
+    def test_a_partial_overkill_is_worth_only_the_part_that_lands(self):
+        """f = 0.6 into a full bar: doubling would deal 1.2, of which 0.4 is
+        real and 0.2 is spilled on the floor."""
+        value = offensive_boost_value(2.0, 0.6, tenure=2.0, target_fraction=1.0)
+        assert value == pytest.approx(0.4)
 
     def test_a_boost_on_your_last_turn_is_worthless(self):
         assert offensive_boost_value(2.0, 0.4, tenure=1.0) == 0.0

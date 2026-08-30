@@ -373,11 +373,20 @@ class HeuristicAgent(Agent):
         # put the whole ceiling at +4.3 points, so this is a modest effect that
         # has to be measured rather than assumed.
         infer_spreads: bool = False,
+        # Off by default: measured at +0.9 points over 1,600 battles, 95% CI
+        # 48.4%-53.3%, p = 0.48. That is neutral, not an improvement, and this
+        # project does not ship unproven changes to the shipped agent. The code
+        # stays because the finding it rests on is solid -- setup moves are
+        # roughly break-even here, which is worth knowing and worth being able
+        # to re-measure -- and because pricing a stat stage in damage terms is
+        # machinery the position evaluator needs next.
+        tenure_boosts: bool = False,
     ) -> None:
         self.dex = dex
         self.name = name
         self.assumed_opponent_points = assumed_opponent_points
         self.infer_spreads = infer_spreads
+        self.tenure_boosts = tenure_boosts
         self.belief = OpponentBelief(dex) if infer_spreads else None
         # What the field looked like when we last chose, and what we chose.
         # Diffing the two is the only way an agent sees damage: it is handed
@@ -2121,7 +2130,12 @@ class HeuristicAgent(Agent):
             # defensive stats) keeps the flat rate; each is a different
             # calculation and changing one at a time is the only way to know
             # which one moved the result.
-            if recipient is attacker and stat in OFFENSIVE_STATS and moved > 0:
+            if (
+                self.tenure_boosts
+                and recipient is attacker
+                and stat in OFFENSIVE_STATS
+                and moved > 0
+            ):
                 priced = self._tenure_priced_boost(
                     observation, slot, attacker, stat, current, moved
                 )
@@ -2175,7 +2189,15 @@ class HeuristicAgent(Agent):
         threat, _, _ = self._incoming_threat(observation, slot, attacker)
         tenure = expected_tenure(attacker.hp_fraction, threat)
         multiplier = stage_multiplier(current, current + moved)
-        worth = offensive_boost_value(multiplier, damage, tenure) * DAMAGE_WEIGHT
+        worth = (
+            offensive_boost_value(
+                multiplier,
+                damage,
+                tenure,
+                target_fraction=observed.hp_percent / 100,
+            )
+            * DAMAGE_WEIGHT
+        )
         return worth, tenure
 
     def _status_move_status(self, move, observed, reasons) -> float:
