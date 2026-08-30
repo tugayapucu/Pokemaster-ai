@@ -315,3 +315,44 @@ def harvest_teams(
                 continue
             texts.append("\n\n".join(s for s in sets if s is not None))
     return texts
+
+
+def harvested_pool(
+    bridge,
+    battle_format: str,
+    replays: list[Replay],
+    *,
+    dex=None,
+    seed: int = 0,
+    limit: int | None = None,
+):
+    """A `TeamPool` of real teams, with the engine as the only gate.
+
+    Every candidate goes through `validate_team`; anything the engine refuses
+    is dropped and counted rather than repaired here, because a team the engine
+    will not start is not a team. Roughly 96% survive.
+
+    Pass the **train** split. The corpus also supplies the human-agreement
+    benchmarks, and building the teams we measure on out of the battles we
+    grade against is the leak experiment 0014 already caught once.
+    """
+    from champions_ai.data.team_pool import BattleTeam, TeamPool
+    from champions_ai.data.team_text import parse_showdown_team
+
+    texts = harvest_teams(replays, dex=dex, seed=seed)
+    teams: list[BattleTeam] = []
+    for text in texts:
+        if limit is not None and len(teams) >= limit:
+            break
+        try:
+            packed = bridge.validate_team(battle_format, text)
+        except Exception:
+            continue
+        teams.append(
+            BattleTeam(
+                team=parse_showdown_team(text),
+                packed=packed,
+                name=f"harvested-{len(teams)}",
+            )
+        )
+    return TeamPool(teams)
