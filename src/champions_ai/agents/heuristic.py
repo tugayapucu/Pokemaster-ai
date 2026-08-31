@@ -246,18 +246,23 @@ AVERAGE_WEIGHT = 0.25
 # (McNemar chi2 = 172 on 11,133 labels), worse against Random (96.7% against
 # 99.0%), and a head-to-head edge that did not survive being re-run at higher
 # power. Switching remains an open problem, not a solved one.
-# Matchup switching, restored behind a flag for experiment 0027. Experiment
-# 0004 measured it as worse and reverted it -- on human agreement (43.1% ->
-# 39.7%, chi2 = 172 over 11,133 labels), a marginal head-to-head (52.9% over
-# 1,600 battles, one seed null) and a loss against Random. All three were run
-# on the singles-generated pool 0024 later found unrepresentative, where
-# battles lasted 8.5 turns.
+# Matchup switching. Kept behind a flag and **off**, on evidence twice over.
 #
-# The horizon is the reason to look again rather than a hope the numbers move.
-# It converts a per-turn matchup gain into a total, and its own comment
-# calibrated it "in a format where battles last five or six turns". Harvested
-# battles run thirteen, and a constant that encodes a battle length is wrong
-# when the battle length doubles.
+# Experiment 0004 built it and reverted it on the singles-generated pool that
+# 0024 later found unrepresentative. Experiment 0027 re-measured it on
+# harvested teams, where battles run thirteen turns instead of 8.5:
+#
+#   horizon 8.0 (matches the human switch rate)   46.4%   p = 0.004
+#   horizon 4.0                                   48.4%   p = 0.21
+#
+# Both below even and monotone -- the more the agent switches, the worse it
+# does. So the flat cost's 0.3% switch rate is right for this format even
+# though rated humans switch on 11.8% of decisions, and that gap is not a
+# defect to close.
+#
+# The horizon converts a per-turn matchup gain into a total. 0004 needed 1.0 to
+# reach the human switch rate and this needs 8.0, which was the sign it was
+# absorbing something other than horizon.
 SWITCH_HORIZON = 1.0
 # Saving a Pokemon that would otherwise be knocked out is worth roughly what
 # losing it would cost: a slot, an attacker and a switch option at once.
@@ -398,8 +403,9 @@ class HeuristicAgent(Agent):
         # to re-measure -- and because pricing a stat stage in damage terms is
         # machinery the position evaluator needs next.
         tenure_boosts: bool = False,
-        # Off by default. 0004's revert stands until something re-measures it
-        # on teams that resemble the game people actually play.
+        # Off by default, and expected to stay that way: 0027 measured it as
+        # worse on harvested teams at every horizon tried. Kept constructible
+        # so the result can be re-checked rather than taken on trust.
         matchup_switching: bool = False,
     ) -> None:
         self.dex = dex

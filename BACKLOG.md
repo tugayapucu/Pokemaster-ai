@@ -122,6 +122,25 @@ Fix the docstring either way: it currently cites a refuted claim as settled.
 
 ## Done, most recent first
 
+### ~~Switch more, like humans do~~ — ruled out 2026-08-31, it costs games (0027)
+
+The agent switches on **0.3%** of free decisions against a human **11.8%**, the
+widest behavioural gap left in it, and `_score_switch` gives no credit at all
+for the matchup a switch buys. Experiment 0004 built the matchup version and
+reverted it on the old pool; 0027 restored it and re-measured on harvested
+teams:
+
+    horizon 8.0 (matches the human rate)   46.4%   p = 0.004
+    horizon 4.0                            48.4%   p = 0.21
+
+Both below even and monotone -- more switching is worse. The 0.3% rate is right
+for this format, and human agreement was the wrong target for the third time
+(after 0010's Trick Room and 0013's targets).
+
+Kept behind `matchup_switching`, default off. Found on the way:
+`legal_switch_actions`, because replacing a fainted Pokemon was crashing on
+move data it never needed.
+
 ### ~~Redirection~~ — ruled out 2026-08-31, ceiling is 2.0% (0026)
 
 Rage Powder on 36% of harvested teams and modelled nowhere looked like the
