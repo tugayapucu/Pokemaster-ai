@@ -1,7 +1,7 @@
 # Experiment 0027 — The agent barely switches, and that turns out to be right
 
 **Date:** 2026-08-31
-**Result: the widest behavioural gap left in the agent is not a defect.** It switches on **0.3%** of free decisions where rated humans switch on **11.8%**, and the cause is visible in the code — a switch is priced at a flat −25 with no credit for the matchup it buys. Restoring the matchup-based scorer experiment 0004 reverted, and re-measuring it on harvested teams, makes the agent **worse**: 46.4% at the horizon that reproduces the human switch rate, 48.4% at half of it, monotone in how much it switches. 0004's revert stands, now on a pool that resembles the game.
+**Result: the widest behavioural gap left in the agent is not a defect.** It switches on **0.3%** of free decisions where rated humans switch on **11.8%**, and the cause is visible in the code — a switch is priced at a flat −25 with no credit for the matchup it buys. Restoring the matchup-based scorer experiment 0004 reverted, and re-measuring it on harvested teams, makes the agent **worse**: 47.1% over 3,200 battles at the horizon that reproduces the human switch rate, 48.5% at half of it, monotone in how much it switches and replicated on two different pools. 0004's revert stands, now on a pool that resembles the game.
 
 ## The gap
 
@@ -88,8 +88,33 @@ KeyError: no MoveData for move 'dazzlinggleam' on 'Hatterene'
 
 because `_forced_switch_actions` asked `legal_slot_actions` for every action and kept only the switches — building every move action, discarding them, and raising on data it never needed. Move target types are learned from requests carrying an `active` block, and a forced-switch request carries none. Matchup switching reaches replacement turns far more often, which is why it surfaced here.
 
+## The rejection that turned out not to be a legality bug
+
+`Can't move: <X>'s Protect is disabled` had been refused three times across
+three different scripted agents and survived two fixes aimed at legality. It
+was diagnosed after this experiment, and it was never a legality bug at all.
+
+An invariant check over **425,008 joint actions** across four agent types found
+`legal_actions` had never once offered a disabled move, which ruled out
+enumeration. What was left was the wording, ignored six times:
+
+```
+[Unavailable choice]  ... Protect is disabled          x3
+[Invalid choice]      ... needs a target / bad target  x3
+```
+
+Showdown separates them in `Side.emitChoiceError`: **Invalid** means the choice
+was never legal, **Unavailable** means it was legal for the request we held and
+the engine has since corrected and re-emitted that request. Showdown's own
+reference agent ignores Unavailable errors. `updateDisabledRequest` is one of
+the two things that triggers the correction, which is exactly why every
+instance mentioned a disabled move and why it read as a legality problem.
+
+`_absorb` raised on any error at all; it now tolerates Unavailable, counts it,
+and still fails loudly on Invalid.
+
 ## Not established
 
-- **An intermittent engine rejection remains open**: `Can't move: <X>'s Protect is disabled` has appeared three times across different scripted agents, and did not reproduce across the 3,200 battles run here or in a dedicated state-dumping harness. Two fixes aimed at it did not cure it, so its cause is still unknown and should not be assumed fixed.
+- Whether the pool drift between the two runs changed anything beyond the 1.4 points seen. Both runs agree in direction and the pooled figure is significant, but neither was measured on a frozen pool.
 - Whether a *better* switch model would pay. This tests one particular matchup formulation at two horizons; it does not show that no switching policy could help.
 - Whether the same holds against an opponent that switches well. Both sides here share a policy, and 0026 is a standing reminder that self-play cannot price behaviour the agent does not exhibit.
