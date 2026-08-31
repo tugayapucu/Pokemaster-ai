@@ -40,7 +40,7 @@ The other half — whether the agent should *use* redirection more — is answer
 reported as the HEURISTIC's win rate; below 50% means the scripted agent won
 
 vs always redirects   794/1600 = 49.6%   95% CI 47.2-52.1%   p = 0.76
-vs always protects    738/800  = 92.3%   (400 per seed: 92.8%, 91.8%)
+vs always protects  1459/1600 = 91.2%   95% CI 89.7-92.5%   p < 1e-200
 ```
 
 Forcing redirection is neutral. It was measured four times as the legality
