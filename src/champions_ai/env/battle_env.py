@@ -34,6 +34,11 @@ from champions_ai.simulator import (
     format_team_preview,
 )
 
+# Showdown distinguishes a choice that was never legal from one that was
+# legal until the engine updated its own request. Only the first is a bug
+# on our side; the second is answered by choosing again.
+UNAVAILABLE_CHOICE = "[Unavailable choice]"
+
 PLAYER_TAGS = ("p1", "p2")
 
 
@@ -78,6 +83,7 @@ class BattleEnv:
         self._seed: str | None = None
         self._packed: tuple[str, str] = ("", "")
         self._last_legal_counts: dict[int, int] = {}
+        self._stale_requests = 0
 
     # ------------------------------------------------------------- lifecycle
 
@@ -366,14 +372,45 @@ class BattleEnv:
 
         return result
 
+    @property
+    def stale_requests(self) -> int:
+        """How often the engine corrected a superseded request and re-asked.
+
+        Not an error, but not nothing either: a rise here means our view of
+        what is choosable is drifting from the engine's more often.
+        """
+        return self._stale_requests
+
     def _absorb(self, events: list[dict]) -> StepResult:
         self._pending = set()
         for event in events:
             if event["type"] == "error":
-                # A rejected choice means our legality model disagrees with the
-                # engine. Failing loudly keeps that visible instead of letting an
-                # agent quietly play a different game.
-                raise BridgeError(f"engine rejected a choice: {event.get('message')}")
+                message = str(event.get("message") or "")
+                if message.startswith(UNAVAILABLE_CHOICE):
+                    # Not a rejection. `Side.emitChoiceError` marks an error
+                    # "Unavailable" only when `updateRequestForPokemon` changed
+                    # the request -- the engine noticed its own request was
+                    # stale, corrected it, and re-emitted it:
+                    #
+                    #     const updated = update ? this.updateRequestForPokemon(...) : null;
+                    #     const type = `[${updated ? 'Unavailable' : 'Invalid'} choice]`;
+                    #     if (updated) this.emitRequest(this.activeRequest!, true);
+                    #
+                    # Showdown's own reference agent ignores these for exactly
+                    # that reason. The corrected request arrives in this same
+                    # batch and puts the player back in `_pending`, so the
+                    # caller simply chooses again against the fixed view.
+                    #
+                    # Every instance seen here was a move the engine had newly
+                    # disabled -- `updateDisabledRequest` is one of the two
+                    # callers -- which is why it read as a legality bug and
+                    # survived two fixes aimed at legality.
+                    self._stale_requests += 1
+                    continue
+                # An *invalid* choice is the real thing: our legality model
+                # disagrees with the engine. Failing loudly keeps that visible
+                # instead of letting an agent quietly play a different game.
+                raise BridgeError(f"engine rejected a choice: {message}")
             if event["type"] == "line":
                 self._protocol.append(event["line"])
             if event["type"] == "request":
