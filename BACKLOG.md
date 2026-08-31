@@ -101,19 +101,30 @@ copying anyone's judgement.
 
 ### 2. An evaluator that can price more than HP
 
-0022 turned this into the live item rather than the follow-on.
+**Now the live item, and better motivated than it was.** 0028 re-measured
+`evaluate_position` on the frozen pool and it is weaker than 0021 reported:
 
-Putting both of search's terms in position-value units is the principled fix,
-and it cannot be done yet: **`evaluate_position` scores only HP and fainting**,
-so Protect, Tailwind, Swords Dance and every other status move price at exactly
-zero. A search maximising it would stop using them.
+    turns 1-2         57.6%   was 71.0%     <- barely better than a coin flip
+    turns 3-5         71.8%   was 81.0%
+    clear (50-150)    72.6%   was 82.7%
+    overall           74.6%   was 79.7%
 
-So the job is an evaluator that prices a stat stage and a field effect, graded
-the way 0021 graded this one — against who actually won. The weakest cell there
-is the one search depends on: **66.1% on slim advantages**, which is precisely
-where a lookahead compares close positions.
+It scores only HP and fainting, so on turn one -- when nobody has taken damage
+-- its whole signal is which side has revealed less. That correlated with
+something on the generated pool and does not on real teams.
 
-Only after that is search worth re-opening.
+**A search compares positions one or two turns ahead, which is exactly where
+this is now weakest.** So it is not a refinement of Milestone 7; it is the
+precondition for search being worth trying at all.
+
+What survives is the property search actually needs: it is still monotone in
+its own confidence (65.2% slim, 72.6% clear, 85.6% large). It knows when it is
+guessing. Anything replacing it must keep that and beat the numbers above, on
+the frozen pool, graded against who won.
+
+Honest order: improve the evaluator to a measured target *first*, re-test
+search *second*, and stop if the first step does not move. 0022 is a standing
+reminder that a better evaluator may still not make search pay.
 
 ### 3. A learned value model, once there is something to learn against
 
