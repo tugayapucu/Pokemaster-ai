@@ -101,7 +101,15 @@ copying anyone's judgement.
 
 ### 2. An evaluator that can price more than HP
 
-**Now the live item, and better motivated than it was.** 0028 re-measured
+**Confirmed worth doing by 0029, and the confirmation nearly went the other
+way.** Fitted on self-play positions the extra features looked worthless
+(+1.4); fitted on reconstructed human positions they are worth +3.0 held out
+and +4.4 against the shipped evaluator. Screens are non-zero in 0.0% of
+self-play positions and 7.8% of real ones -- the agent never uses them, so
+self-play could not see them. Grade this work on human positions, not
+self-play.
+
+**Also from 0028.** 0028 re-measured
 `evaluate_position` on the frozen pool and it is weaker than 0021 reported:
 
     turns 1-2         57.6%   was 71.0%     <- barely better than a coin flip
