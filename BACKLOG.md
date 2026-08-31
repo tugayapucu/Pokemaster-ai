@@ -33,6 +33,25 @@ than disappearing.
 
 ## Now
 
+**Measure on the frozen pool.** `data/pool-eval.txt` holds 200 validated teams
+harvested from the train split of a 1,769-replay corpus, and
+`harvested_pool(..., cache=...)` reloads it without touching the corpus. Use it
+for anything compared across runs.
+
+The reason is recorded in 0027: while the corpus was being collected the train
+split moved 405 -> 923 -> 1,427, so `harvested_pool` drew different teams every
+time, and two runs of the same A/B on identical seeds disagreed by 1.4 points.
+Within a run both arms share the pool and the comparison holds; across runs it
+did not, and nothing said so. Results published before this was frozen were
+each internally valid and are not comparable to each other.
+
+What the frozen pool carries, against the generated pool 0024 replaced:
+
+    protect 100.0%   fakeout 60.0%   tailwind 50.5%   trickroom 47.5%
+    ragepowder 35.5%   helpinghand 17.5%   followme 8.0%
+    swordsdance 8.0%   knockoff 12.0%   uturn 1.0%   stealthrock 0.0%
+
+
 **Direction set by experiment 0020: what the agent chooses is worth more than
 what it knows.** Damage accuracy converts at ~0.23 points of win rate per
 point, which prices out the Mega gap (~1.6) and the rest of the mechanical
