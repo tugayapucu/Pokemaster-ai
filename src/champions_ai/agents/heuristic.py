@@ -246,6 +246,23 @@ AVERAGE_WEIGHT = 0.25
 # (McNemar chi2 = 172 on 11,133 labels), worse against Random (96.7% against
 # 99.0%), and a head-to-head edge that did not survive being re-run at higher
 # power. Switching remains an open problem, not a solved one.
+# Matchup switching, restored behind a flag for experiment 0027. Experiment
+# 0004 measured it as worse and reverted it -- on human agreement (43.1% ->
+# 39.7%, chi2 = 172 over 11,133 labels), a marginal head-to-head (52.9% over
+# 1,600 battles, one seed null) and a loss against Random. All three were run
+# on the singles-generated pool 0024 later found unrepresentative, where
+# battles lasted 8.5 turns.
+#
+# The horizon is the reason to look again rather than a hope the numbers move.
+# It converts a per-turn matchup gain into a total, and its own comment
+# calibrated it "in a format where battles last five or six turns". Harvested
+# battles run thirteen, and a constant that encodes a battle length is wrong
+# when the battle length doubles.
+SWITCH_HORIZON = 1.0
+# Saving a Pokemon that would otherwise be knocked out is worth roughly what
+# losing it would cost: a slot, an attacker and a switch option at once.
+SWITCH_SAVES_KO_BONUS = 35.0
+
 SWITCH_COST = -25.0
 
 # High Jump Kick, Axe Kick and Supercell Slam take half the user's maximum HP
@@ -381,12 +398,16 @@ class HeuristicAgent(Agent):
         # to re-measure -- and because pricing a stat stage in damage terms is
         # machinery the position evaluator needs next.
         tenure_boosts: bool = False,
+        # Off by default. 0004's revert stands until something re-measures it
+        # on teams that resemble the game people actually play.
+        matchup_switching: bool = False,
     ) -> None:
         self.dex = dex
         self.name = name
         self.assumed_opponent_points = assumed_opponent_points
         self.infer_spreads = infer_spreads
         self.tenure_boosts = tenure_boosts
+        self.matchup_switching = matchup_switching
         self.belief = OpponentBelief(dex) if infer_spreads else None
         # What the field looked like when we last chose, and what we chose.
         # Diffing the two is the only way an agent sees damage: it is handed
@@ -468,6 +489,9 @@ class HeuristicAgent(Agent):
         is recoverable from git history and documented in experiment 0004; it
         was reverted on evidence, not abandoned for lack of one.
         """
+        if self.matchup_switching:
+            return self._score_switch_on_matchup(observation, slot, action)
+
         attacker = self._own_active(observation, slot)
         if attacker is None:
             # The slot is empty, so this is a forced replacement rather than a
@@ -480,6 +504,114 @@ class HeuristicAgent(Agent):
             score += SWITCH_WHEN_WEAKENED_BONUS
             reasons.append(f"{attacker.pokemon_set.species} is weakened")
         return ScoredAction(action, score, tuple(reasons))
+
+    def _score_switch_on_matchup(
+        self, observation: Observation, slot: int, action: SwitchAction
+    ) -> ScoredAction:
+        """Worth the matchup it buys, minus the turn and the free hit it costs.
+
+        The old scoring was a flat cost plus a bonus when weakened, which made
+        switching almost never worth it: measured against rated humans, they
+        switched on 11.0% of decisions and this agent on 1.7%, agreeing on 8 of
+        117 switch labels.
+        """
+        incoming = observation.own_side.team[action.team_index]
+        current = self._own_active(observation, slot)
+
+        if current is None:
+            # An empty slot must be refilled, so there is no turn to give up
+            # and nothing to compare against -- only which Pokemon is best
+            # placed against what is on the field.
+            replacement = self._matchup_against_field(observation, incoming)
+            return ScoredAction(
+                action,
+                replacement * DAMAGE_WEIGHT,
+                (f"{incoming.pokemon_set.species} is best placed to come in",),
+            )
+
+        staying = self._matchup_against_field(observation, current)
+        coming_in = self._matchup_against_field(observation, incoming)
+
+        gain = (coming_in - staying) * SWITCH_HORIZON * DAMAGE_WEIGHT
+        reasons = [
+            f"{incoming.pokemon_set.species} matches up "
+            f"{'better' if coming_in > staying else 'worse'} than "
+            f"{current.pokemon_set.species}"
+        ]
+
+        # Giving up this turn's attack is the price, and it is only a price if
+        # there was something worth attacking.
+        forgone, _, _ = self._best_offence(observation, slot, current)
+        score = gain - forgone * DAMAGE_WEIGHT
+        if forgone > 0:
+            reasons.append(f"but gives up a ~{forgone:.0%} hit this turn")
+
+        threat, would_ko, _ = self._incoming_threat(observation, slot, current)
+        if would_ko:
+            score += SWITCH_SAVES_KO_BONUS
+            reasons.append(f"and saves {current.pokemon_set.species} from a knockout")
+        elif threat >= current.hp_fraction:
+            score += SWITCH_SAVES_KO_BONUS * 0.5
+            reasons.append(f"{current.pokemon_set.species} may not survive the turn")
+
+        return ScoredAction(action, score, tuple(reasons))
+
+    def _matchup_against_field(self, observation: Observation, mon) -> float:
+        """Our net matchup against the live opponents, from this Pokemon.
+
+        Averaged rather than maximised: in doubles both of them get to act, so
+        being excellent against one and helpless against the other is not the
+        same as being solid against both.
+        """
+        scores = []
+        opponent = observation.opponent_side
+        for index in opponent.active_slots:
+            if index is None:
+                continue
+            observed = opponent.revealed[index]
+            if observed.fainted:
+                continue
+            try:
+                species = self.dex.get_species(observed.species)
+            except KeyError:
+                continue
+            revealed = [m for m in self._revealed_moves(observed) if m.is_damaging]
+            estimated = estimate_stats(species.base_stats, self.assumed_opponent_points)
+            scores.append(
+                matchup(
+                    self.dex,
+                    mon.pokemon_set,
+                    species,
+                    level=observation.regulation.level,
+                    doubles=observation.regulation.game_type == "doubles",
+                    assumed_points=self.assumed_opponent_points,
+                    our_stats=mon.computed_stats or None,
+                    our_hp=max(1, mon.current_hp),
+                    their_hp=max(1, estimated["hp"] * observed.hp_percent // 100),
+                    their_moves=revealed or None,
+                ).net
+            )
+        return sum(scores) / len(scores) if scores else 0.0
+
+    def _best_offence(
+        self, observation: Observation, slot: int, attacker
+    ) -> tuple[float, str | None, bool]:
+        """The best damaging move available to this slot right now."""
+        best, name, ko = 0.0, None, False
+        for index, move_id in enumerate(attacker.selectable_moves):
+            if move_id in attacker.disabled_moves:
+                continue
+            try:
+                move = self.dex.get_move(move_id)
+            except KeyError:
+                continue
+            if not move.is_damaging:
+                continue
+            scored = self._score_move(observation, slot, MoveAction(move_index=index))
+            if scored.score > best * DAMAGE_WEIGHT:
+                best = max(best, scored.score / DAMAGE_WEIGHT)
+                name, ko = move.name, False
+        return max(0.0, min(best, 1.0)), name, ko
 
     def _score_move(self, observation: Observation, slot: int, action: MoveAction) -> ScoredAction:
         attacker = self._own_active(observation, slot)
