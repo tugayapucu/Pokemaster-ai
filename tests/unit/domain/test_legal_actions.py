@@ -267,3 +267,59 @@ class TestLastResortAvoidsDisabledMoves:
         assert len(actions) == 1
         assert isinstance(actions[0], MoveAction)
         assert actions[0].move_index == 0
+
+
+class TestTargetRelaxationStaysLegal:
+    """Relaxing a target must not invent one the move cannot use.
+
+    When a slot has no usable action, `legal_slot_actions` relaxes *targeting*
+    and aims at the first foe, because the engine rejects a targetless attack
+    with "Ice Beam needs a target" and our view of who is standing can lag the
+    engine's mid-turn.
+
+    Applied to every target type, that sent Helping Hand -- `adjacentAlly` --
+    at an opponent, and the engine refused the whole choice:
+
+        [Invalid choice] Can't move: Invalid target for Helping Hand
+
+    An ally-only move with no living ally has no legal target at all.
+    """
+
+    def _alone(self, moves: tuple[str, ...], targets: tuple[str, ...]):
+        """One Pokemon with usable moves, no partner, and no foe we can see.
+
+        PP must remain, or every move is filtered before targeting is even
+        considered and the final Struggle fallback runs instead of the branch
+        under test. What makes targets empty here is that our view has no
+        living opponent -- exactly the mid-turn lag the relaxation exists for.
+        """
+        mon = _mon(
+            "own0",
+            moves=moves,
+            choosable_moves=moves,
+            choosable_move_targets=targets,
+            move_pp=(10,) * len(moves),
+            volatile_conditions=frozenset({"trapped"}),
+        )
+        side = _own_side(
+            team=(mon, _mon("own1"), _mon("own2"), _mon("own3")),
+            active_slots=(0, None),
+        )
+        downed = Side(
+            team=tuple(_mon(f"foe{i}", current_hp=0) for i in range(4)),
+            active_slots=(0, 1),
+        )
+        return legal_slot_actions(_observation(side, downed), 0, MOVES)
+
+    def test_an_ally_only_move_is_not_aimed_at_an_opponent(self):
+        actions = self._alone(("helpinghand",), ("adjacentAlly",))
+        for action in actions:
+            if isinstance(action, MoveAction) and action.target is not None:
+                assert action.target.side != "foe", "Helping Hand cannot be aimed at a foe"
+
+    def test_an_attacking_move_still_gets_the_relaxed_foe_target(self):
+        """The behaviour the relaxation exists for is unchanged."""
+        actions = self._alone(("tackle",), ("normal",))
+        aimed = [a for a in actions if isinstance(a, MoveAction) and a.target is not None]
+        assert aimed, "an attacking move should still be offered a foe target"
+        assert all(a.target.side == "foe" for a in aimed)

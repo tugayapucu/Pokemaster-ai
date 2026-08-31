@@ -55,6 +55,12 @@ def _live_own_slots(
     )
 
 
+# Target types that may name an opponent. Ally-only moves are excluded on
+# purpose: relaxing their target to a foe produces a choice the engine refuses
+# outright rather than a slightly wrong one.
+_CAN_AIM_AT_A_FOE = frozenset({"normal", "any", "adjacentFoe"})
+
+
 def _candidate_targets(
     observation: Observation, acting_slot: int, target_type: str | None
 ) -> tuple[TargetSlot | None, ...]:
@@ -216,12 +222,19 @@ def _move_actions(
             target_type = move.target
 
         candidates = _candidate_targets(observation, acting_slot, target_type)
-        if not candidates and relax_targets:
+        if not candidates and relax_targets and target_type in _CAN_AIM_AT_A_FOE:
             # Last resort only. We believe nothing is alive to aim at, and the
             # engine disagrees -- it rejected a targetless choice with "Ice
             # Beam needs a target". Our view of who is still standing can lag
             # the engine's mid-turn, so name the first foe slot rather than
             # submit a choice that is certain to be refused.
+            #
+            # Only for moves that may aim at a foe at all. Relaxing every
+            # target type sent Helping Hand -- `adjacentAlly` -- at an
+            # opponent, and the engine refused the whole choice with "Invalid
+            # target for Helping Hand". An ally-only move with no living ally
+            # has no legal target, and offering one anyway trades a move we
+            # cannot use for a turn we cannot take.
             candidates = (TargetSlot(side="foe", slot=0),)
         for target in candidates:
             if target_type in TARGETS_REQUIRING_CHOICE and target is None:
