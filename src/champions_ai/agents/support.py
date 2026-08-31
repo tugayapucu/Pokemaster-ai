@@ -191,6 +191,18 @@ TRAPPED = "trapped"
 # admitting ignorance, admitting ignorance is the better model.
 
 
+# Rage Powder and Follow Me draw the opponent's single-target attacks onto the
+# user, which is worth something only while there is a partner to draw them
+# *off*. Alone they change nothing at all, and the agent was picking them
+# anyway -- one battle in 200 turned into a fifteen-turn standoff of both sides
+# redirecting at nobody, dragging it to 49 turns.
+#
+# Only the no-ally case is decided here. What a redirect is worth *with* a
+# partner is a live question (experiment 0026) and is left to the unknown
+# support value until it is measured.
+REDIRECTION_MOVES = frozenset({"ragepowder", "followme"})
+
+
 def _stage(boosts: Boosts, field: str) -> int:
     return getattr(boosts, field)
 
@@ -261,6 +273,9 @@ def score_support_move(
     """
     move_id = move.move_id
     reasons: list[str] = []
+
+    if move_id in REDIRECTION_MOVES and (ally is None or ally.fainted):
+        return 0.0, [f"{move.name} has no partner to draw attacks away from"]
 
     # ---------------------------------------------------------------- healing
 

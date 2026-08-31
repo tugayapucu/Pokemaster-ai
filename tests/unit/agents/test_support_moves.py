@@ -25,15 +25,23 @@ STAGE = STAT_STAGE_VALUE * STAT_STAGE_WEIGHT
 
 def _move(move_id, target="self"):
     return MoveInfo(
-        move_id=move_id, name=move_id, type="Normal", category="Status",
-        base_power=0, accuracy=100, priority=0, target=target,
+        move_id=move_id,
+        name=move_id,
+        type="Normal",
+        category="Status",
+        base_power=0,
+        accuracy=100,
+        priority=0,
+        target=target,
     )
 
 
 def _mon(hp=200, max_hp=200, boosts=None, status=None):
     return BattlePokemon(
         pokemon_set=PokemonSet(species="Garchomp", level=50, ability="x", moves=("rest",)),
-        current_hp=hp, max_hp=max_hp, status=status,
+        current_hp=hp,
+        max_hp=max_hp,
+        status=status,
         computed_stats={"atk": 150, "def": 100, "spa": 150, "spd": 100, "spe": 100},
         boosts=boosts or Boosts(),
     )
@@ -41,7 +49,10 @@ def _mon(hp=200, max_hp=200, boosts=None, status=None):
 
 def _foe(hp_percent=100, boosts=None):
     return ObservedPokemon(
-        species="Charizard", level=50, hp_percent=hp_percent, fainted=False,
+        species="Charizard",
+        level=50,
+        hp_percent=hp_percent,
+        fainted=False,
         boosts=boosts or Boosts(),
     )
 
@@ -85,17 +96,14 @@ def test_rest_costs_two_turns_of_about_five():
 
 
 def test_pain_split_is_worth_nothing_when_we_are_the_healthy_one():
-    taking, _ = _score("painsplit", attacker=_mon(hp=40),
-                       observed=_foe(100), observed_stats=STATS)
-    giving, _ = _score("painsplit", attacker=_mon(hp=200),
-                       observed=_foe(20), observed_stats=STATS)
+    taking, _ = _score("painsplit", attacker=_mon(hp=40), observed=_foe(100), observed_stats=STATS)
+    giving, _ = _score("painsplit", attacker=_mon(hp=200), observed=_foe(20), observed_stats=STATS)
     assert taking > 0
     assert giving == 0.0
 
 
 def test_strength_sap_heals_by_their_attack_and_drops_it():
-    value, why = _score("strengthsap", attacker=_mon(hp=40),
-                        observed=_foe(), observed_stats=STATS)
+    value, why = _score("strengthsap", attacker=_mon(hp=40), observed=_foe(), observed_stats=STATS)
     assert value > 0
     assert any("Attack" in reason for reason in why)
 
@@ -146,8 +154,7 @@ def test_haze_with_nothing_to_clear_is_worth_nothing():
 
 def test_psych_up_only_copies_what_is_better_than_ours():
     better, _ = _score("psychup", observed=_foe(boosts=Boosts(attack=4)))
-    worse, _ = _score("psychup", attacker=_mon(boosts=Boosts(attack=4)),
-                      observed=_foe())
+    worse, _ = _score("psychup", attacker=_mon(boosts=Boosts(attack=4)), observed=_foe())
     assert better == pytest.approx(4 * STAGE)
     assert worse == 0.0
 
@@ -165,9 +172,7 @@ def test_topsy_turvy_would_help_a_debuffed_target():
 
 def test_parting_shot_drops_both_offences():
     fresh, _ = _score("partingshot", observed=_foe())
-    floored, _ = _score(
-        "partingshot", observed=_foe(boosts=Boosts(attack=-6, special_attack=-6))
-    )
+    floored, _ = _score("partingshot", observed=_foe(boosts=Boosts(attack=-6, special_attack=-6)))
     assert fresh == pytest.approx(2 * STAGE)
     assert floored == 0.0
 
@@ -190,15 +195,15 @@ def test_perish_song_is_not_priced_at_all():
 
 def test_a_stage_swap_only_pays_when_theirs_are_better():
     good, _ = _score("powerswap", observed=_foe(boosts=Boosts(attack=3)))
-    bad, _ = _score("powerswap", attacker=_mon(boosts=Boosts(attack=3)),
-                    observed=_foe())
+    bad, _ = _score("powerswap", attacker=_mon(boosts=Boosts(attack=3)), observed=_foe())
     assert good == pytest.approx(3 * STAGE)
     assert bad == 0.0
 
 
 def test_acupressure_fails_only_when_everything_is_maxed():
-    maxed = Boosts(attack=6, defense=6, special_attack=6, special_defense=6,
-                   speed=6, accuracy=6, evasion=6)
+    maxed = Boosts(
+        attack=6, defense=6, special_attack=6, special_defense=6, speed=6, accuracy=6, evasion=6
+    )
     value, _ = _score("acupressure", attacker=_mon(boosts=maxed))
     assert value == 0.0
     assert _score("acupressure")[0] == pytest.approx(2 * STAGE)
@@ -231,8 +236,8 @@ def test_phazing_undoes_what_they_set_up():
 
 def _item(item_id, is_berry=False, mega_stone=None):
     from champions_ai.dex import ItemInfo
-    return ItemInfo(item_id=item_id, name=item_id, is_berry=is_berry,
-                    mega_stone=mega_stone)
+
+    return ItemInfo(item_id=item_id, name=item_id, is_berry=is_berry, mega_stone=mega_stone)
 
 
 def test_stuff_cheeks_needs_a_berry():
@@ -247,8 +252,11 @@ def test_stuff_cheeks_needs_a_berry():
 
 
 def test_stuff_cheeks_is_worth_less_at_a_high_defence():
-    boosted, _ = _score("stuffcheeks", attacker=_mon(boosts=Boosts(defense=5)),
-                        attacker_item=_item("sitrusberry", is_berry=True))
+    boosted, _ = _score(
+        "stuffcheeks",
+        attacker=_mon(boosts=Boosts(defense=5)),
+        attacker_item=_item("sitrusberry", is_berry=True),
+    )
     assert boosted == pytest.approx(1 * STAGE)
 
 
@@ -280,10 +288,18 @@ def test_recycle_knows_whether_there_is_anything_to_recover():
 # ----------------------------------------------------------- honestly unknown
 
 
-@pytest.mark.parametrize("move_id", [
-    "batonpass", "transform", "trick", "skillswap", "afteryou", "quash",
-    "spite",
-])
+@pytest.mark.parametrize(
+    "move_id",
+    [
+        "batonpass",
+        "transform",
+        "trick",
+        "skillswap",
+        "afteryou",
+        "quash",
+        "spite",
+    ],
+)
 def test_a_move_this_scorer_cannot_price_returns_none_rather_than_zero(move_id):
     """None means *this* function cannot say, so the caller falls back to its
     unknown-support value. Being unable to price a move is not the same as the
@@ -295,3 +311,38 @@ def test_a_move_this_scorer_cannot_price_returns_none_rather_than_zero(move_id):
     the type chart. Those still return None *here* by design.
     """
     assert _score(move_id, observed=_foe()) is None
+
+
+class TestRedirectionWithoutAPartner:
+    """Rage Powder alone draws attacks off nobody.
+
+    Found by watching a battle where both sides had one Pokemon left and spent
+    fifteen consecutive turns redirecting at each other, dragging it to 49
+    turns. The move fell through to the flat unknown-support value, which is
+    the right answer for a move whose worth we cannot compute -- and the wrong
+    answer for one that provably does nothing.
+
+    Only the no-partner case is decided. What a redirect is worth *with* a
+    partner is still open, and is left deliberately unpriced.
+    """
+
+    def _score(self, move_id, ally):
+        return score_support_move(_move(move_id), attacker=_mon(), ally=ally)
+
+    @pytest.mark.parametrize("move_id", ["ragepowder", "followme"])
+    def test_alone_it_is_worth_nothing(self, move_id):
+        result = self._score(move_id, ally=None)
+        assert result is not None, "should be priced at zero, not deferred"
+        value, reasons = result
+        assert value == 0.0
+        assert reasons
+
+    def test_a_fainted_partner_is_no_partner(self):
+        result = self._score("ragepowder", ally=_mon(hp=0))
+        assert result is not None
+        assert result[0] == 0.0
+
+    def test_with_a_living_partner_it_is_left_unpriced(self):
+        """Not zero, and not a number we have earned. The unknown-support
+        fallback is the honest answer until it is measured."""
+        assert self._score("ragepowder", ally=_mon()) is None

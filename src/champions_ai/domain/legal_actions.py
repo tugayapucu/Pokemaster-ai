@@ -124,7 +124,9 @@ def legal_slot_actions(
 
     engine_targets = pokemon.choosable_move_targets
 
-    def move_actions(*, relax_targets: bool) -> list[SlotAction]:
+    def move_actions(
+        *, relax_targets: bool, ignore_pp: bool = False
+    ) -> list[SlotAction]:
         return list(
             _move_actions(
                 observation,
@@ -134,6 +136,7 @@ def legal_slot_actions(
                 engine_targets,
                 specials,
                 relax_targets=relax_targets,
+                ignore_pp=ignore_pp,
             )
         )
 
@@ -166,23 +169,31 @@ def legal_slot_actions(
     # moves it actually saw used, so a Pokemon can legitimately have an empty
     # list -- and `MoveAction(move_index=0)` then points at nothing. Passing is
     # wrong against a live engine and is the only thing left here.
+    # Still nothing. Of the two filters that can strand a slot, **PP is the one
+    # that can be stale** -- `disabled` arrives on the engine's own request and
+    # is authoritative under ADR 0003, while a PP count we believe spent may
+    # not be. So drop the PP filter and keep everything else, rather than
+    # naming a move index blindly.
+    #
+    # Naming one blindly produced two different rejections in one session: a
+    # disabled Protect ("Can't move: Whimsicott's Protect is disabled"), and
+    # then, once that was avoided, an untargeted Helping Hand ("Helping Hand
+    # needs a target"). Both came from bypassing the targeting and legality
+    # rules this function already implements, which is the argument for
+    # re-running them with one filter relaxed instead of guessing.
+    ignoring_pp = move_actions(relax_targets=True, ignore_pp=True)
+    if ignoring_pp:
+        return ignoring_pp
+
+    # Every move really is disabled. The engine answers that itself --
+    # `Side.chooseMove`: "Override action and use Struggle if there are no
+    # enabled moves with PP" -- and Struggle needs no target.
+    #
+    # Unless there is no move to name at all. A reconstructed replay knows only
+    # the moves it saw used, so a Pokemon can legitimately have an empty list,
+    # and `MoveAction(move_index=0)` then points at nothing.
     if not pokemon.selectable_moves:
         return [PassAction()]
-
-    # Prefer a move the *engine* has not flagged disabled. Reaching here means
-    # our own filters rejected every move, and of the two filters PP is the one
-    # that can be stale: `disabled` arrives on the request and is authoritative
-    # per ADR 0003, while a PP count we believe to be spent may not be. Choosing
-    # blindly here sent the engine a disabled Protect once, which it refused
-    # outright rather than substituting Struggle for -- Showdown only does that
-    # when the request itself carries no usable move, and in that case the
-    # request already offers Struggle and the normal path returns it.
-    #
-    # Narrowing only: when everything really is disabled this still falls
-    # through to index 0, which is the Struggle case it was written for.
-    for index, move_id in enumerate(pokemon.selectable_moves):
-        if move_id not in pokemon.disabled_moves:
-            return [MoveAction(move_index=index, target=None)]
     return [MoveAction(move_index=0, target=None)]
 
 
@@ -195,6 +206,7 @@ def _move_actions(
     specials: tuple[str | None, ...],
     *,
     relax_targets: bool,
+    ignore_pp: bool = False,
 ) -> Iterator[SlotAction]:
     """The move half of `legal_slot_actions`.
 
@@ -206,7 +218,11 @@ def _move_actions(
     for move_index, move_id in enumerate(pokemon.selectable_moves):
         if move_id in pokemon.disabled_moves:
             continue
-        if pokemon.move_pp is not None and pokemon.move_pp[move_index] <= 0:
+        if (
+            not ignore_pp
+            and pokemon.move_pp is not None
+            and pokemon.move_pp[move_index] <= 0
+        ):
             continue
 
         if engine_targets is not None:

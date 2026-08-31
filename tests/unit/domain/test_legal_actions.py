@@ -252,14 +252,18 @@ class TestLastResortAvoidsDisabledMoves:
     def test_a_disabled_move_is_not_named_when_another_is_only_out_of_pp(self):
         """Protect is disabled by the engine; Tackle merely looks spent to us.
 
-        Tackle is the safer thing to name: the engine never said it was
-        unusable, and our PP count is the belief more likely to be wrong.
+        Tackle is the safer thing to offer: the engine never said it was
+        unusable, and our PP count is the belief more likely to be wrong. The
+        last resort re-runs the normal rules with the PP filter dropped, so
+        what comes back is properly targeted rather than a bare move index.
         """
         actions = self._cornered(disabled=frozenset({"protect"}), pp=(10, 0))
-        assert len(actions) == 1
-        chosen = actions[0]
-        assert isinstance(chosen, MoveAction)
-        assert chosen.move_index == 1, "should name Tackle, not the disabled Protect"
+        assert actions, "the slot must be given something to do"
+        moves = [a for a in actions if isinstance(a, MoveAction)]
+        assert moves
+        assert all(a.move_index == 1 for a in moves), (
+            "should offer Tackle only, never the disabled Protect"
+        )
 
     def test_everything_disabled_still_names_a_move_for_struggle(self):
         """The case the fallback was written for is unchanged."""
