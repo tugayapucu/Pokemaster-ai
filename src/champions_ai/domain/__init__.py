@@ -10,7 +10,11 @@ from champions_ai.domain.actions import (
 from champions_ai.domain.battle_pokemon import BattlePokemon
 from champions_ai.domain.battle_state import BattleState
 from champions_ai.domain.boosts import Boosts
-from champions_ai.domain.legal_actions import legal_joint_actions, legal_slot_actions
+from champions_ai.domain.legal_actions import (
+    legal_joint_actions,
+    legal_slot_actions,
+    legal_switch_actions,
+)
 from champions_ai.domain.move_data import (
     FIRST_TURN_MOVES,
     PROTECT_MOVES,
@@ -65,4 +69,5 @@ __all__ = [
     "TeamPreviewAction",
     "legal_joint_actions",
     "legal_slot_actions",
+    "legal_switch_actions",
 ]

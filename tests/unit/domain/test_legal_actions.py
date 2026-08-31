@@ -13,6 +13,7 @@ from champions_ai.domain import (
     SwitchAction,
     legal_joint_actions,
     legal_slot_actions,
+    legal_switch_actions,
 )
 
 MOVES = {
@@ -375,3 +376,59 @@ class TestAllyMoveWithAFaintedPartner:
             if isinstance(action, MoveAction):
                 assert action.target is not None, "the engine refuses no target"
                 assert action.target.side == "ally"
+
+
+class TestSwitchOnlyEnumeration:
+    """Replacing a fainted Pokemon must not depend on move data.
+
+    Move target types are learned from requests that carry an `active` block,
+    and a forced-switch request carries none -- so a Pokemon that has not yet
+    had a move request has no entry. That is routine. The forced-switch path
+    made it fatal by asking `legal_slot_actions` for every action and then
+    keeping only the switches:
+
+        KeyError: no MoveData for move 'dazzlinggleam' on 'Hatterene'
+
+    It built every move action, discarded them all, and crashed on data it did
+    not need. Surfaced by matchup switching, which reaches replacement turns far
+    more often.
+    """
+
+    def _side(self, fainted_first: bool):
+        active = _mon("own0", current_hp=0 if fainted_first else 100)
+        return _own_side(
+            team=(active, _mon("own1"), _mon("own2"), _mon("own3")),
+            active_slots=(0, 1),
+        )
+
+    def test_no_move_data_is_needed_at_all(self):
+        """The empty mapping is the point: it is what the tracker has here."""
+        actions = legal_switch_actions(_observation(self._side(True)), 0)
+        assert actions
+        assert all(isinstance(a, SwitchAction) for a in actions)
+
+    def test_it_matches_what_the_old_filter_produced(self):
+        """Same answer as before for a healthy slot, without the moves."""
+        side = self._side(False)
+        observation = _observation(side)
+        expected = [
+            a for a in legal_slot_actions(observation, 0, MOVES) if isinstance(a, SwitchAction)
+        ]
+        assert legal_switch_actions(observation, 0) == expected
+
+    def test_a_trapped_pokemon_still_cannot_switch(self):
+        trapped = _mon("own0", volatile_conditions=frozenset({"trapped"}))
+        side = _own_side(
+            team=(trapped, _mon("own1"), _mon("own2"), _mon("own3")),
+            active_slots=(0, 1),
+        )
+        assert legal_switch_actions(_observation(side), 0) == []
+
+    def test_a_fainted_pokemon_is_replaceable_even_while_trapped(self):
+        """Trapping does not hold a Pokemon that is already gone."""
+        gone = _mon("own0", current_hp=0, volatile_conditions=frozenset({"trapped"}))
+        side = _own_side(
+            team=(gone, _mon("own1"), _mon("own2"), _mon("own3")),
+            active_slots=(0, 1),
+        )
+        assert legal_switch_actions(_observation(side), 0)

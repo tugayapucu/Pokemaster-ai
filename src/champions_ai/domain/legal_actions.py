@@ -109,6 +109,33 @@ def _switch_actions(observation: Observation, exclude: int | None = None) -> lis
     ]
 
 
+def legal_switch_actions(
+    observation: Observation, acting_slot: int
+) -> list[SlotAction]:
+    """Only the switches available to a slot, without enumerating any moves.
+
+    The forced-switch path wants exactly this, and used to get it by calling
+    `legal_slot_actions` and filtering the result. That built every move action
+    first and threw them away -- wasted work, and it raised
+
+        KeyError: no MoveData for move 'dazzlinggleam' on 'Hatterene'
+
+    because move target types are learned from requests carrying an `active`
+    block, and a forced-switch request carries none. A Pokemon that has not yet
+    had a move request has no entry, which is routine and not an error. Asking
+    for moves in order to discard them made it one.
+    """
+    own = observation.own_side
+    team_index = own.active_slots[acting_slot]
+    if team_index is None or own.team[team_index].fainted:
+        # An empty or fainted slot is being refilled: nothing to exclude, and
+        # trapping does not hold a Pokemon that is already gone.
+        return _switch_actions(observation)
+    if TRAPPED in own.team[team_index].volatile_conditions:
+        return []
+    return _switch_actions(observation, exclude=team_index)
+
+
 def legal_slot_actions(
     observation: Observation,
     acting_slot: int,

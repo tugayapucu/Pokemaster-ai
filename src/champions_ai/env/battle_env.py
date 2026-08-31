@@ -24,7 +24,7 @@ from champions_ai.domain import (
     TeamPreview,
     TeamPreviewAction,
     legal_joint_actions,
-    legal_slot_actions,
+    legal_switch_actions,
 )
 from champions_ai.simulator import (
     BattleTracker,
@@ -227,7 +227,7 @@ class BattleEnv:
 
             switches = [
                 action
-                for action in legal_slot_actions(observation, slot, move_data)
+                for action in legal_switch_actions(observation, slot)
                 if isinstance(action, SwitchAction) and action.team_index not in used
             ]
             if not switches:
