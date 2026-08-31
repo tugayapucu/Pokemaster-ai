@@ -60,6 +60,14 @@ def _live_own_slots(
 # outright rather than a slightly wrong one.
 _CAN_AIM_AT_A_FOE = frozenset({"normal", "any", "adjacentFoe"})
 
+# Target types that name a partner. When the partner has fainted these have no
+# *live* target, but the engine may still leave the move enabled -- and under
+# ADR 0003 the engine's availability is what counts. Tinkaton was left holding
+# Helping Hand with a fainted Politoed beside it and its other three moves
+# disabled, so the only choice the engine would accept was Helping Hand aimed
+# at the empty partner slot.
+_ALLY_TARGETS = frozenset({"adjacentAlly", "adjacentAllyOrSelf"})
+
 
 def _candidate_targets(
     observation: Observation, acting_slot: int, target_type: str | None
@@ -238,6 +246,19 @@ def _move_actions(
             target_type = move.target
 
         candidates = _candidate_targets(observation, acting_slot, target_type)
+        if not candidates and relax_targets and target_type in _ALLY_TARGETS:
+            # The partner is down but the engine kept the move enabled, so it
+            # wants the partner's slot named rather than nothing. Aiming at a
+            # foe here is what produced "Invalid target for Helping Hand";
+            # naming no target at all produced "Helping Hand needs a target".
+            partner = [
+                slot
+                for slot in range(len(observation.own_side.active_slots))
+                if slot != acting_slot
+            ]
+            candidates = tuple(
+                TargetSlot(side="ally", slot=slot) for slot in partner[:1]
+            )
         if not candidates and relax_targets and target_type in _CAN_AIM_AT_A_FOE:
             # Last resort only. We believe nothing is alive to aim at, and the
             # engine disagrees -- it rejected a targetless choice with "Ice

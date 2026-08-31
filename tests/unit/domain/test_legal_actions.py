@@ -327,3 +327,51 @@ class TestTargetRelaxationStaysLegal:
         aimed = [a for a in actions if isinstance(a, MoveAction) and a.target is not None]
         assert aimed, "an attacking move should still be offered a foe target"
         assert all(a.target.side == "foe" for a in aimed)
+
+
+class TestAllyMoveWithAFaintedPartner:
+    """The engine keeps an ally-targeting move enabled after the ally faints.
+
+    Real state, from a run that crashed: Tinkaton held Fake Out, Helping Hand,
+    Encore and Gigaton Hammer with three of them disabled by the engine and
+    Politoed fainted beside it. Helping Hand was the only move the engine had
+    *not* disabled, so under ADR 0003 it is the choice the engine expects --
+    but its partner was gone, so our own liveness check found no target.
+
+    Both earlier answers were refused. Aiming at a foe:
+
+        Can't move: Invalid target for Helping Hand
+
+    and falling through to a bare move index with no target:
+
+        Can't move: Helping Hand needs a target
+
+    So the partner's slot is named even though nobody is standing in it.
+    """
+
+    def _with_fainted_partner(self):
+        actor = _mon(
+            "own0",
+            moves=("helpinghand",),
+            choosable_moves=("helpinghand",),
+            choosable_move_targets=("adjacentAlly",),
+            move_pp=(16,),
+            volatile_conditions=frozenset({"trapped"}),
+        )
+        downed = _mon("own1", current_hp=0)
+        side = _own_side(
+            team=(actor, downed, _mon("own2"), _mon("own3")),
+            active_slots=(0, 1),
+        )
+        return legal_slot_actions(_observation(side), 0, MOVES)
+
+    def test_the_move_is_still_offered(self):
+        actions = self._with_fainted_partner()
+        moves = [a for a in actions if isinstance(a, MoveAction)]
+        assert moves, "the engine expects this move, so it must be offered"
+
+    def test_it_names_the_partner_slot_and_not_a_foe(self):
+        for action in self._with_fainted_partner():
+            if isinstance(action, MoveAction):
+                assert action.target is not None, "the engine refuses no target"
+                assert action.target.side == "ally"
