@@ -52,15 +52,25 @@ So the code was restored verbatim from `0692cc1` behind a `matchup_switching` fl
 
 ```
 matchup switching's win rate against the shipped flat cost
-1,600 battles per horizon, two seeds, paired, teams exchanged
+two independent runs of 1,600 battles per horizon, two seeds each,
+paired, teams exchanged
 
-  horizon 8.0   742/1600 = 46.4%   z = -2.90, p = 0.004   (seeds 44.8%, 48.0%)
-  horizon 4.0   775/1600 = 48.4%   z = -1.25, p = 0.21    (seeds 48.2%, 48.6%)
+  horizon 8.0   run 1  742/1600 = 46.4%     run 2  765/1600 = 47.8%
+                pooled 1507/3200 = 47.1%   z = -3.29, p = 0.001
+  horizon 4.0   run 1  775/1600 = 48.4%     run 2  777/1600 = 48.6%
+                pooled 1552/3200 = 48.5%   z = -1.70, p = 0.090
 
 0004 on the old pool:  847/1600 = 52.9%, one seed null
 ```
 
-Both below even, and **monotone**: the more the agent switches, the worse it does. That is the useful part. A single null could be a mis-set constant; a monotone trend across the parameter that controls the behaviour says the behaviour itself does not pay here.
+The two runs of horizon 8.0 differ by 1.4 points on identical seeds and code,
+and the reason is worth recording: `harvested_pool` rebuilt from the corpus,
+which was still being collected, so the train split moved from 923 to 1,391
+replays between them and each run drew a different 120 teams. Within a run both
+arms share the pool and the comparison holds; across runs it does not. Pools can
+now be frozen to a file, and comparisons across runs need it.
+
+Both below even in all four measurements, and **monotone**: the more the agent switches, the worse it does. That is the useful part. A single null could be a mis-set constant; a monotone trend across the parameter that controls the behaviour, replicated on two different pools, says the behaviour itself does not pay here.
 
 ## What this settles
 
