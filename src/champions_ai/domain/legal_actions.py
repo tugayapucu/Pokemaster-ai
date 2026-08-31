@@ -162,6 +162,21 @@ def legal_slot_actions(
     # wrong against a live engine and is the only thing left here.
     if not pokemon.selectable_moves:
         return [PassAction()]
+
+    # Prefer a move the *engine* has not flagged disabled. Reaching here means
+    # our own filters rejected every move, and of the two filters PP is the one
+    # that can be stale: `disabled` arrives on the request and is authoritative
+    # per ADR 0003, while a PP count we believe to be spent may not be. Choosing
+    # blindly here sent the engine a disabled Protect once, which it refused
+    # outright rather than substituting Struggle for -- Showdown only does that
+    # when the request itself carries no usable move, and in that case the
+    # request already offers Struggle and the normal path returns it.
+    #
+    # Narrowing only: when everything really is disabled this still falls
+    # through to index 0, which is the Struggle case it was written for.
+    for index, move_id in enumerate(pokemon.selectable_moves):
+        if move_id not in pokemon.disabled_moves:
+            return [MoveAction(move_index=index, target=None)]
     return [MoveAction(move_index=0, target=None)]
 
 

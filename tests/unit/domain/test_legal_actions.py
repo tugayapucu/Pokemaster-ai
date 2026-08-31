@@ -35,9 +35,7 @@ def _mon(species: str, moves: tuple[str, ...] = ("tackle", "protect"), **overrid
 
 
 def _observation(own: Side, opponent: Side | None = None, player: int = 0) -> Observation:
-    opponent = opponent or Side(
-        team=tuple(_mon(f"foe{i}") for i in range(4)), active_slots=(0, 1)
-    )
+    opponent = opponent or Side(team=tuple(_mon(f"foe{i}") for i in range(4)), active_slots=(0, 1))
     sides = (own, opponent) if player == 0 else (opponent, own)
     state = BattleState(regulation=REGULATION_M_B, turn=1, sides=sides)
     return Observation.from_battle_state(state, player=player)
@@ -212,3 +210,60 @@ def test_an_empty_slot_still_passes():
     )
     actions = legal_slot_actions(_observation(own), 1, MOVES)
     assert actions == [PassAction()]
+
+
+class TestLastResortAvoidsDisabledMoves:
+    """The blind fallback sent the engine a disabled move once.
+
+    When every move has been filtered, `legal_slot_actions` falls back to a
+    single `MoveAction` so the slot has *something* -- passing is refused for a
+    slot the engine expects to act. It used to name move index 0 whatever that
+    was, on the grounds that Showdown substitutes Struggle. It only does that
+    when the request itself carries no usable move, and in that case the
+    request already offers Struggle and the normal path returns it. So naming a
+    disabled move here gets the whole choice rejected:
+
+        [Unavailable choice] Can't move: Whimsicott's Protect is disabled
+
+    Observed once against a scripted opponent and not reproduced since, so this
+    is a narrowing rather than a claimed root cause: of the two filters, PP is
+    the one that can be stale, while `disabled` arrives on the engine's own
+    request.
+    """
+
+    def _cornered(self, disabled: frozenset[str], pp: tuple[int, ...]):
+        """A Pokemon whose every move our filters reject."""
+        moves = ("protect", "tackle")
+        mon = _mon(
+            "own0",
+            moves=moves,
+            choosable_moves=moves,
+            choosable_move_targets=("self", "normal"),
+            move_pp=pp,
+            disabled_moves=disabled,
+            # Trapped, so switching cannot rescue the slot and the fallback is
+            # actually reached. Without this the bench supplies legal actions
+            # and the branch under test never runs.
+            volatile_conditions=frozenset({"trapped"}),
+        )
+        side = _own_side(team=(mon, _mon("own1"), _mon("own2"), _mon("own3")))
+        return legal_slot_actions(_observation(side), 0, MOVES)
+
+    def test_a_disabled_move_is_not_named_when_another_is_only_out_of_pp(self):
+        """Protect is disabled by the engine; Tackle merely looks spent to us.
+
+        Tackle is the safer thing to name: the engine never said it was
+        unusable, and our PP count is the belief more likely to be wrong.
+        """
+        actions = self._cornered(disabled=frozenset({"protect"}), pp=(10, 0))
+        assert len(actions) == 1
+        chosen = actions[0]
+        assert isinstance(chosen, MoveAction)
+        assert chosen.move_index == 1, "should name Tackle, not the disabled Protect"
+
+    def test_everything_disabled_still_names_a_move_for_struggle(self):
+        """The case the fallback was written for is unchanged."""
+        actions = self._cornered(disabled=frozenset({"protect", "tackle"}), pp=(10, 10))
+        assert len(actions) == 1
+        assert isinstance(actions[0], MoveAction)
+        assert actions[0].move_index == 0
