@@ -317,6 +317,10 @@ def harvest_teams(
     return texts
 
 
+# How frozen pools are stored: one Showdown export per team.
+POOL_SEPARATOR = "\n\n===\n\n"
+
+
 def harvested_pool(
     bridge,
     battle_format: str,
@@ -325,6 +329,7 @@ def harvested_pool(
     dex=None,
     seed: int = 0,
     limit: int | None = None,
+    cache: Path | None = None,
 ):
     """A `TeamPool` of real teams, with the engine as the only gate.
 
@@ -335,12 +340,32 @@ def harvested_pool(
     Pass the **train** split. The corpus also supplies the human-agreement
     benchmarks, and building the teams we measure on out of the battles we
     grade against is the leak experiment 0014 already caught once.
+
+    `cache` freezes the pool to a file, and measurements that compare across
+    runs need it. Without it the pool is rebuilt from whatever is on disk, so a
+    corpus that is still being collected silently changes what every run is
+    measured on: the train split moved 405 -> 923 -> 1,391 in a single session,
+    and two runs of the same A/B drew different teams and disagreed by 1.4
+    points because of it. Within one run both arms share a pool and the
+    comparison is still sound; across runs it is not.
+
+    The cached teams are re-validated on load rather than trusted, so a frozen
+    pool cannot outlive a Showdown update that makes one of them illegal.
     """
     from champions_ai.data.team_pool import BattleTeam, TeamPool
     from champions_ai.data.team_text import parse_showdown_team
 
-    texts = harvest_teams(replays, dex=dex, seed=seed)
+    if cache is not None and cache.exists():
+        texts = [
+            text
+            for text in cache.read_text(encoding="utf-8").split(POOL_SEPARATOR)
+            if text.strip()
+        ]
+    else:
+        texts = harvest_teams(replays, dex=dex, seed=seed)
+
     teams: list[BattleTeam] = []
+    kept_texts: list[str] = []
     for text in texts:
         if limit is not None and len(teams) >= limit:
             break
@@ -355,4 +380,9 @@ def harvested_pool(
                 name=f"harvested-{len(teams)}",
             )
         )
+        kept_texts.append(text)
+
+    if cache is not None and not cache.exists():
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(POOL_SEPARATOR.join(kept_texts), encoding="utf-8")
     return TeamPool(teams)

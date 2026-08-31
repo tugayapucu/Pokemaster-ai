@@ -17,3 +17,8 @@ data/dex.json
 # so they inherit the same constraint the logs carry: local research use, never
 # redistributed. Rebuild with `champions_ai.data.harvest` from a local corpus.
 data/harvested_teams.txt
+
+# Frozen evaluation pools. Same constraint as the teams they are built from:
+# derived from unlicensed battle logs, so local research use only, never
+# redistributed. Rebuild with `harvested_pool(..., cache=...)`.
+data/pool-*.txt
