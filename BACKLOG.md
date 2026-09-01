@@ -99,42 +99,7 @@ Not a human-imitation model. 0010 and 0013 are both cases where following the
 corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
-### 2. An evaluator that can price more than HP
-
-**Confirmed worth doing by 0029, and the confirmation nearly went the other
-way.** Fitted on self-play positions the extra features looked worthless
-(+1.4); fitted on reconstructed human positions they are worth +3.0 held out
-and +4.4 against the shipped evaluator. Screens are non-zero in 0.0% of
-self-play positions and 7.8% of real ones -- the agent never uses them, so
-self-play could not see them. Grade this work on human positions, not
-self-play.
-
-**Also from 0028.** 0028 re-measured
-`evaluate_position` on the frozen pool and it is weaker than 0021 reported:
-
-    turns 1-2         57.6%   was 71.0%     <- barely better than a coin flip
-    turns 3-5         71.8%   was 81.0%
-    clear (50-150)    72.6%   was 82.7%
-    overall           74.6%   was 79.7%
-
-It scores only HP and fainting, so on turn one -- when nobody has taken damage
--- its whole signal is which side has revealed less. That correlated with
-something on the generated pool and does not on real teams.
-
-**A search compares positions one or two turns ahead, which is exactly where
-this is now weakest.** So it is not a refinement of Milestone 7; it is the
-precondition for search being worth trying at all.
-
-What survives is the property search actually needs: it is still monotone in
-its own confidence (65.2% slim, 72.6% clear, 85.6% large). It knows when it is
-guessing. Anything replacing it must keep that and beat the numbers above, on
-the frozen pool, graded against who won.
-
-Honest order: improve the evaluator to a measured target *first*, re-test
-search *second*, and stop if the first step does not move. 0022 is a standing
-reminder that a better evaluator may still not make search pay.
-
-### 3. A learned value model, once there is something to learn against
+### 2. A learned value model, once there is something to learn against
 
 79.7% is a high floor for a hand-written function, so Milestone 7's headroom
 over it is real but modest. Worth less than giving search an evaluator it
@@ -159,6 +124,26 @@ Fix the docstring either way: it currently cites a refuted claim as settled.
 ---
 
 ## Done, most recent first
+
+### ~~An evaluator that can price more than HP~~ — ruled out 2026-09-01 (0030)
+
+Adding status, boosts, screens, Tailwind and Trick Room to `evaluate_position`
+is worth **+0.2pp** of winner prediction, sd 1.4, positive in four of eight
+splits over 19,035 human positions. The weights are well determined and
+sensible -- a slept Pokemon prices at about three quarters of a Pokemon -- and
+they are simply redundant once HP and living count are known.
+
+0029 reported +3.0/+4.4 from a single split and was wrong; 0030 records that,
+and that this is the third time this project has published from an
+underpowered run after writing down the lesson (0003, 0004, now 0029).
+
+The stopping rule agreed before the work fires here: improve the evaluator
+first, re-test search second, stop if the first does not move. It did not move,
+so **search is not re-opened on this basis**.
+
+What survives: self-play cannot measure evaluator features either (screens are
+non-zero in 0.0% of self-play positions and 7.8% of real ones), so human
+positions are the instrument for this class of question.
 
 ### ~~Switch more, like humans do~~ — ruled out 2026-08-31, it costs games (0027)
 

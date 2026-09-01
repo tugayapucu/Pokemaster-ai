@@ -1,7 +1,15 @@
-# Experiment 0029 — The extra evaluator features do matter, on positions where they happen
+# Experiment 0029 — Self-play cannot see the evaluator's missing features
+
+*(The original title claimed the features "do matter". 0030 refuted that; what survives is why self-play could not have told us either way.)*
 
 **Date:** 2026-08-31
-**Result: self-play said adding status, screens and field terms to the evaluator was worthless. It was wrong, and it was wrong for the reason 0026 identified.** Those features are non-zero in 4.2%, **0.0%** and 3.8% of self-play positions, because the agent never uses them. Measured on reconstructed human positions where they actually occur, they are worth **+3.0 points** of winner prediction (59.6% → 62.6%), and +4.4 against the shipped evaluator on matched positions. Backlog item 2 is worth doing after all — and the instrument that would have killed it is the one everything else in this project is measured on.
+> **Corrected by 0030.** The headline gain below (+3.0 held out, +4.4 against
+> the shipped evaluator) came from a **single split** of 307 replays.
+> Cross-validated over 19,035 positions it is **+0.2pp, sd 1.4, positive in
+> four of eight splits** -- a null. The feature-presence finding in this
+> document stands and is the reason 0030 could be run at all; the conclusion
+> drawn from it does not.
+**Result: self-play cannot measure whether status, screens and field terms belong in the evaluator, for the reason 0026 identified.** Those features are non-zero in 4.2%, **0.0%** and 3.8% of self-play positions, because the agent never uses them. Measured on reconstructed human positions where they actually occur, one split put them at +3.0 points — **which 0030 then showed was noise**, the cross-validated figure being +0.2 with an sd of 1.4. The lasting finding is the instrument, not the number: the tool everything else in this project is measured on is blind to this whole class of question.
 
 ## The plan, and the first answer
 
@@ -54,7 +62,7 @@ feature presence          real     self-play
   shipped evaluate_position             59.7% (n=924, where it has an opinion)
 ```
 
-**+3.0 points held out, +4.4 against the shipped evaluator on matched positions.** Field effects alone are worth +1.3 where self-play said −0.2. The direction of the conclusion flips with the instrument.
+**+3.0 points held out on this split, +4.4 against the shipped evaluator.** This is the number 0030 refutes: it is one split of 307 replays, and eight splits of 1,610 put the gain at +0.2 ± 1.4. What does survive is the row above it — the features are present in real positions and absent in self-play.
 
 ## Two bugs in this measurement, both mine
 
@@ -66,7 +74,7 @@ Both were caught by checking a property that had to hold, not by reading the acc
 
 ## What this settles
 
-- **Item 2 is real work, not a refinement.** The features are worth 3–4 points of winner prediction, and the evaluator needs them before search is worth re-opening.
+- ~~**Item 2 is real work, not a refinement.**~~ **Withdrawn by 0030**: cross-validated, the features are worth +0.2pp and item 2 is a null. This bullet is left visible rather than deleted, because the claim was published and the correction is the point.
 - **Self-play is the wrong instrument for evaluator features**, for the same reason it was the wrong instrument for redirection. Anything the agent under-uses is invisible to it. Human positions are the instrument for this class of question.
 - **The evaluator is far weaker on human games than on self-play**: 59.7% against 74.6%. Some of that is that evenly-matched humans produce genuinely less predictable positions; how much is not established here.
 
