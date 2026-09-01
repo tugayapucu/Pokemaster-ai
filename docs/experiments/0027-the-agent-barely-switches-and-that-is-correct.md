@@ -14,6 +14,14 @@
 > and `_score_switch` really does give no credit for the matchup. What does
 > **not** survive is the conclusion that closing that gap costs games. It is
 > now simply unexplained.
+>
+> **Resolved by 0032.** Swept rather than sampled, the curve is monotone and
+> crosses even between horizons 2 and 4. Horizon 8 -- the setting this document
+> tested, chosen to reproduce the human switch rate -- really is harmful, so
+> the observation here was of something real. What it missed is that a *small*
+> amount of switching wins: horizon 2 at 57.8% over three seed sets, now
+> shipped. The optimum rate is 4.4%, between this agent's 0.27% and the human
+> 11.8%.
 **Result (withdrawn): the widest behavioural gap left in the agent appeared not to be a defect.** It switches on **0.3%** of free decisions where rated humans switch on **11.8%**, and the cause is visible in the code — a switch is priced at a flat −25 with no credit for the matchup it buys. Restoring the matchup-based scorer experiment 0004 reverted, and re-measuring it on harvested teams, makes the agent **worse**: 47.1% over 3,200 battles at the horizon that reproduces the human switch rate, 48.5% at half of it, monotone in how much it switches and replicated on two different pools. 0004's revert stands, now on a pool that resembles the game.
 
 ## The gap

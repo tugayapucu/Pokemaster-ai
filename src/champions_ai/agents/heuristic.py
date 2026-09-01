@@ -246,24 +246,32 @@ AVERAGE_WEIGHT = 0.25
 # (McNemar chi2 = 172 on 11,133 labels), worse against Random (96.7% against
 # 99.0%), and a head-to-head edge that did not survive being re-run at higher
 # power. Switching remains an open problem, not a solved one.
-# Matchup switching. Kept behind a flag and **off**, on evidence twice over.
+# Matchup switching, **on**, at a horizon of 2. Experiment 0032.
 #
-# Experiment 0004 built it and reverted it on the singles-generated pool that
-# 0024 later found unrepresentative. Experiment 0027 re-measured it on
-# harvested teams, where battles run thirteen turns instead of 8.5:
+# This question was answered wrongly three times, and every wrong answer came
+# from testing a single horizon rather than sweeping one. On the fixed harness
+# the curve is monotone and crosses even between 2 and 4:
 #
-#   horizon 8.0 (matches the human switch rate)   46.4%   p = 0.004
-#   horizon 4.0                                   48.4%   p = 0.21
+#   horizon  2.0   57.8%  p = 0.013     switch rate  4.4%
+#   horizon  3.0   57.3%  p = 0.011     switch rate  5.9%
+#   horizon  4.0   50.2%  p = 0.95
+#   horizon  8.0   42.9%  p = 0.016
+#   horizon 16.0   39.6%  p = 0.000
 #
-# Both below even and monotone -- the more the agent switches, the worse it
-# does. So the flat cost's 0.3% switch rate is right for this format even
-# though rated humans switch on 11.8% of decisions, and that gap is not a
-# defect to close.
+# 0004 tuned the horizon to reproduce the *human* switch rate and landed at a
+# setting deep in the harmful region; 0027 tested horizon 8, also harmful, and
+# concluded the agent's near-zero rate was correct. Both were measuring a real
+# effect at the wrong point on the curve.
 #
-# The horizon converts a per-turn matchup gain into a total. 0004 needed 1.0 to
-# reach the human switch rate and this needs 8.0, which was the sign it was
-# absorbing something other than horizon.
-SWITCH_HORIZON = 1.0
+# Confirmed on three independent seed sets -- 56.1%, 57.8%, 55.4% -- with the
+# middle one pre-registered before it ran. Against Random it costs one matchup
+# in 1,704 (99.9% against the flat cost's 100.0%), which settles the third
+# objection 0004 raised and nothing since had re-examined.
+#
+# The rate this produces is 4.4%, against 0.27% for the flat cost and 11.8% for
+# rated humans. Both ends were wrong: chasing the human rate overshoots badly,
+# and the flat cost barely switches at all.
+SWITCH_HORIZON = 2.0
 # Saving a Pokemon that would otherwise be knocked out is worth roughly what
 # losing it would cost: a slot, an attacker and a switch option at once.
 SWITCH_SAVES_KO_BONUS = 35.0
@@ -403,10 +411,9 @@ class HeuristicAgent(Agent):
         # to re-measure -- and because pricing a stat stage in damage terms is
         # machinery the position evaluator needs next.
         tenure_boosts: bool = False,
-        # Off by default, and expected to stay that way: 0027 measured it as
-        # worse on harvested teams at every horizon tried. Kept constructible
-        # so the result can be re-checked rather than taken on trust.
-        matchup_switching: bool = False,
+        # On by default since 0032, at SWITCH_HORIZON = 2. The flag stays so
+        # the flat cost remains constructible for comparison.
+        matchup_switching: bool = True,
     ) -> None:
         self.dex = dex
         self.name = name

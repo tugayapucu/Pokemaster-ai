@@ -33,68 +33,21 @@ than disappearing.
 
 ## Now
 
-**The harness was the problem, and it is fixed.** 0031: `evaluate` swapped
-agents *and* teams between the two passes of a matchup, which cancels, so each
-agent kept its team and only the seat was controlled. With 93% of outcome
-variance coming from the matchup, that sat uncontrolled in the error bars and
-made the binomial CIs too narrow. Teams now stay put while the agents swap, and
-both passes share one seed, so identical agents tie every matchup at exactly
-50.0%.
+**Switching is solved and shipped (0032).** A small amount of matchup-based
+switching beats the flat cost: 56.1%, 57.8% and 55.4% across three independent
+seed sets, the middle one pre-registered. `SWITCH_HORIZON = 2.0` and
+`matchup_switching` on by default -- the first shipped improvement since Mega.
 
-What the re-run showed, and it is not all good news:
+The question had been answered wrongly three times because every attempt tested
+a single horizon. The curve is monotone and crosses even between 2 and 4, so
+0004 and 0027 were both measuring a real effect at the wrong point. Optimal
+switch rate 4.4%, against the flat cost's 0.27% and rated humans' 11.8% --
+**both ends were wrong**, and calibrating to the human rate was the specific
+error.
 
-    Mega                57.6%  p<0.0001   survives
-    search              42.4%  p<0.0001   survives
-    matchup switching   49.9%  p=0.92     0027's -2.9 was a FALSE POSITIVE
-    tenure setup        49.8%  p=0.84     still null
-
-**The confound was inflating confidence, not hiding wins.** The nulls stayed
-null with the noise removed. So the run of failed ideas was not a measurement
-artefact -- only 0027's positive finding was.
-
-Still to re-run on the fixed harness: 0026 (redirection) and 0030 (the richer
-evaluator), both nulls, plus any earlier result whose significance was
-marginal.
-
-
-**Measure on the frozen pool.** `data/pool-eval.txt` holds 200 validated teams
-harvested from the train split of a 1,769-replay corpus, and
-`harvested_pool(..., cache=...)` reloads it without touching the corpus. Use it
-for anything compared across runs.
-
-The reason is recorded in 0027: while the corpus was being collected the train
-split moved 405 -> 923 -> 1,427, so `harvested_pool` drew different teams every
-time, and two runs of the same A/B on identical seeds disagreed by 1.4 points.
-Within a run both arms share the pool and the comparison holds; across runs it
-did not, and nothing said so. Results published before this was frozen were
-each internally valid and are not comparable to each other.
-
-What the frozen pool carries, against the generated pool 0024 replaced:
-
-    protect 100.0%   fakeout 60.0%   tailwind 50.5%   trickroom 47.5%
-    ragepowder 35.5%   helpinghand 17.5%   followme 8.0%
-    swordsdance 8.0%   knockoff 12.0%   uturn 1.0%   stealthrock 0.0%
-
-
-**Direction set by experiment 0020: what the agent chooses is worth more than
-what it knows.** Damage accuracy converts at ~0.23 points of win rate per
-point, which prices out the Mega gap (~1.6) and the rest of the mechanical
-work. The largest improvement ever measured here was +10.1 from a *decision*
-the agent was not making.
-
-Two things make this a live direction rather than a fresh guess, and both were
-found by reading what is already there:
-
-- **`evaluate_position` exists, is exported, has unit tests, and has no
-  production caller.** Its own docstring says search needs it and that
-  Milestone 7 replaces it with a learned model. Nothing has ever checked
-  whether it predicts anything.
-- **`search.py`'s stated reason for not doing real search is refuted.** It
-  says *"0001 found search depth is not the bottleneck, opponent knowledge
-  is"* — and 0005, 0018 and 0019 have since measured opponent knowledge at
-  +0.09 agreement, a +4.3 ceiling, and a null. Forking the engine was measured
-  viable at ~460 forks/sec with verified isolation. It was set aside on a
-  premise that stopped being true.
+The generalisable lesson: **sweep the parameter, do not sample it.** Tenure
+setup, redirection and the richer evaluator were each tested at one or two
+settings, on the old harness, and each was called a null.
 
 ### 1. An opponent worth measuring against
 
