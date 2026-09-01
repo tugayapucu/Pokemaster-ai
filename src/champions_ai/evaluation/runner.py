@@ -215,10 +215,22 @@ def evaluate(
 ) -> MatchResult:
     """Play a head-to-head over a pool of matchups and summarise it.
 
-    Every matchup is played **twice with the teams exchanged**, so neither the
-    seat nor the team a given agent happened to receive can be credited to it.
-    Both confounds cancel by construction rather than being assumed to average
-    out. `battles` is rounded up to an even number for that reason.
+    Every matchup is played **twice**, and the two passes exchange the agents
+    while leaving the teams in place. That gives each agent both teams and both
+    seats across the pair, so neither confound can be credited to it. `battles`
+    is rounded up to an even number for that reason.
+
+    Swapping the agents *and* the teams together, which this used to do, is not
+    the same thing: the two swaps cancel and each agent keeps the team it
+    started with. Only the seat was ever controlled. That is not biased -- over
+    many matchups the team draw evens out -- but it is enormously noisy, and it
+    is why this harness could not resolve small effects. Measured on the frozen
+    pool, **85% of matchups are one-sided** with identical agents on both sides
+    (one team wins 17 or more of 20), and **93% of the variance in outcomes is
+    the matchup**. Leaving that uncontrolled put it all in the error bars.
+
+    The invariant worth remembering: with the *same* agent on both sides, every
+    matchup must tie. Before this fix, 240 of 299 did not.
 
     Battle seeds and matchup selection both derive from `seed`, so a whole run
     reproduces from one number.
@@ -237,12 +249,12 @@ def evaluate(
     index = 0
     for matchup in matchups:
         for swapped in (False, True):
-            # Pass 1: A takes the first team as player 0. Pass 2: the agents
-            # exchange both seat and team, so the pair is fully symmetric.
+            # Pass 1: A is player 0 with the first team. Pass 2: the agents
+            # swap and the teams stay put, so A now holds the second team from
+            # the other seat. Across the pair each agent has played both teams
+            # and sat in both seats.
             ordered = (agent_b, agent_a) if swapped else (agent_a, agent_b)
-            teams = (
-                (matchup.teams[1], matchup.teams[0]) if swapped else matchup.teams
-            )
+            teams = matchup.teams
             a_player = 1 if swapped else 0
             battle_seed = f"sodium,{(seed * 1_000_003 + index) % (2**256):064x}"
 
