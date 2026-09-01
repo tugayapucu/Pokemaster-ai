@@ -1,7 +1,20 @@
-# Experiment 0027 — The agent barely switches, and that turns out to be right
+# Experiment 0027 — The agent barely switches (conclusion withdrawn)
+
+*(The original title said "and that turns out to be right". 0031 withdrew it: the result was a false positive from a harness that never exchanged teams.)*
 
 **Date:** 2026-08-31
-**Result: the widest behavioural gap left in the agent is not a defect.** It switches on **0.3%** of free decisions where rated humans switch on **11.8%**, and the cause is visible in the code — a switch is priced at a flat −25 with no credit for the matchup it buys. Restoring the matchup-based scorer experiment 0004 reverted, and re-measuring it on harvested teams, makes the agent **worse**: 47.1% over 3,200 battles at the horizon that reproduces the human switch rate, 48.5% at half of it, monotone in how much it switches and replicated on two different pools. 0004's revert stands, now on a pool that resembles the game.
+> **Withdrawn by 0031.** The finding below rests on `evaluate` measurements
+> taken before the harness was fixed. It swapped agents *and* teams, which
+> cancels, so each agent kept its team and 93% of outcome variance went
+> uncontrolled — making the binomial confidence intervals too narrow. Re-run
+> on the fixed harness, matchup switching is **49.9% with p = 0.92**, not
+> 47.1% with p = 0.001. It is neutral, not harmful.
+>
+> What survives: the 0.3%-against-11.8% switch-rate gap is real and measured,
+> and `_score_switch` really does give no credit for the matchup. What does
+> **not** survive is the conclusion that closing that gap costs games. It is
+> now simply unexplained.
+**Result (withdrawn): the widest behavioural gap left in the agent appeared not to be a defect.** It switches on **0.3%** of free decisions where rated humans switch on **11.8%**, and the cause is visible in the code — a switch is priced at a flat −25 with no credit for the matchup it buys. Restoring the matchup-based scorer experiment 0004 reverted, and re-measuring it on harvested teams, makes the agent **worse**: 47.1% over 3,200 battles at the horizon that reproduces the human switch rate, 48.5% at half of it, monotone in how much it switches and replicated on two different pools. 0004's revert stands, now on a pool that resembles the game.
 
 ## The gap
 
@@ -74,7 +87,7 @@ Both below even in all four measurements, and **monotone**: the more the agent s
 
 ## What this settles
 
-- **The 0.3% switch rate is not a bug.** It is the largest behavioural difference between this agent and human players, and closing it costs games. Switching more is worse at every setting tried.
+- ~~**The 0.3% switch rate is not a bug.**~~ **Withdrawn by 0031.** On the fixed harness switching is neutral (49.9%, p = 0.92), so nothing here shows that closing the gap costs games. Left visible rather than deleted, because the claim was published.
 - **Human agreement is not a target, again.** This is the third time following the corpus would have been wrong (0010's Trick Room, 0013's targets, now switching), and the first time it has been checked directly against win rate on a representative pool.
 - **0004's conclusion survives its own evidence being invalidated.** Its measurements were taken on a pool now known to be wrong, and the verdict held anyway — worth holding alongside 0025, where the same thing happened to 0023. Finding that an instrument was broken does not mean the answer it gave was.
 

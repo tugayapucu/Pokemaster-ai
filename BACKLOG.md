@@ -33,6 +33,30 @@ than disappearing.
 
 ## Now
 
+**The harness was the problem, and it is fixed.** 0031: `evaluate` swapped
+agents *and* teams between the two passes of a matchup, which cancels, so each
+agent kept its team and only the seat was controlled. With 93% of outcome
+variance coming from the matchup, that sat uncontrolled in the error bars and
+made the binomial CIs too narrow. Teams now stay put while the agents swap, and
+both passes share one seed, so identical agents tie every matchup at exactly
+50.0%.
+
+What the re-run showed, and it is not all good news:
+
+    Mega                57.6%  p<0.0001   survives
+    search              42.4%  p<0.0001   survives
+    matchup switching   49.9%  p=0.92     0027's -2.9 was a FALSE POSITIVE
+    tenure setup        49.8%  p=0.84     still null
+
+**The confound was inflating confidence, not hiding wins.** The nulls stayed
+null with the noise removed. So the run of failed ideas was not a measurement
+artefact -- only 0027's positive finding was.
+
+Still to re-run on the fixed harness: 0026 (redirection) and 0030 (the richer
+evaluator), both nulls, plus any earlier result whose significance was
+marginal.
+
+
 **Measure on the frozen pool.** `data/pool-eval.txt` holds 200 validated teams
 harvested from the train split of a 1,769-replay corpus, and
 `harvested_pool(..., cache=...)` reloads it without touching the corpus. Use it
