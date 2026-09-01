@@ -212,6 +212,7 @@ def evaluate(
     battles: int = 100,
     seed: int = 0,
     keep_trajectories: bool = False,
+    common_seed: bool = True,
 ) -> MatchResult:
     """Play a head-to-head over a pool of matchups and summarise it.
 
@@ -232,6 +233,17 @@ def evaluate(
     The invariant worth remembering: with the *same* agent on both sides, every
     matchup must tie. Before this fix, 240 of 299 did not.
 
+    `common_seed` gives both passes of a matchup the same battle seed. Since the
+    teams and seats are now identical between the two passes and only the agents
+    swap, sharing the seed makes the pair differ in *nothing but the policies* --
+    the same damage rolls, the same speed ties, the same everything. That is
+    plain common random numbers, unbiased and much tighter, and it sharpens the
+    invariant from "should tie" to "must tie": identical agents produce two
+    identical battles, so one wins each pass by construction.
+
+    Without it the two passes draw different luck, which is why identical agents
+    still failed to tie 19% of matchups after the pairing was fixed.
+
     Battle seeds and matchup selection both derive from `seed`, so a whole run
     reproduces from one number.
     """
@@ -247,7 +259,7 @@ def evaluate(
     per_matchup: dict[str, list[int]] = {}
 
     index = 0
-    for matchup in matchups:
+    for pair, matchup in enumerate(matchups):
         for swapped in (False, True):
             # Pass 1: A is player 0 with the first team. Pass 2: the agents
             # swap and the teams stay put, so A now holds the second team from
@@ -256,7 +268,11 @@ def evaluate(
             ordered = (agent_b, agent_a) if swapped else (agent_a, agent_b)
             teams = matchup.teams
             a_player = 1 if swapped else 0
-            battle_seed = f"sodium,{(seed * 1_000_003 + index) % (2**256):064x}"
+            # With `common_seed` the pair shares its luck, so the two passes
+            # differ only in which agent sits where. `pair` counts matchups
+            # rather than battles for exactly that reason.
+            stream = pair if common_seed else index
+            battle_seed = f"sodium,{(seed * 1_000_003 + stream) % (2**256):064x}"
 
             result = play_battle(env, ordered, teams, seed=battle_seed)
             total_turns += result.turn

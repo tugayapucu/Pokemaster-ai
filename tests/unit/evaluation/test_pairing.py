@@ -46,9 +46,7 @@ def _team(species: str) -> BattleTeam:
     return BattleTeam(
         team=Team(
             pokemon=tuple(
-                PokemonSet(
-                    species=f"{species}{i}", level=50, ability="a", moves=("tackle",)
-                )
+                PokemonSet(species=f"{species}{i}", level=50, ability="a", moves=("tackle",))
                 for i in range(6)
             )
         ),
@@ -63,9 +61,7 @@ def recorded(monkeypatch):
     seen: list[tuple[tuple[str, str], tuple[str, str]]] = []
 
     def fake_play_battle(env, agents, teams, *, seed=None):
-        seen.append(
-            ((agents[0].name, agents[1].name), (teams[0].name, teams[1].name))
-        )
+        seen.append(((agents[0].name, agents[1].name), (teams[0].name, teams[1].name)))
         return _Result(winner=0)
 
     monkeypatch.setattr(runner, "play_battle", fake_play_battle)
@@ -78,9 +74,7 @@ def recorded(monkeypatch):
             pass
 
     pool = TeamPool([_team("LEFT"), _team("RIGHT")])
-    runner.evaluate(
-        _Env(), Agent("A"), Agent("B"), pool, battles=2, seed=0
-    )
+    runner.evaluate(_Env(), Agent("A"), Agent("B"), pool, battles=2, seed=0)
     return seen
 
 
@@ -112,3 +106,60 @@ class TestEachAgentPlaysEachTeam:
         first, second = recorded
         assert _team_of("A", *first) == _team_of("B", *second)
         assert _team_of("B", *first) == _team_of("A", *second)
+
+
+class TestCommonRandomNumbers:
+    """Both passes of a matchup should be able to share their luck.
+
+    Once the teams and seats are identical between the two passes and only the
+    agents swap, giving the pair one seed makes it differ in nothing but the
+    policies. That is plain common random numbers, and it turns the mirror
+    invariant from "should tie" into "must tie": two identical agents produce
+    two identical battles, so each wins exactly one pass.
+
+    Without it the passes draw different luck, which is why identical agents
+    still failed to tie 19% of matchups after the pairing itself was fixed.
+    """
+
+    def _seeds(self, monkeypatch, *, common_seed):
+        seen: list[str] = []
+
+        def fake_play_battle(env, agents, teams, *, seed=None):
+            seen.append(seed)
+            return _Result(winner=0)
+
+        monkeypatch.setattr(runner, "play_battle", fake_play_battle)
+
+        class Agent:
+            def __init__(self, name):
+                self.name = name
+
+            def on_battle_start(self):
+                pass
+
+        pool = TeamPool([_team("LEFT"), _team("RIGHT")])
+        runner.evaluate(
+            _Env(),
+            Agent("A"),
+            Agent("B"),
+            pool,
+            battles=4,
+            seed=0,
+            common_seed=common_seed,
+        )
+        return seen
+
+    def test_a_pair_shares_one_seed(self, monkeypatch):
+        seeds = self._seeds(monkeypatch, common_seed=True)
+        assert len(seeds) == 4
+        assert seeds[0] == seeds[1], "the two passes of a matchup must share luck"
+        assert seeds[2] == seeds[3]
+
+    def test_different_matchups_still_differ(self, monkeypatch):
+        """Sharing within a pair must not mean sharing across pairs."""
+        seeds = self._seeds(monkeypatch, common_seed=True)
+        assert seeds[0] != seeds[2]
+
+    def test_it_can_be_turned_off(self, monkeypatch):
+        seeds = self._seeds(monkeypatch, common_seed=False)
+        assert seeds[0] != seeds[1], "without it each battle draws its own luck"
