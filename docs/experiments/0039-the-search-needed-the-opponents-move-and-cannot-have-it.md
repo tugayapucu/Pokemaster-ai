@@ -15,7 +15,9 @@ That is player 1's true simultaneous choice. It is not a leak of anything player
 
 ## What replaced it
 
-`guess_opponent_action` reads only `observation(0).opponent_side`: species, HP%, boosts, status, and **revealed** moves. It reuses the machinery the agent already has for judging incoming danger — `_threat_from`'s damage loop and `assumed_attacks` — and predicts, per active slot, the revealed damaging move doing the most expected damage to our best target. It never sees their true stats, item, ability, PP or unrevealed moves.
+`guess_opponent_action` reads only `observation(0).opponent_side`: species, HP%, boosts, status, and **revealed** moves. It reuses `_threat_from`'s damage loop and predicts, per active slot, the revealed damaging move doing the most expected damage to our best target. It never sees their true stats, item, ability, PP or unrevealed moves.
+
+**Corrected after publication.** This paragraph originally said the guesser also falls back on `assumed_attacks` — a standard STAB attack off their public typing — when nothing has been revealed. It does not. The import was there and was never called: a slot with nothing revealed is skipped, and the fixed default takes it. The measurement is unaffected, because the code described here is the code that ran and the coverage table below reports exactly this behaviour. What the error hid is how much room the guesser has left, which the coverage section now states outright.
 
 Two opponent actions are then used for two different jobs, which also removes 0038's selection-bias problem for free:
 
@@ -65,6 +67,17 @@ It beats a model that knows nothing by nearly nine points per slot and more than
 
 **The structure is the finding.** A one-ply search does not need to predict a move; it needs to predict the *turn* — both slots, with targets, simultaneously — because that is what the engine needs to step. Per-slot accuracy of 39% compounds to 8.4% jointly. Doubles makes opponent modelling exponentially harder in exactly the place a search consumes it.
 
+**How much of the turn it even has an opinion about**, which the original write-up did not report:
+
+```
+  opponent slots live    slots guessed    decision points
+  2                      0                             74
+  2                      1                             92
+  2                      2                             97
+```
+
+**63% of the time the guesser covers less than the opponent's full turn**, and the uncovered slot falls to enumeration order rather than to any judgement. That is the largest known lever on this model — larger than its per-slot accuracy — and it is the direct consequence of the missing fallback described above.
+
 By information available:
 
 ```
@@ -85,6 +98,7 @@ Worth noting against my own case: accuracy does **not** keep climbing with more 
 
 ## Not established
 
-- Whether a materially better opponent model exists. The plateau after one revealed move suggests the rule is the limit, not the data, and nothing here tries a better rule — a policy trained to imitate the opponent, or a distribution over their actions rather than a single guess.
+- Whether a materially better opponent model exists. The plateau after one revealed move suggests the rule is the limit, not the data, and nothing here tries a better rule — a policy trained to imitate the opponent, or a distribution over their actions rather than a single guess. The cheapest untried improvement is the fallback this experiment believed it had: giving a slot with nothing revealed a standard STAB attack off its public typing, which would raise coverage from 37% of turns to all of them.
+- **Whether 8 ranking samples were enough.** 0038 chose with 12 and this chose with 8, so guess quality and sample count both moved between the two. A collapse from +1.4 to +0.2 is unlikely to be four samples, but it is not separated here.
 - **Whether marginalising beats guessing.** This commits to one predicted action. A search that scored each candidate against a *distribution* of opponent replies is the standard answer to simultaneous moves and is not tested here; it is the one design that could work at 8.4% joint accuracy, because it never needs the single right answer.
 - Whether any of it changes against an opponent that is not our own heuristic. 0026's blind spot, still open, and now doubly relevant: the guesser was predicting a policy identical to our own and still only managed 39%.
