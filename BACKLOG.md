@@ -102,6 +102,27 @@ Fix the docstring either way: it currently cites a refuted claim as settled.
 
 ## Done, most recent first
 
+### ~~Sweep the evaluator's extra terms~~ — done 2026-09-03, no rescue (0034)
+
+0032's lesson said sweep before believing a null. Swept, the scale curve peaks
+at roughly where 0030 already tested:
+
+    scale 0.25  +0.28pp    scale 2.0  +0.57pp
+    scale 0.5   +0.53pp    scale 4.0  -0.95pp
+    scale 1.0   +1.00pp    scale 8.0  -2.87pp
+
+So 0030 sampled the best available point -- unlike 0027, whose answer changed
+sign at settings nobody had tried. The gain is small and not stably estimated:
+the same computation over the same data gives +0.2pp with 8 splits and +1.00pp
+with 24, and repeated CV folds are not independent so the usual standard error
+does not apply.
+
+Nothing ships. `evaluate_position` has no production caller, so it matters only
+if search is re-opened.
+
+**Sweeping is not a universal rescue** -- worth recording, since it worked
+spectacularly for switching and did nothing here.
+
 ### ~~Redirection, priced~~ — closed 2026-09-03, it loses (0033)
 
 0026 called redirection a null from a strawman test. 0032's lesson said sweep

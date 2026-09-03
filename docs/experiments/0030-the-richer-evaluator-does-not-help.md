@@ -1,6 +1,12 @@
 # Experiment 0030 — The richer evaluator does not help, and 0029 over-claimed
 
 **Date:** 2026-09-01
+> **Refined by 0034.** Swept rather than sampled, the scale curve peaks at
+> roughly the setting this document used, so the conclusion was not the result
+> of testing the wrong point. But the gain there is not reliably zero either:
+> two cross-validation runs over the same data give +0.2pp (here) and +1.00pp
+> (0034). "Small, and not stably estimated" is closer than "null". Nothing
+> ships either way -- `evaluate_position` still has no production caller.
 **Result: adding status, boosts, screens, Tailwind and Trick Room to `evaluate_position` is worth +0.2 points of winner prediction, with a standard deviation of 1.4 and a positive sign in four of eight splits.** A null. Experiment 0029 reported +3.0 held out and +4.4 against the shipped evaluator; both came from a **single split** of 307 replays. Cross-validated over 19,035 positions from 1,610 replays, the effect disappears. Backlog item 2 is closed, and by the stopping rule agreed before the work began, search is not re-opened on this basis.
 
 ## What 0029 got right and what it got wrong
