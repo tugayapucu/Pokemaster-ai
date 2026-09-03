@@ -49,7 +49,7 @@ The generalisable lesson: **sweep the parameter, do not sample it.** Tenure
 setup, redirection and the richer evaluator were each tested at one or two
 settings, on the old harness, and each was called a null.
 
-### 1. An opponent worth measuring against
+### An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
 redirection's ceiling as exactly zero -- 0 of 2,211 attacks ever diverted --
@@ -67,48 +67,53 @@ latent engine-rejection crashes as a side effect. The item is to make that
 routine rather than ad hoc: a small set of opponents that exercise the
 behaviours the corpus shows and our agent does not.
 
-Speed control is the first one to point it at. Tailwind is on ~48% of
-harvested teams and Trick Room ~50%, and unlike redirection they change every
-turn that follows rather than a single attack -- a much larger prior than the
-2.0% ceiling redirection turned out to have.
+Speed control was the first one to point it at, and 0036 closed it: swept 0
+to 8, nothing significant, and the pre-registered confirmation came back 53.4%
+with p = 0.56. So the item survives its first target rather than being
+justified by it. **What is left of it is the general form** -- a small set of
+opponents that exercise Fake Out pressure, redirection, hazard and status
+pressure, and anything else the corpus shows and our agent does not -- and it
+now has no specific mechanic behind it, which lowers it rather than removing
+it.
+
+The honest reading of 0036 is that the scripted-opponent theory has been tested
+once and did not find anything. That is one test, on the mechanic with the
+largest prior. Worth remembering before spending an afternoon on the second.
 
 Not a human-imitation model. 0010 and 0013 are both cases where following the
 corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
-### 2. Richer features, or nothing — the aggregate view is exhausted
-
-0035 measured the ceiling before building the model, and it is low. Winner
-prediction from a position saturates at about **63%**, and `evaluate_position`
-already scores 63.2%:
-
-    shipped evaluate_position   63.2%
-    linear, base only           61.8%
-    linear, all features        63.7%
-    linear + interactions       63.8%
-    bucket-oracle ceiling       62.7%   (converged over a 30x range of
-                                         bucket counts)
-
-Adding every feature and every interaction buys +2pp over base and stops. A
-hand-written function with four terms sits inside the range of the best model
-tried. **A learned value model over these features has about a point of
-headroom**, which does not justify a milestone.
-
-So the item is no longer "learn the value function". It is: **do richer
-features have more room?** These are aggregates -- health difference, living
-count, boost stages -- and they discard species, movesets, items and matchup
-entirely. A model that could see *which* Pokemon are on the field is a
-different proposition, and 0035 explicitly does not rule it out.
-
-Measure that ceiling before building that model, too.
-
-**And it explains search.** A lookahead compares positions one or two plies
-apart, and turns 1-2 is where the evaluator is nearly blind (54.8%). That is
-0022's inert lookahead with a reason attached rather than a diagnosis. Search
-is not waiting on a better evaluator; it is waiting on positions being worth
-evaluating.
-
 ## Done, most recent first
+
+### ~~Richer features, or nothing~~ — closed 2026-09-03, they do not move it (0037)
+
+0035 left one door open: the aggregates discard species, movesets, items and
+matchup entirely, so maybe the ceiling was a property of the *view* rather than
+of the game. `mechanics.matchup` is that view, and it already existed. Twelve
+matchup features added to the twelve aggregates, same two probes as 0035:
+
+    shipped evaluate_position    64.2%
+    aggregates only              63.5%
+    matchup only                 56.0%
+    aggregates + matchup         64.5%
+    bucket-oracle ceiling        63.1%   (was 62.7%, now at 82% coverage)
+
+**+1.0pp, and +0.4pp on the ceiling.** The pre-registered bar -- clear 62.7% by
+enough to justify building a model on top -- is not cleared, and it was written
+down before the run.
+
+Two things worth keeping. **Matchup alone is 56.0%**, far below aggregates
+alone: how much health each side has left tells you more about who wins than
+what the actives can do to each other. And the hand-written four-term
+`evaluate_position` trails the best fitted model by 0.3pp here and 0.6pp in
+0035, inside the split-to-split spread both times -- it has never been beaten
+by anything fitted.
+
+**The value-model line is finished, and with it the last named item in this
+list.** What is not ruled out is a learned *representation* -- embeddings over
+species and moves rather than hand-crafted features -- and the ranking task
+rather than the prediction one. Both are new directions, not continuations.
 
 ### ~~Speed control pricing~~ — closed 2026-09-03, priced about right (0036)
 

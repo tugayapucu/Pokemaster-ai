@@ -1125,6 +1125,59 @@ That is the case for Milestone 7 (a value model) and Milestone 11 (search with
 a learned policy) over any further mechanical work, and it is measured rather
 than asserted.
 
+The first half of that held: the two improvements since are both decision
+fixes. The second half did not -- see *The ceiling on a value model* below,
+which measured Milestone 7's headroom before building it and found about a
+point.
+
+### The ceiling on a value model, measured twice (2026-09-03)
+
+Milestone 7 proposes learning `P(win | observation)` to replace the
+hand-written `evaluate_position`. Rather than build it, the ceiling was
+measured first -- experiments 0035 and 0037, on 19,035 reconstructed human
+positions held out by replay.
+
+**The aggregate view (0035).** Health difference, living count, boost stages,
+side conditions. A capacity ladder from base features through every feature and
+then products, squares and turn interactions moves 61.8% -> 63.8% and stops. An
+oracle that memorises the outcome distribution of near-identical positions
+converges to **62.7%** across a thirty-fold range of bucket counts.
+`evaluate_position` scores 63.2%.
+
+**The richer view (0037).** The obvious objection was that aggregates discard
+species, movesets, items and matchup entirely. `mechanics.matchup` supplies
+exactly that, from the real movesets on the field. Twelve such features added to
+the twelve aggregates:
+
+```
+  shipped evaluate_position    64.2%
+  aggregates only              63.5%
+  matchup only                 56.0%
+  aggregates + matchup         64.5%
+  bucket-oracle ceiling        63.1%   (up from 62.7%, at 82% coverage)
+```
+
+**+1.0pp for knowing who is standing there, and +0.4pp on the ceiling.** And
+matchup *alone* is far weaker than the aggregates -- how much health each side
+has left says more about who wins than what the actives can do to each other.
+
+Three consequences, all measured rather than argued:
+
+- **Milestone 7 as specified is not worth building.** Two feature sets, two
+  probes, ~1pp of headroom over a four-term function written by hand.
+- **`evaluate_position` is not the weak link.** It trails the best fitted
+  alternative by 0.6pp and 0.3pp respectively, inside the split-to-split spread
+  in both cases.
+- **This bounds Milestone 11 too.** A search compares positions a ply or two
+  apart, and turns 1-2 are where prediction is weakest (54.8%). 0022 found the
+  lookahead inert and nine points worse when woken; this is the same conclusion
+  with a reason attached. Search is not waiting on a better evaluator.
+
+What is *not* ruled out: a learned representation (embeddings over species and
+moves, trained end to end) rather than hand-crafted features; whether a ceiling
+measured on 1500-1850 Elo games binds a stronger agent; and whether *ranking*
+two positions one ply apart is easier than naming the eventual winner.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
@@ -1556,6 +1609,13 @@ High action-prediction accuracy does not automatically imply a strong autonomous
 ---
 
 ## Milestone 7 — Value Model / Win Probability Model
+
+> **Status (2026-09-03): measured, and not worth building as specified.** The
+> ceiling on winner prediction from a position is ~63% and `evaluate_position`
+> is already there — experiments 0035 and 0037, both feature sets, ~1pp of
+> headroom. See *The ceiling on a value model* above. The goal below is left
+> as written; what would reopen it is a learned representation rather than
+> hand-crafted features, or the ranking task rather than the prediction one.
 
 ### Goal
 
