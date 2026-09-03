@@ -20,6 +20,15 @@ SEED = "sodium," + "0123456789abcdef" * 4
 BRANCH = "sodium," + "fedcba9876543210" * 4
 
 
+# Showdown opens a battle with `|t:|<unix seconds>`, which is wall-clock and so
+# differs between two runs that straddle a tick. Comparing raw protocol made
+# these tests fail about one run in three -- and fail *at index 0*, which reads
+# exactly like the battle diverging immediately. Determinism is a claim about
+# the simulation, not about the clock.
+def stable(protocol):
+    return tuple(line for line in protocol if not line.startswith("|t:|"))
+
+
 def _play(bridge: ShowdownBridge, teams, battle_format, *, turns=6, reseed_after=None):
     """Drive a battle on `default` choices, returning the protocol it emitted."""
     lines: list[str] = []
@@ -46,7 +55,7 @@ def test_replaying_a_seed_and_the_same_choices_reproduces_the_battle(bridge, tea
     first = _play(bridge, teams, battle_format)
     second = _play(bridge, teams, battle_format)
 
-    assert first == second
+    assert stable(first) == stable(second)
     assert len(first) > 20, "a six-turn battle should emit more than a handful of lines"
 
 
@@ -56,19 +65,21 @@ def test_reseeding_branches_the_battle(bridge, teams, battle_format):
     branched = _play(bridge, teams, battle_format, reseed_after=1)
 
     shared = 0
-    for a, b in zip(straight, branched):
+    for a, b in zip(stable(straight), stable(branched)):
         if a != b:
             break
         shared += 1
 
-    assert branched != straight, "reseeding changed nothing; the fork would not sample"
+    assert stable(branched) != stable(straight), (
+        "reseeding changed nothing; the fork would not sample"
+    )
     assert shared > 0, "the battle diverged before the branch point"
 
 
 def test_reseeding_is_itself_reproducible(bridge, teams, battle_format):
     """A branch has to be repeatable, or a rollout cannot be re-run or debugged."""
-    assert _play(bridge, teams, battle_format, reseed_after=1) == _play(
-        bridge, teams, battle_format, reseed_after=1
+    assert stable(_play(bridge, teams, battle_format, reseed_after=1)) == stable(
+        _play(bridge, teams, battle_format, reseed_after=1)
     )
 
 

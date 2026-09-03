@@ -24,6 +24,15 @@ SEED = "sodium," + "0f1e2d3c4b5a6978" * 4
 BRANCH = "sodium," + "89abcdef01234567" * 4
 
 
+# Showdown opens a battle with `|t:|<unix seconds>`, which is wall-clock and so
+# differs between two runs that straddle a tick. Comparing raw protocol made
+# these tests fail about one run in three -- and fail *at index 0*, which reads
+# exactly like the battle diverging immediately. Determinism is a claim about
+# the simulation, not about the clock.
+def stable(protocol):
+    return tuple(line for line in protocol if not line.startswith("|t:|"))
+
+
 @pytest.fixture(scope="module")
 def dex(bridge) -> Dex:
     return Dex.load(bridge)
@@ -51,7 +60,7 @@ def test_a_prefix_replay_reproduces_the_position_exactly(env, dex, mega_teams, r
     finished = play_out(env, _agents(dex))
 
     assert finished.winner == original.winner
-    assert finished.protocol == original.protocol
+    assert stable(finished.protocol) == stable(original.protocol)
 
 
 def test_the_prefix_actually_stops_early(env, mega_teams, recorded):
@@ -76,11 +85,11 @@ def test_reseeding_after_a_prefix_branches_the_battle(env, dex, mega_teams, reco
     env.reseed(BRANCH)
     branched = play_out(env, _agents(dex))
 
-    assert branched.protocol != original.protocol, (
+    assert stable(branched.protocol) != stable(original.protocol), (
         "reseeding changed nothing, so every rollout from a position would be identical"
     )
     shared = 0
-    for a, b in zip(original.protocol, branched.protocol):
+    for a, b in zip(stable(original.protocol), stable(branched.protocol)):
         if a != b:
             break
         shared += 1
@@ -96,7 +105,7 @@ def test_a_branch_is_reproducible(env, dex, mega_teams, recorded):
     for _ in range(2):
         env.replay(trajectory, mega_teams, stop_after=steps)
         env.reseed(BRANCH)
-        outcomes.append(play_out(env, _agents(dex)).protocol)
+        outcomes.append(stable(play_out(env, _agents(dex)).protocol))
 
     assert outcomes[0] == outcomes[1]
 
@@ -110,7 +119,7 @@ def test_different_branch_seeds_give_different_continuations(env, dex, mega_team
     for tail in ("aa", "bb", "cc", "dd"):
         env.replay(trajectory, mega_teams, stop_after=steps)
         env.reseed("sodium," + (tail * 16))
-        seen.add(play_out(env, _agents(dex)).protocol)
+        seen.add(stable(play_out(env, _agents(dex)).protocol))
 
     assert len(seen) > 1
 
