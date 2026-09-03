@@ -49,47 +49,7 @@ The generalisable lesson: **sweep the parameter, do not sample it.** Tenure
 setup, redirection and the richer evaluator were each tested at one or two
 settings, on the old harness, and each was called a null.
 
-### 1. Build the search, or decide not to (0038)
-
-**The first positive search result in this project, and it is small.** A one-ply
-search -- fork the engine, apply each candidate, score the successor with
-`evaluate_position` -- ranks candidate actions at 67.2% against the shipped
-action score's 63.4%, and is worth **+1.4 points** of win rate on held-out
-rollouts, pre-registered and confirmed at p = 0.020.
-
-The first run said +2.9. It selected the action using an evaluation computed
-from the same rollouts that graded it, which is 0029's mistake exactly. Half
-the effect was that bias.
-
-What makes it worth an item rather than a footnote:
-
-- **ranking really is an easier task than prediction.** 0035 and 0037 both
-  ended on "we measured winner prediction, not ordering, and they are not the
-  same question". They are not: 67.2% against 63%.
-- **decisions matter enormously** -- 35.3 points of real standard deviation
-  between two legal actions, against 12.2 points of rollout noise.
-- **the agent is already good**, picking the best of four candidates 57% of the
-  time against 25% for random, so the headroom is the remaining 43%.
-- **the limit is the evaluator, not the search.** A ranker given twelve
-  rollouts to choose with reaches 67.4%; ours captures an eighth of that.
-
-Against building it: +1.4 points, against Mega's +10.1 and switching's +7.8.
-And 0022 built a lookahead once already, found it inert, woke it and lost nine
-points.
-
-**The cheap next measurement before any building.** The search is handed the
-opponent's actual move. That is the largest uncontrolled factor and it inflates
-the result; a real search has to guess, from revealed information only. Measure
-that first -- it is the same fork machinery with the opponent's action
-predicted rather than given, and it decides whether +1.4 is a floor or a
-mirage.
-
-Also known: skipping the most lopsided quarter of positions costs only 14% of
-the value, so a search need not run everywhere. Turn does not predict stakes,
-and neither does the agent's own score spread -- it cannot tell when its
-decision matters.
-
-### 2. An opponent worth measuring against
+### An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
 redirection's ceiling as exactly zero -- 0 of 2,211 attacks ever diverted --
@@ -125,6 +85,47 @@ corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
 ## Done, most recent first
+
+### ~~Build the search, or decide not to~~ — closed 2026-09-03, it needed the oracle (0039)
+
+0038 measured a one-ply search at +1.4 points and named its own largest
+uncontrolled factor: the search was handed the opponent's actual move, and a
+real one has to guess. The backlog said measure that before building anything.
+Measured, and the whole effect was the oracle:
+
+    search chose the agent's own action     210   (73%)
+    search chose something different         76   (27%)
+
+                                     all points   where they differ
+    the agent's own pick                  48.1%              44.0%
+    guessed-opponent search               48.2%              44.6%
+
+    ahead 27  behind 25  tied 24     p = 0.7815    NOT CONFIRMED
+    noise floor, same action twice:  mean 5.7%, sd 8.8%
+
+**The guesser is not the excuse.** At 39.0% per slot against a 30.5% floor it
+beats a model that knows nothing by nine points, and recovers none of the gain.
+The reason is structural: a one-ply search needs the opponent's whole *turn* to
+step the engine, and 39% per slot compounds to **8.4%** jointly. Doubles makes
+opponent modelling exponentially harder in exactly the place a search spends it.
+
+**Milestone 11 is closed on much better grounds than 0022's.** 0022 found the
+lookahead inert and nine points worse when woken, and left the reason as a
+hypothesis. The reason is now measured.
+
+It also resolves the contradiction with 0005, which found perfect knowledge of
+the opponent's move *this turn* made the agent worse. That information went
+into the heuristic's scorer in the wrong currency; 0038 put it into an engine
+fork where it cannot be mispriced and it was worth +1.4. Both were right --
+and it is unobtainable regardless.
+
+One route survives and is not tested: **scoring candidates against a
+distribution of opponent replies rather than a single guess.** That is the
+standard answer to simultaneous moves, and the only design that could work at
+8.4% joint accuracy, because it never needs the single right answer.
+
+Kept from the work: the engine fork itself (`replay(..., stop_after=k)` plus
+`reseed`), which is general infrastructure and now has tests.
 
 ### ~~Richer features, or nothing~~ — closed 2026-09-03, they do not move it (0037)
 

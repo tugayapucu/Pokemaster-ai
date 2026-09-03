@@ -1181,6 +1181,16 @@ Three consequences, all measured rather than argued:
   the first evidence in this project pointing towards search rather than away
   from it.
 
+  **And amended again the same day by 0039, which closes it.** That +1.4 was
+  measured with the opponent's move handed to the search. Replaced with a guess
+  built from public information, it is +0.2 points, 27 ahead and 25 behind,
+  p = 0.78. The guesser is a real model -- 39.0% per slot against a 30.5% floor
+  -- and recovers none of the gain, because a one-ply search needs the
+  opponent's whole *turn* and 39% per slot compounds to 8.4% jointly. **Ranking
+  is still the easier task; the search that would exploit it cannot get its
+  input.** Untested and still open: scoring against a *distribution* of
+  opponent replies rather than a single guess.
+
 What is *not* ruled out: a learned representation (embeddings over species and
 moves, trained end to end) rather than hand-crafted features; whether a ceiling
 measured on 1500-1850 Elo games binds a stronger agent; and whether *ranking*
