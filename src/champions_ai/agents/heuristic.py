@@ -29,7 +29,7 @@ from champions_ai.agents.currency import (
     SUSTAIN_WEIGHT,
     SWITCH_WHEN_WEAKENED_BONUS,
 )
-from champions_ai.agents.support import score_support_move
+from champions_ai.agents.support import REDIRECTION_MOVES, score_support_move
 from champions_ai.agents.tenure import (
     OFFENSIVE_STATS,
     expected_tenure,
@@ -271,6 +271,23 @@ AVERAGE_WEIGHT = 0.25
 # The rate this produces is 4.4%, against 0.27% for the flat cost and 11.8% for
 # rated humans. Both ends were wrong: chasing the human rate overshoots badly,
 # and the flat cost barely switches at all.
+# Redirection draws the opponent's single-target attacks onto the user and off
+# the partner. It does not remove the damage, it *moves* it, so the flat 30 it
+# used to collect (the unknown-support fallback) priced the wrong thing --
+# exactly the mistake 0032 found in switching, where a constant stood in for a
+# trade.
+#
+# What it actually buys is the difference in how much the hit costs. Both
+# threats are fractions of their own bearer's health bar, so an attack taking
+# 60% of a frail partner and 30% of a bulky redirector converts a 60% loss into
+# a 30% one -- and a partner that would faint into one that does not.
+#
+# Swept rather than guessed; see experiment 0033. **Zero means unchanged**: the
+# scorer bows out and the move collects the flat unknown-support value it always
+# did, so the sweep contains the status quo as one of its points rather than
+# silently shipping a new behaviour at the bottom of the range.
+REDIRECT_WEIGHT = 0.0
+
 SWITCH_HORIZON = 2.0
 # Saving a Pokemon that would otherwise be knocked out is worth roughly what
 # losing it would cost: a slot, an attacker and a switch option at once.
@@ -1151,6 +1168,11 @@ class HeuristicAgent(Agent):
             borrowed = self._score_borrowed(observation, slot, action, move, attacker, borrow_depth)
             if borrowed is not None:
                 return borrowed
+
+        if move.move_id in REDIRECTION_MOVES:
+            drawn = self._score_redirection(observation, slot, action, move, attacker)
+            if drawn is not None:
+                return drawn
 
         observed = self._observed_target(observation, slot)
         on_us = move.target in SELF_TARGETS
@@ -2344,6 +2366,53 @@ class HeuristicAgent(Agent):
             * DAMAGE_WEIGHT
         )
         return worth, tenure
+
+    def _score_redirection(
+        self, observation: Observation, slot: int, action, move, attacker
+    ) -> "ScoredAction | None":
+        """What drawing the opponent's attacks onto us is worth.
+
+        Redirection moves damage rather than preventing it, so its value is the
+        difference between what the hit costs the partner and what it costs us.
+        `_incoming_threat` reports a fraction of the defender's own health bar,
+        which is what makes the subtraction meaningful: the same attack can take
+        60% of a frail partner and 30% of a bulky redirector.
+
+        `None` when there is no partner to protect -- `score_support_move`
+        already prices that case at zero, and a move that changes nothing should
+        say so there rather than here.
+        """
+        if not REDIRECT_WEIGHT:
+            # Unpriced, which is the shipped behaviour: fall through to the
+            # unknown-support value rather than scoring it at zero.
+            return None
+
+        own = observation.own_side
+        partner_slot = next(
+            (
+                other
+                for other in range(len(own.active_slots))
+                if other != slot and own.active_slots[other] is not None
+            ),
+            None,
+        )
+        if partner_slot is None:
+            return None
+        partner = own.team[own.active_slots[partner_slot]]
+        if partner.fainted:
+            return None
+
+        theirs, their_ko, _ = self._incoming_threat(observation, partner_slot, partner)
+        ours, _, _ = self._incoming_threat(observation, slot, attacker)
+        saved = theirs - ours
+        score = saved * REDIRECT_WEIGHT * DAMAGE_WEIGHT
+        reasons = [
+            f"{move.name} takes a ~{theirs:.0%} hit off "
+            f"{partner.pokemon_set.species} and a ~{ours:.0%} one onto us"
+        ]
+        if their_ko:
+            reasons.append(f"which would otherwise knock {partner.pokemon_set.species} out")
+        return ScoredAction(action, score, tuple(reasons))
 
     def _status_move_status(self, move, observed, reasons) -> float:
         """A status the move inflicts, priced exactly as a rider would be."""
