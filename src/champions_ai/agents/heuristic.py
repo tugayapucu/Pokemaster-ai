@@ -176,9 +176,14 @@ SCREEN_FRACTION_BLOCKED = 0.5
 SCREEN_WEIGHT = 30.0
 
 # Everything else a move can put on a side. Hazards are deliberately cheap:
-# this is a four-Pokemon format over about five turns where rated humans
-# switch on 11.5% of decisions, so a hazard collects far less than it would in
+# this is a four-Pokemon format where rated humans switch on 11.8% of decisions
+# and this agent on 4.4%, so a hazard collects far less than it would in
 # singles.
+#
+# The "about five turns" this used to say was measured on the singles-generated
+# pool 0024 replaced; harvested teams run thirteen. That staleness is what made
+# Tailwind worth re-pricing, and 0036 swept it from 0 to 8 without finding
+# anything better than the values below.
 SIDE_CONDITION_VALUE = {
     "tailwind": 45.0,
     "safeguard": 15.0,
@@ -448,12 +453,12 @@ class HeuristicAgent(Agent):
         # every setting compared an agent with itself and tied every matchup --
         # which reads exactly like a null.
         redirect_weight: float | None = None,
-        # Scales Tailwind and Trick Room. Both are flat constants fitted on
-        # human agreement, and Trick Room's is explicitly a *cap* because the
-        # fit "degenerates from worth this much into always do this". Neither
-        # has ever been swept -- 0026 only tested forcing them, which is the
-        # strawman that made redirection look settled. Per-agent for the same
-        # reason `redirect_weight` is.
+        # Scales Tailwind and Trick Room. Swept in 0036 across 0 to 8 and
+        # nothing beat the shipped 1.0; the leading candidate, never using them
+        # at all, came back 53.4% with p = 0.56 on fresh seeds. Kept so the
+        # result can be re-checked rather than taken on trust -- and because
+        # "scale 0 is indistinguishable from the shipped price" is a mildly
+        # uncomfortable fact somebody should be able to poke at again.
         speed_control_scale: float = 1.0,
     ) -> None:
         self.dex = dex

@@ -110,6 +110,25 @@ evaluating.
 
 ## Done, most recent first
 
+### ~~Speed control pricing~~ — closed 2026-09-03, priced about right (0036)
+
+The last flat constant on a high-frequency action, and it carried every marker
+that made switching worth re-opening: flat, fitted on agreement, never swept,
+tested only by a strawman, and justified by an "about five turns" comment when
+battles run thirteen. On ~48% and ~50% of harvested teams.
+
+Swept 0 to 8: nothing significant. The leading candidate -- never using them at
+all -- was pre-registered and came back 53.4%, p = 0.56, with the three seeds
+disagreeing in direction.
+
+Its 60-battle smoke test had said 85.7%, on seven decided matchups. Visible at
+the time because `decided_matchups` is now printed, which is the whole point of
+that guard.
+
+**The hand-priced action space is now swept end to end.** Two wins (Mega,
+switching), both from actions the agent was making wrongly; nothing from better
+evaluation, which 0035 explains -- a position is only ~63% of the answer.
+
 ### ~~A learned value model~~ — ceiling measured 2026-09-03, ~1pp of headroom (0035)
 
 Measured the ceiling instead of building the model. Winner prediction from a
