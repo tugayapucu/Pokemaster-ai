@@ -113,3 +113,70 @@ def test_different_branch_seeds_give_different_continuations(env, dex, mega_team
         seen.add(play_out(env, _agents(dex)).protocol)
 
     assert len(seen) > 1
+
+
+def test_a_branched_battle_is_not_recorded_as_replayable(env, dex, mega_teams, recorded):
+    """The bug this guards: a fork used to record its *starting* seed.
+
+    `replayable` then reported True and replaying produced a different battle --
+    214 protocol lines against 210, with the same winner, so nothing looked
+    wrong. A branched battle has no single seed and the record must say so.
+    """
+    _, trajectory = recorded
+
+    env.replay(trajectory, mega_teams, stop_after=3)
+    env.reseed(BRANCH)
+    play_out(env, _agents(dex))
+    branched = env.trajectory()
+
+    assert branched.seed is None
+    assert not branched.replayable
+    assert branched.metadata["branched"] == "true"
+    assert branched.metadata["starting_seed"] == SEED
+    assert BRANCH in branched.metadata["branch_seeds"]
+    # The decisions are still there -- the record is honest, not empty.
+    assert branched.decisions
+
+
+def test_replaying_a_branched_record_is_refused_by_name(env, dex, mega_teams, recorded):
+    _, trajectory = recorded
+
+    env.replay(trajectory, mega_teams, stop_after=3)
+    env.reseed(BRANCH)
+    play_out(env, _agents(dex))
+    branched = env.trajectory()
+
+    with pytest.raises(ValueError, match="branched"):
+        env.replay(branched, mega_teams)
+
+
+def test_an_unbranched_battle_still_records_its_seed(env, dex, mega_teams):
+    """Regression: the fix must not strip the seed from ordinary battles."""
+    play_battle(env, _agents(dex), mega_teams, seed=SEED)
+    trajectory = env.trajectory()
+
+    assert trajectory.seed == SEED
+    assert trajectory.replayable
+    assert "branched" not in trajectory.metadata
+
+
+def test_resetting_clears_the_branch(env, dex, mega_teams, recorded):
+    """A branched env must not poison the next battle it runs."""
+    _, trajectory = recorded
+    env.replay(trajectory, mega_teams, stop_after=3)
+    env.reseed(BRANCH)
+
+    play_battle(env, _agents(dex), mega_teams, seed=SEED)
+
+    assert env.trajectory().replayable
+
+
+def test_caller_metadata_survives_alongside_the_branch_note(env, dex, mega_teams, recorded):
+    _, trajectory = recorded
+    env.replay(trajectory, mega_teams, stop_after=3)
+    env.reseed(BRANCH)
+
+    recorded_with_note = env.trajectory(metadata={"experiment": "0039"})
+
+    assert recorded_with_note.metadata["experiment"] == "0039"
+    assert recorded_with_note.metadata["branched"] == "true"

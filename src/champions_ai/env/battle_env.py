@@ -84,6 +84,11 @@ class BattleEnv:
         self._packed: tuple[str, str] = ("", "")
         self._last_legal_counts: dict[int, int] = {}
         self._stale_requests = 0
+        # Seeds installed mid-battle by `reseed`. A battle that has been
+        # branched cannot be reproduced from its starting seed and its
+        # decisions, so `trajectory` has to say so rather than hand back a
+        # record that looks replayable and is not.
+        self._branch_seeds: list[str] = []
 
     # ------------------------------------------------------------- lifecycle
 
@@ -125,6 +130,7 @@ class BattleEnv:
         self._decisions = []
         self._seed = seed
         self._packed = packed_teams
+        self._branch_seeds = []
 
         events = self._bridge.start_battle(
             self.regulation.format_id, packed_teams[0], packed_teams[1], seed=seed
@@ -322,18 +328,32 @@ class BattleEnv:
         Observations are deliberately absent: replaying the seed regenerates
         them, and doing so with current code beats preserving whatever the
         recording version happened to produce.
+
+        **A branched battle is recorded without a seed**, because it does not
+        have one: `reseed` means the prefix ran under one generator and the
+        rest under another, so the starting seed and the decisions no longer
+        reproduce what happened. Keeping the starting seed here would hand back
+        a record that reports `replayable` and quietly replays a *different*
+        battle -- which it did, to within four protocol lines and the same
+        winner, until this was fixed. The seeds are preserved in `metadata` so
+        nothing is lost, and `replay` now refuses the record outright.
         """
         self._require_started()
+        recorded = dict(metadata or {})
+        if self._branch_seeds:
+            recorded.setdefault("branched", "true")
+            recorded.setdefault("starting_seed", str(self._seed))
+            recorded.setdefault("branch_seeds", ",".join(self._branch_seeds))
         return Trajectory(
             format_id=self.regulation.format_id,
-            seed=self._seed,
+            seed=None if self._branch_seeds else self._seed,
             packed_teams=self._packed,
             decisions=tuple(self._decisions),
             winner=self._winner,
             turns=self.turn,
             recorded_at=utc_now(),
             git_commit=git_commit(),
-            metadata=metadata or {},
+            metadata=recorded,
             protocol=self.protocol if include_protocol else (),
         )
 
@@ -346,7 +366,9 @@ class BattleEnv:
         turns one reproduced position into a sample of what could follow.
         """
         self._require_started()
-        return self._bridge.reseed(seed)
+        in_force = self._bridge.reseed(seed)
+        self._branch_seeds.append(in_force)
+        return in_force
 
     def replay(
         self,
@@ -370,6 +392,14 @@ class BattleEnv:
         replaying the whole thing; stopping early is the point here.
         """
         if not trajectory.replayable:
+            if trajectory.metadata.get("branched") == "true":
+                raise ValueError(
+                    "this battle was branched with reseed() and cannot be reproduced from "
+                    "a starting seed: its prefix ran under "
+                    f"{trajectory.metadata.get('starting_seed')} and the rest under "
+                    f"{trajectory.metadata.get('branch_seeds')}. Replay the prefix with "
+                    "stop_after and reseed again to rebuild it."
+                )
             raise ValueError("trajectory has no seed and cannot be reproduced")
         recorded = (teams[0].packed, teams[1].packed)
         if recorded != trajectory.packed_teams:
