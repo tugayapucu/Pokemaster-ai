@@ -156,6 +156,21 @@ class ShowdownBridge:
     def choose(self, player: str, choice: str) -> list[dict]:
         return self.request(cmd="choose", player=player, choice=choice)
 
+    def reseed(self, seed: str) -> str:
+        """Replace the running battle's RNG, returning the seed now in force.
+
+        Replaying a seed and a list of choices reproduces a position exactly,
+        which is what makes a fork exact -- and also what would make every
+        rollout from that position identical. Reseeding at the branch point is
+        what turns one reproduced position into an independent sample of what
+        follows it.
+        """
+        events = self.request(cmd="reseed", seed=seed)
+        for event in events:
+            if event["type"] == "seed":
+                return event["seed"]
+        raise BridgeError(f"reseed not acknowledged: {events}")
+
     def current_seed(self) -> str:
         events = self.request(cmd="seed")
         for event in events:

@@ -14,7 +14,7 @@
  * than recomputed.
  */
 const readline = require('readline');
-const { BattleStream, Dex, getPlayerStreams, Teams, TeamValidator } = require('pokemon-showdown');
+const { BattleStream, Dex, getPlayerStreams, PRNG, Teams, TeamValidator } = require('pokemon-showdown');
 
 let streams = null;
 let battleStream = null;
@@ -320,6 +320,18 @@ const HANDLERS = {
 		void streams[msg.player].write(msg.choice);
 	},
 	seed: () => send({ type: 'seed', seed: battleStream.battle.prngSeed }),
+	// Replace the random number generator mid-battle. This is what makes a
+	// fork branch: replaying the same seed and the same choices reproduces a
+	// position exactly, and every rollout from it would then be identical.
+	// Reseeding at the branch point is what turns one position into a sample.
+	// `battle.prngSeed` is a field captured at construction and never updated,
+	// and `battle.resetRNG()` writes a "|message|" line into the protocol that
+	// the trackers would have to learn to ignore. Setting the generator and
+	// reading back its own starting seed does neither.
+	reseed: (msg) => {
+		battleStream.battle.prng = new PRNG(msg.seed);
+		send({ type: 'seed', seed: battleStream.battle.prng.startingSeed });
+	},
 	quit: () => process.exit(0),
 };
 
