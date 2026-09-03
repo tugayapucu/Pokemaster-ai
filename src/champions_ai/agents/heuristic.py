@@ -431,6 +431,11 @@ class HeuristicAgent(Agent):
         # On by default since 0032, at SWITCH_HORIZON = 2. The flag stays so
         # the flat cost remains constructible for comparison.
         matchup_switching: bool = True,
+        # Per-agent so a sweep can put a priced agent against an unpriced one.
+        # As a module global it was read by *both* sides of a head-to-head, so
+        # every setting compared an agent with itself and tied every matchup --
+        # which reads exactly like a null.
+        redirect_weight: float | None = None,
     ) -> None:
         self.dex = dex
         self.name = name
@@ -438,6 +443,9 @@ class HeuristicAgent(Agent):
         self.infer_spreads = infer_spreads
         self.tenure_boosts = tenure_boosts
         self.matchup_switching = matchup_switching
+        self.redirect_weight = (
+            REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
+        )
         self.belief = OpponentBelief(dex) if infer_spreads else None
         # What the field looked like when we last chose, and what we chose.
         # Diffing the two is the only way an agent sees damage: it is handed
@@ -2382,7 +2390,7 @@ class HeuristicAgent(Agent):
         already prices that case at zero, and a move that changes nothing should
         say so there rather than here.
         """
-        if not REDIRECT_WEIGHT:
+        if not self.redirect_weight:
             # Unpriced, which is the shipped behaviour: fall through to the
             # unknown-support value rather than scoring it at zero.
             return None
@@ -2405,7 +2413,7 @@ class HeuristicAgent(Agent):
         theirs, their_ko, _ = self._incoming_threat(observation, partner_slot, partner)
         ours, _, _ = self._incoming_threat(observation, slot, attacker)
         saved = theirs - ours
-        score = saved * REDIRECT_WEIGHT * DAMAGE_WEIGHT
+        score = saved * self.redirect_weight * DAMAGE_WEIGHT
         reasons = [
             f"{move.name} takes a ~{theirs:.0%} hit off "
             f"{partner.pokemon_set.species} and a ~{ours:.0%} one onto us"
