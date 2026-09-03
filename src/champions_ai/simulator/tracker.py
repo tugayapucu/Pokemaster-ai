@@ -140,14 +140,22 @@ class _OpponentPokemon:
         self.consumed_item: str | None = None
         self.revealed_ability: str | None = None
 
-    def snapshot(self) -> ObservedPokemon:
+    def snapshot(self, *, on_field: bool = True) -> ObservedPokemon:
+        """The immutable view. `on_field` is False for a Pokemon on the bench.
+
+        Stages belong to the field rather than to the Pokemon, and are wiped
+        the moment it leaves. They are cleared here rather than on the way out
+        because a `|switch|` line names who *arrives*, never who left -- so the
+        accumulator for the departing Pokemon is never visited, and it sat on
+        the bench still reading whatever Intimidate did to it on turn one.
+        """
         return ObservedPokemon(
             species=self.species,
             level=self.level,
             hp_percent=self.hp_percent,
             fainted=self.fainted,
             status=self.status,
-            boosts=self.boosts,
+            boosts=self.boosts if on_field else Boosts(),
             volatile_conditions=frozenset(self.volatiles | self.single_turn),
             protect_streak=self.protect_streak,
             turns_on_field=self.turns_on_field,
@@ -799,8 +807,16 @@ class BattleTracker:
                     available_specials=specials,
                     # The request says nothing about the stall counter, so this
                     # comes from the protocol stream instead.
-                    boosts=self._own_boosts.get(
-                        split_ident(entry["ident"])[2], Boosts()
+                    # Stages belong to the field, not to the Pokemon: one
+                    # that is not out has none. `_own_boosts` is only cleared
+                    # when a Pokemon switches *in*, because the `|switch|`
+                    # line names who arrives and not who left -- so without
+                    # this a Pokemon Intimidated on turn 1 sat on the bench
+                    # still reading -1 Atk until it came back out.
+                    boosts=(
+                        self._own_boosts.get(split_ident(entry["ident"])[2], Boosts())
+                        if entry.get("active")
+                        else Boosts()
                     ),
                     protect_streak=self.protect_streak(
                         self.own_tag, split_ident(entry["ident"])[2]
@@ -827,7 +843,11 @@ class BattleTracker:
         )
 
     def opponent_side(self) -> ObservedSide:
-        revealed = [self._opponents[species].snapshot() for species in self._opponent_order]
+        on_field = {name for name in self._opponent_slots if name is not None}
+        revealed = [
+            self._opponents[species].snapshot(on_field=species in on_field)
+            for species in self._opponent_order
+        ]
         position = {species: i for i, species in enumerate(self._opponent_order)}
         return ObservedSide(
             revealed=tuple(revealed),

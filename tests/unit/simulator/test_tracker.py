@@ -549,3 +549,59 @@ def test_switching_out_forgets_the_last_move():
     assert seen.last_move is None
     # ...but we still know it has the move.
     assert "earthquake" in seen.revealed_moves
+
+
+def test_a_benched_opponent_carries_no_stat_stages():
+    """Stages belong to the field, and a Pokemon on the bench is not on it.
+
+    `test_boosts_accumulate_and_clear_on_switch_out` above looks like it covers
+    this and does not: it switches Garchomp out *and back in* before checking,
+    so it only ever asserts that arriving clears the stages. The bench itself
+    was never inspected, and a Pokemon Intimidated on turn one sat there
+    reading -1 Atk for the rest of the battle.
+    """
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Garchomp|Garchomp, L50, M|100/100",
+        "|-unboost|p2a: Garchomp|atk|1",
+    )
+    assert tracker.opponent_side().revealed[0].boosts.attack == -1
+
+    _sideline(tracker, "|switch|p2a: Incineroar|Incineroar, L50, F|100/100")
+
+    side = tracker.opponent_side()
+    benched = next(mon for mon in side.revealed if mon.species == "Garchomp")
+    assert benched.boosts.attack == 0, "a benched Pokemon kept its stat stages"
+
+
+def test_the_opponent_on_the_field_keeps_its_stages():
+    """The other half of the rule: clearing the bench must not clear the field."""
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Garchomp|Garchomp, L50, M|100/100",
+        "|-boost|p2a: Garchomp|atk|2",
+    )
+
+    active = tracker.opponent_side().revealed[0]
+    assert active.boosts.attack == 2
+
+
+def test_a_benched_pokemon_of_ours_carries_no_stat_stages():
+    tracker = _tracker()
+    _sideline(tracker, "|-boost|p1a: Charizard|atk|2")
+    _request(tracker, _move_request())
+    assert tracker.own_side().team[0].boosts.attack == 2
+
+    # Charizard leaves and Garchomp takes the slot. The `|switch|` line names
+    # only the arrival, so nothing ever visits Charizard's stages.
+    _sideline(tracker, "|switch|p1a: Garchomp|Garchomp, L50, M|183/183")
+    benched = _move_request()
+    benched["side"]["pokemon"][0]["active"] = False
+    benched["side"]["pokemon"][1]["active"] = True
+    _request(tracker, benched)
+
+    side = tracker.own_side()
+    assert side.team[0].pokemon_set.species == "Charizard"
+    assert side.team[0].boosts.attack == 0, "our own benched Pokemon kept its stat stages"
