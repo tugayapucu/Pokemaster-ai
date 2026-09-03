@@ -242,6 +242,18 @@ def play_out(env: BattleEnv, agents: tuple[Agent, Agent]) -> StepResult:
     start: a position reproduced by replaying a prefix has to be finished from
     the middle. Deliberately does **not** call `on_battle_start` -- an agent
     picking up a battle in progress has not started one.
+
+    **That makes rollouts from a fork exact only for a stateless agent.**
+    `HeuristicAgent` is one at its shipped settings, because the only thing it
+    carries between turns is the previous observation, and that is read solely
+    by `_learn_from`, which returns immediately while `belief` is None. Turn
+    `infer_spreads=True` on and it stops being true: an agent handed a
+    position mid-battle would start with a blank belief where the agent that
+    actually played the prefix had learned from every turn of it, and every
+    fork-based measurement would quietly be measuring a different agent.
+    Nothing currently does this -- `infer_spreads` has been off since 0019
+    measured it flat -- and the test suite pins the contract rather than the
+    assumption.
     """
     while not env.terminal:
         waiting = env.awaiting()
