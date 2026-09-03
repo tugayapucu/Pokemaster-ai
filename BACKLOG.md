@@ -102,6 +102,27 @@ Fix the docstring either way: it currently cites a refuted claim as settled.
 
 ## Done, most recent first
 
+### ~~Redirection, priced~~ — closed 2026-09-03, it loses (0033)
+
+0026 called redirection a null from a strawman test. 0032's lesson said sweep
+the price first. Swept on the fixed harness, priced against the shipped
+unpriced agent:
+
+    weight  4   23.5%  p = 0.029      weight 16   24.0%  p = 0.009
+    weight  8   25.0%  p = 0.025      weight 32   26.7%  p = 0.011
+
+Negative everywhere, with and without a tempo cost for the turn it spends. A
+stopping rule was written down before the second run and fired.
+
+The ceiling matters as much as the sign: pricing it at all only changes 17-31
+matchups in 798, so even a version that worked is worth about a point. Not
+where the remaining value is.
+
+Two bugs found in the measurement, both worth remembering: a module-global
+weight made both agents priced and tied every matchup, which reads exactly like
+a null; and the first sweep ran across weights 0.5-2.0, where the parameter
+does not change behaviour at all.
+
 ### ~~An evaluator that can price more than HP~~ — ruled out 2026-09-01 (0030)
 
 Adding status, boosts, screens, Tailwind and Trick Room to `evaluate_position`

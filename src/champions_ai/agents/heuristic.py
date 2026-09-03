@@ -282,10 +282,22 @@ AVERAGE_WEIGHT = 0.25
 # 60% of a frail partner and 30% of a bulky redirector converts a 60% loss into
 # a 30% one -- and a partner that would faint into one that does not.
 #
-# Swept rather than guessed; see experiment 0033. **Zero means unchanged**: the
-# scorer bows out and the move collects the flat unknown-support value it always
-# did, so the sweep contains the status quo as one of its points rather than
-# silently shipping a new behaviour at the bottom of the range.
+# Swept, and it loses. Experiment 0033, on the fixed harness, priced against
+# the shipped unpriced agent -- the paired figure is over the matchups the two
+# actually decided differently, which is only about 3% of them:
+#
+#   weight  4    23.5%   p = 0.029        weight 16    24.0%   p = 0.009
+#   weight  8    25.0%   p = 0.025        weight 32    26.7%   p = 0.011
+#
+# Negative at every weight that changes a decision, with and without a tempo
+# cost for the turn it spends. So **zero ships**, and zero means *unchanged*:
+# the scorer bows out and the move collects the flat unknown-support value it
+# always did. Kept constructible so the result can be re-checked rather than
+# taken on trust.
+#
+# Worth knowing before anyone tries again: the ceiling is small either way.
+# Pricing it at all only changes 17-31 matchups in 798, so even a version that
+# worked could be worth at most about a point of win rate.
 REDIRECT_WEIGHT = 0.0
 
 SWITCH_HORIZON = 2.0
@@ -2413,13 +2425,24 @@ class HeuristicAgent(Agent):
         theirs, their_ko, _ = self._incoming_threat(observation, partner_slot, partner)
         ours, _, _ = self._incoming_threat(observation, slot, attacker)
         saved = theirs - ours
-        score = saved * self.redirect_weight * DAMAGE_WEIGHT
+
+        # Redirecting spends the turn dealing no damage, and every other
+        # turn-consuming move here charges for that: Protect has
+        # PROTECT_TEMPO_COST, and the switch scorer subtracts the forgone
+        # attack. Leaving it out priced the benefit and none of the cost, and
+        # the first sweep duly found that using redirection more lost games at
+        # every weight it changed anything (18-26% on the matchups it moved).
+        forgone, _, _ = self._best_offence(observation, slot, attacker)
+
+        score = saved * self.redirect_weight * DAMAGE_WEIGHT - forgone * DAMAGE_WEIGHT
         reasons = [
             f"{move.name} takes a ~{theirs:.0%} hit off "
             f"{partner.pokemon_set.species} and a ~{ours:.0%} one onto us"
         ]
         if their_ko:
             reasons.append(f"which would otherwise knock {partner.pokemon_set.species} out")
+        if forgone > 0:
+            reasons.append(f"but gives up a ~{forgone:.0%} hit this turn")
         return ScoredAction(action, score, tuple(reasons))
 
     def _status_move_status(self, move, observed, reasons) -> float:
