@@ -76,31 +76,47 @@ Not a human-imitation model. 0010 and 0013 are both cases where following the
 corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
-### 2. A learned value model, once there is something to learn against
+### 2. Richer features, or nothing — the aggregate view is exhausted
 
-79.7% is a high floor for a hand-written function, so Milestone 7's headroom
-over it is real but modest. Worth less than giving search an evaluator it
-currently ignores.
+0035 measured the ceiling before building the model, and it is low. Winner
+prediction from a position saturates at about **63%**, and `evaluate_position`
+already scores 63.2%:
 
-The weakest cell is the one search cares most about: **66.1% on slim
-advantages**, which is exactly where a lookahead compares close positions. If a
-learned model is built, that is the number to improve, not the headline.
+    shipped evaluate_position   63.2%
+    linear, base only           61.8%
+    linear, all features        63.7%
+    linear + interactions       63.8%
+    bucket-oracle ceiling       62.7%   (converged over a 30x range of
+                                         bucket counts)
 
+Adding every feature and every interaction buys +2pp over base and stops. A
+hand-written function with four terms sits inside the range of the best model
+tried. **A learned value model over these features has about a point of
+headroom**, which does not justify a milestone.
 
+So the item is no longer "learn the value function". It is: **do richer
+features have more room?** These are aggregates -- health difference, living
+count, boost stages -- and they discard species, movesets, items and matchup
+entirely. A model that could see *which* Pokemon are on the field is a
+different proposition, and 0035 explicitly does not rule it out.
 
-Only after item 1 says the evaluator is worth maximising.
+Measure that ceiling before building that model, too.
 
-0001 found one-turn search inert (49.3%, not significant) and blamed opponent
-knowledge. That explanation is dead, so the result needs a better one — the
-likeliest being that the "search" scores actions with the heuristic's own
-per-move numbers rather than evaluating positions, so it never had anything to
-look ahead *with*.
-
-Fix the docstring either way: it currently cites a refuted claim as settled.
-
----
+**And it explains search.** A lookahead compares positions one or two plies
+apart, and turns 1-2 is where the evaluator is nearly blind (54.8%). That is
+0022's inert lookahead with a reason attached rather than a diagnosis. Search
+is not waiting on a better evaluator; it is waiting on positions being worth
+evaluating.
 
 ## Done, most recent first
+
+### ~~A learned value model~~ — ceiling measured 2026-09-03, ~1pp of headroom (0035)
+
+Measured the ceiling instead of building the model. Winner prediction from a
+position saturates at ~63% and the hand-written evaluator is already there, so
+Milestone 7 as specified is not worth the work. Superseded by the richer-feature
+question above, which has its own ceiling to measure first.
+
 
 ### ~~Sweep the evaluator's extra terms~~ — done 2026-09-03, no rescue (0034)
 
