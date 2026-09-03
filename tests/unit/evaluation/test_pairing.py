@@ -221,3 +221,53 @@ class TestTheHarnessCanTellNullFromBroken:
     def test_an_empty_run_is_not_flagged(self):
         """Nothing played is a different problem, and not this one."""
         assert not self._result([]).changed_nothing
+
+
+class TestCheckMirror:
+    """The harness should be able to catch its own bugs.
+
+    `check_mirror` plays an agent against a copy of itself. With a shared seed
+    the two passes of a matchup are identical but for which agent sits where,
+    so identical policies must tie every matchup. Anything decided means the
+    apparatus is measuring something other than the agents.
+
+    This is the check that would have caught 0031's bug on the day it was
+    written: `evaluate` swapped agents *and* teams, which cancels, and 240 of
+    299 mirror matchups came out decided. It survived because every existing
+    test used a pool of two identical teams.
+    """
+
+    def _run(self, monkeypatch, winners):
+        """`winners` is the winner of each battle, in order."""
+        calls = iter(winners)
+
+        def fake_play_battle(env, agents, teams, *, seed=None):
+            return _Result(winner=next(calls))
+
+        monkeypatch.setattr(runner, "play_battle", fake_play_battle)
+
+        class Agent:
+            name = "same"
+
+            def on_battle_start(self):
+                pass
+
+        pool = TeamPool([_team("LEFT"), _team("RIGHT")])
+        return runner.check_mirror(_Env(), Agent, pool, battles=4, seed=0)
+
+    def test_a_sound_harness_passes(self, monkeypatch):
+        """Player 0 wins both passes: each agent takes one, so both tie."""
+        result = self._run(monkeypatch, [0, 0, 0, 0])
+        assert result.decided_matchups == 0
+        assert result.matchups_tied == 2
+
+    def test_a_decided_mirror_matchup_raises(self, monkeypatch):
+        """Agent A winning both passes of a matchup is impossible for two
+        identical policies, and is exactly what the old pairing produced."""
+        with pytest.raises(runner.HarnessUnsound, match="copy of itself"):
+            self._run(monkeypatch, [0, 1, 0, 0])
+
+    def test_the_error_says_how_bad_it_is(self, monkeypatch):
+        with pytest.raises(runner.HarnessUnsound) as caught:
+            self._run(monkeypatch, [0, 1, 0, 1])
+        assert "2 of 2 matchups" in str(caught.value)

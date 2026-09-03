@@ -252,6 +252,42 @@ def play_battle(
     return result
 
 
+class HarnessUnsound(AssertionError):
+    """The measuring apparatus disagrees with itself."""
+
+
+def check_mirror(env, make_agent, pool, *, battles: int = 60, seed: int = 0):
+    """Play an agent against a copy of itself. Every matchup must tie.
+
+    With `common_seed` the two passes of a matchup share their luck and differ
+    only in which agent sits where, so two identical policies produce two
+    identical battles and each wins exactly one pass. A tie is therefore not a
+    tendency but an identity, and any decided matchup means the harness is
+    measuring something other than the agents.
+
+    This is the check that would have caught the bug 0031 found: `evaluate`
+    swapped agents *and* teams, which cancels, so each agent kept its team and
+    240 of 299 mirror matchups came out decided. It sat there for the life of
+    the project because every test used a pool of two identical teams.
+
+    Raises `HarnessUnsound` rather than returning a flag, because a caller who
+    ignores this is measuring noise and should not get the chance.
+    """
+    result = evaluate(
+        env, make_agent(), make_agent(), pool, battles=battles, seed=seed
+    )
+    if result.decided_matchups:
+        raise HarnessUnsound(
+            f"an agent played against a copy of itself and "
+            f"{result.decided_matchups} of {result.matchups_played} matchups "
+            f"came out decided ({result.matchups_won} ahead, "
+            f"{result.matchups_lost} behind). With identical policies and a "
+            f"shared seed every matchup must tie, so something other than the "
+            f"agents is differing between the two passes."
+        )
+    return result
+
+
 def evaluate(
     env: BattleEnv,
     agent_a: Agent,

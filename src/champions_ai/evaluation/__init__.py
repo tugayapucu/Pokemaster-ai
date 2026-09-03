@@ -24,7 +24,9 @@ from champions_ai.evaluation.margin import (
 )
 from champions_ai.evaluation.runner import (
     BattleOutcome,
+    HarnessUnsound,
     MatchResult,
+    check_mirror,
     evaluate,
     play_battle,
     wilson_interval,
@@ -53,6 +55,8 @@ __all__ = [
     "collect_samples",
     "compare",
     "compare_agents",
+    "HarnessUnsound",
+    "check_mirror",
     "evaluate",
     "human_signature",
     "margin_from_sides",
