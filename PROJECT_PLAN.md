@@ -1173,6 +1173,14 @@ Three consequences, all measured rather than argued:
   lookahead inert and nine points worse when woken; this is the same conclusion
   with a reason attached. Search is not waiting on a better evaluator.
 
+  **Amended 2026-09-03 by 0038.** The last of the three open questions above --
+  whether ranking two positions a ply apart is easier than naming the eventual
+  winner -- was measured, and it is. Ordering candidate actions by the
+  successor's evaluation runs at 67.2% where prediction saturates near 63%, and
+  is worth +1.4 points of win rate on held-out rollouts. Small, confirmed, and
+  the first evidence in this project pointing towards search rather than away
+  from it.
+
 What is *not* ruled out: a learned representation (embeddings over species and
 moves, trained end to end) rather than hand-crafted features; whether a ceiling
 measured on 1500-1850 Elo games binds a stronger agent; and whether *ranking*

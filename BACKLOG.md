@@ -49,7 +49,47 @@ The generalisable lesson: **sweep the parameter, do not sample it.** Tenure
 setup, redirection and the richer evaluator were each tested at one or two
 settings, on the old harness, and each was called a null.
 
-### An opponent worth measuring against
+### 1. Build the search, or decide not to (0038)
+
+**The first positive search result in this project, and it is small.** A one-ply
+search -- fork the engine, apply each candidate, score the successor with
+`evaluate_position` -- ranks candidate actions at 67.2% against the shipped
+action score's 63.4%, and is worth **+1.4 points** of win rate on held-out
+rollouts, pre-registered and confirmed at p = 0.020.
+
+The first run said +2.9. It selected the action using an evaluation computed
+from the same rollouts that graded it, which is 0029's mistake exactly. Half
+the effect was that bias.
+
+What makes it worth an item rather than a footnote:
+
+- **ranking really is an easier task than prediction.** 0035 and 0037 both
+  ended on "we measured winner prediction, not ordering, and they are not the
+  same question". They are not: 67.2% against 63%.
+- **decisions matter enormously** -- 35.3 points of real standard deviation
+  between two legal actions, against 12.2 points of rollout noise.
+- **the agent is already good**, picking the best of four candidates 57% of the
+  time against 25% for random, so the headroom is the remaining 43%.
+- **the limit is the evaluator, not the search.** A ranker given twelve
+  rollouts to choose with reaches 67.4%; ours captures an eighth of that.
+
+Against building it: +1.4 points, against Mega's +10.1 and switching's +7.8.
+And 0022 built a lookahead once already, found it inert, woke it and lost nine
+points.
+
+**The cheap next measurement before any building.** The search is handed the
+opponent's actual move. That is the largest uncontrolled factor and it inflates
+the result; a real search has to guess, from revealed information only. Measure
+that first -- it is the same fork machinery with the opponent's action
+predicted rather than given, and it decides whether +1.4 is a floor or a
+mirage.
+
+Also known: skipping the most lopsided quarter of positions costs only 14% of
+the value, so a search need not run everywhere. Turn does not predict stakes,
+and neither does the agent's own score spread -- it cannot tell when its
+decision matters.
+
+### 2. An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
 redirection's ceiling as exactly zero -- 0 of 2,211 attacks ever diverted --
