@@ -231,9 +231,19 @@ def play_battle(
     """Run one battle to completion, with `agents[i]` playing as player i."""
     for agent in agents:
         agent.on_battle_start()
+    env.reset(teams, seed=seed)
+    return play_out(env, agents)
 
-    result = env.reset(teams, seed=seed)
-    while not result.terminal:
+
+def play_out(env: BattleEnv, agents: tuple[Agent, Agent]) -> StepResult:
+    """Play a battle from wherever it currently stands, to the end.
+
+    Split out of `play_battle` because a battle does not always start at the
+    start: a position reproduced by replaying a prefix has to be finished from
+    the middle. Deliberately does **not** call `on_battle_start` -- an agent
+    picking up a battle in progress has not started one.
+    """
+    while not env.terminal:
         waiting = env.awaiting()
         if not waiting:
             break
@@ -248,8 +258,13 @@ def play_battle(
                 choices[player] = agent.select_action(
                     env.observation(player), env.legal_actions(player)
                 )
-        result = env.step(choices)
-    return result
+        env.step(choices)
+    return StepResult(
+        terminal=env.terminal,
+        winner=env.winner,
+        turn=env.turn,
+        protocol=env.protocol,
+    )
 
 
 class HarnessUnsound(AssertionError):

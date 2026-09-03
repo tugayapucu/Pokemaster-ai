@@ -337,13 +337,37 @@ class BattleEnv:
             protocol=self.protocol if include_protocol else (),
         )
 
-    def replay(self, trajectory: Trajectory, teams: tuple[BattleTeam, BattleTeam]) -> StepResult:
+    def reseed(self, seed: str) -> str:
+        """Replace the running battle's random number generator.
+
+        Only meaningful mid-battle. Replaying a seed and a recording reproduces
+        a position exactly, which is what makes a fork exact -- and also what
+        would make every continuation of it identical. Reseeding here is what
+        turns one reproduced position into a sample of what could follow.
+        """
+        self._require_started()
+        return self._bridge.reseed(seed)
+
+    def replay(
+        self,
+        trajectory: Trajectory,
+        teams: tuple[BattleTeam, BattleTeam],
+        *,
+        stop_after: int | None = None,
+    ) -> StepResult:
         """Re-run a recorded battle by resubmitting its decisions.
 
         Raises if the recording cannot drive the battle -- a decision arriving
         for a player the engine is not asking, or the choices running out
         early, means the record and the current code disagree, which is worth
         failing on rather than papering over.
+
+        `stop_after` replays only that many *steps* and leaves the battle
+        running mid-game, which is how a position gets reproduced in order to
+        branch from it. A step is one exchange with the engine, so it consumes
+        a decision for each player the engine is currently waiting on -- not
+        one record. Running out of recorded decisions is an error only when
+        replaying the whole thing; stopping early is the point here.
         """
         if not trajectory.replayable:
             raise ValueError("trajectory has no seed and cannot be reproduced")
@@ -356,8 +380,11 @@ class BattleEnv:
 
         result = self.reset(teams, seed=trajectory.seed)
         queued = list(trajectory.decisions)
+        steps = 0
 
         while not result.terminal:
+            if stop_after is not None and steps >= stop_after:
+                break
             waiting = self.awaiting()
             if not waiting:
                 break
@@ -369,6 +396,7 @@ class BattleEnv:
                 queued.remove(match)
                 actions[player] = match.action
             result = self.step(actions)
+            steps += 1
 
         return result
 

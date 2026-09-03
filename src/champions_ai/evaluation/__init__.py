@@ -29,6 +29,7 @@ from champions_ai.evaluation.runner import (
     check_mirror,
     evaluate,
     play_battle,
+    play_out,
     wilson_interval,
 )
 from champions_ai.evaluation.turn_order import (
@@ -63,6 +64,7 @@ __all__ = [
     "measure_agreement",
     "measure_side",
     "play_battle",
+    "play_out",
     "relative_power",
     "summarise",
     "wilson_interval",
