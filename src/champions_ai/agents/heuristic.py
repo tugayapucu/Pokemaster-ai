@@ -448,6 +448,13 @@ class HeuristicAgent(Agent):
         # every setting compared an agent with itself and tied every matchup --
         # which reads exactly like a null.
         redirect_weight: float | None = None,
+        # Scales Tailwind and Trick Room. Both are flat constants fitted on
+        # human agreement, and Trick Room's is explicitly a *cap* because the
+        # fit "degenerates from worth this much into always do this". Neither
+        # has ever been swept -- 0026 only tested forcing them, which is the
+        # strawman that made redirection look settled. Per-agent for the same
+        # reason `redirect_weight` is.
+        speed_control_scale: float = 1.0,
     ) -> None:
         self.dex = dex
         self.name = name
@@ -458,6 +465,7 @@ class HeuristicAgent(Agent):
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
+        self.speed_control_scale = speed_control_scale
         self.belief = OpponentBelief(dex) if infer_spreads else None
         # What the field looked like when we last chose, and what we chose.
         # Diffing the two is the only way an agent sees damage: it is handed
@@ -2497,7 +2505,10 @@ class HeuristicAgent(Agent):
                 value += blocked * SCREEN_WEIGHT
                 reasons.append(f"halves ~{fraction:.0%} incoming for several turns ({source})")
             else:
-                value += SIDE_CONDITION_VALUE.get(condition, STATUS_MOVE_VALUE)
+                worth = SIDE_CONDITION_VALUE.get(condition, STATUS_MOVE_VALUE)
+                if condition == "tailwind":
+                    worth *= self.speed_control_scale
+                value += worth
                 reasons.append(f"sets {move.side_condition} on our side")
 
         if move.sets_weather:
@@ -2519,7 +2530,10 @@ class HeuristicAgent(Agent):
             if condition in observation.field_conditions:
                 reasons.append(f"{move.pseudo_weather} is already up")
             else:
-                value += PSEUDO_WEATHER_VALUE.get(condition, PSEUDO_WEATHER_DEFAULT)
+                worth = PSEUDO_WEATHER_VALUE.get(condition, PSEUDO_WEATHER_DEFAULT)
+                if condition == "trickroom":
+                    worth *= self.speed_control_scale
+                value += worth
                 reasons.append(f"sets {move.pseudo_weather}")
 
         return value
