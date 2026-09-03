@@ -11,6 +11,9 @@ dependencies = [
     "pydantic>=2",
 ]
 
+[project.scripts]
+champions-ai = "champions_ai.__main__:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
