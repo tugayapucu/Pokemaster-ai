@@ -163,3 +163,61 @@ class TestCommonRandomNumbers:
     def test_it_can_be_turned_off(self, monkeypatch):
         seeds = self._seeds(monkeypatch, common_seed=False)
         assert seeds[0] != seeds[1], "without it each battle draws its own luck"
+
+
+class TestTheHarnessCanTellNullFromBroken:
+    """A comparison where nothing ever differed is not a null result.
+
+    Experiment 0033 lost a sweep to a weight held in a module global that both
+    agents read. Every setting tied every matchup, which is indistinguishable
+    from "the change does nothing" -- and it was caught only because a separate
+    diagnostic showed the parameter plainly changing behaviour.
+
+    `decided_matchups` is the real sample size, and `changed_nothing` is the
+    flag an experiment should check before reporting a null.
+    """
+
+    def _result(self, scores):
+        return runner.MatchResult(
+            agent_a="a",
+            agent_b="b",
+            battles=2 * len(scores),
+            wins_a=sum(1 for pair in scores for s in pair if s > 0),
+            wins_b=sum(1 for pair in scores for s in pair if s < 0),
+            draws=0,
+            total_turns=len(scores),
+            seed=0,
+            recorded_at="now",
+            matchup_scores={str(i): pair for i, pair in enumerate(scores)},
+        )
+
+    def test_all_tied_is_flagged_as_nothing_changed(self):
+        result = self._result([(1, -1), (-1, 1), (1, -1)])
+        assert result.matchups_tied == 3
+        assert result.decided_matchups == 0
+        assert result.changed_nothing
+
+    def test_a_real_comparison_is_not_flagged(self):
+        result = self._result([(1, 1), (-1, -1), (1, -1)])
+        assert result.decided_matchups == 2
+        assert not result.changed_nothing
+
+    def test_the_sample_size_is_decided_matchups_not_battles(self):
+        """Six battles, but only two of them carry any information."""
+        result = self._result([(1, 1), (-1, -1), (1, -1)])
+        assert result.battles == 6
+        assert result.decided_matchups == 2
+
+    def test_paired_rate_reads_off_the_decided_matchups(self):
+        result = self._result([(1, 1), (1, 1), (-1, -1), (1, -1)])
+        assert result.matchups_won == 2
+        assert result.matchups_lost == 1
+        assert result.paired_win_rate == pytest.approx(2 / 3)
+
+    def test_paired_rate_is_even_when_nothing_was_decided(self):
+        """No evidence either way must not read as a loss."""
+        assert self._result([(1, -1)]).paired_win_rate == 0.5
+
+    def test_an_empty_run_is_not_flagged(self):
+        """Nothing played is a different problem, and not this one."""
+        assert not self._result([]).changed_nothing

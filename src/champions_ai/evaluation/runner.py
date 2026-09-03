@@ -145,6 +145,54 @@ class MatchResult:
         """Matchups where agent A came out ahead across both team assignments."""
         return sum(1 for scores in self.matchup_scores.values() if sum(scores) > 0)
 
+    @property
+    def matchups_lost(self) -> int:
+        return sum(1 for scores in self.matchup_scores.values() if sum(scores) < 0)
+
+    @property
+    def matchups_tied(self) -> int:
+        """Matchups the two agents split, one team assignment each.
+
+        With `common_seed` a tie is not a coincidence: the pair is identical but
+        for which agent sits where, so a tie means the two policies produced the
+        same result and the matchup carries no information about them.
+        """
+        return sum(1 for scores in self.matchup_scores.values() if sum(scores) == 0)
+
+    @property
+    def decided_matchups(self) -> int:
+        """Matchups where the agents actually differed. **The sample size.**
+
+        The pooled win rate counts every battle, but tied matchups contribute
+        one win and one loss by construction and say nothing about either
+        policy. This is what a comparison is really resting on, and it is
+        routinely a small fraction of `battles` -- 21 of 798 in experiment 0033.
+        """
+        return self.matchups_won + self.matchups_lost
+
+    @property
+    def paired_win_rate(self) -> float:
+        """Share of the decided matchups agent A took.
+
+        The statistic to quote when `common_seed` is on. Ties are deterministic
+        there, so the pooled rate is just `0.5 + (won - lost) / 2N` and a
+        binomial interval on it is too wide.
+        """
+        decided = self.decided_matchups
+        return self.matchups_won / decided if decided else 0.5
+
+    @property
+    def changed_nothing(self) -> bool:
+        """Whether the two agents produced identical results everywhere.
+
+        **Not a null.** Two agents that never once decided a matchup differently
+        are, as far as this run can tell, the same agent -- which usually means
+        the thing meant to differ between them did not. Experiment 0033 lost a
+        sweep to a weight held in a module global that both sides read; every
+        setting tied every matchup and it read exactly like a null result.
+        """
+        return self.matchups_played > 0 and self.decided_matchups == 0
+
     def summary(self) -> str:
         low, high = self.confidence_interval_a
         verdict = "significant" if self.is_significant else "not significant"
@@ -165,7 +213,8 @@ class MatchResult:
             f"avg {self.average_turns:.1f} turns"
             + margin_text
             + (
-                f" | ahead in {self.matchups_won}/{self.matchups_played} matchups"
+                f" | ahead in {self.matchups_won}/{self.decided_matchups}"
+                f" decided matchups ({self.matchups_tied} tied)"
                 if self.matchup_scores
                 else ""
             )
