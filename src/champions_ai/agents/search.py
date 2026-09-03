@@ -5,12 +5,17 @@ it is about to be knocked out, or whether it even moves first. This does, which
 is most of what "search" buys at this depth.
 
 **Not true multi-ply search.** A real one would fork the battle and ask the
-simulator what actually happens. That turns out to be possible -- Showdown
-supports `Battle.toJSON()`/`fromJSON()`, and a fork advances in complete
-isolation from the original at roughly 460 forks/sec (measured; see
-`PROJECT_PLAN.md` section 15). It is simply not what is limiting play right
-now: `docs/experiments/0001` found search depth is not the bottleneck,
-opponent knowledge is.
+simulator what actually happens, and that is now built --
+`BattleEnv.replay(..., stop_after=k)` reproduces a position by resubmitting a
+recording, and `reseed` branches the generator so what follows is a sample.
+This agent does not use it. Whether stepping the engine and evaluating the
+successor is worth its cost is the question `docs/experiments/0038` asks; until
+that says so, nothing here changes.
+
+The reason recorded here previously -- that `docs/experiments/0001` found
+opponent knowledge rather than search depth to be the bottleneck -- has since
+been measured and did not hold: 0005 put an opponent oracle at +0.09 points and
+0018 put the whole ceiling at +4.3.
 
 So this estimates a single exchange with the same approximate damage model the
 heuristic uses. Reimplementing battle resolution to get a faster forward model
