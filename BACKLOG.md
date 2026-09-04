@@ -33,22 +33,49 @@ than disappearing.
 
 ## Now
 
-**Switching is solved and shipped (0032).** A small amount of matchup-based
-switching beats the flat cost: 56.1%, 57.8% and 55.4% across three independent
-seed sets, the middle one pre-registered. `SWITCH_HORIZON = 2.0` and
-`matchup_switching` on by default -- the first shipped improvement since Mega.
+**Every named measurement avenue is closed, and for the first time the project
+can be run.** The engine work finished at damage 93.9%, turn order 97.8% and
+the knockout claim 99.0%; the hand-priced action space was swept end to end;
+the value model, richer features and search were each measured and ruled out
+on evidence rather than opinion. Two changes ever improved the agent -- Mega
+(+10.1) and switching (+7.8) -- and **both were actions it was choosing
+wrongly**, not things it needed to know or evaluate better.
 
-The question had been answered wrongly three times because every attempt tested
-a single horizon. The curve is monotone and crosses even between 2 and 4, so
-0004 and 0027 were both measuring a real effect at the wrong point. Optimal
-switch rate 4.4%, against the flat cost's 0.27% and rated humans' 11.8% --
-**both ends were wrong**, and calibrating to the human rate was the specific
-error.
+So the work changes shape here. There is no obvious next measurement, and
+`AGENTS.md`'s rule -- no polished frontend before the decision engine works --
+has been satisfied about as thoroughly as it can be. `python -m champions_ai
+play` now puts a board, a ranked shortlist and its reasons in front of a human.
 
-The generalisable lesson: **sweep the parameter, do not sample it.** Tenure
-setup, redirection and the richer evaluator were each tested at one or two
-settings, on the old harness, and each was called a null.
+**Using it is the new instrument.** Building the terminal client took an
+afternoon and immediately found two real defects that forty experiments had
+not: benched Pokemon carried stale stat stages, invisible until something
+displayed the bench, and the test suite was failing two runs in five. Both had
+tests that *looked* like they covered the case.
 
+### 1. Review a real game
+
+`play` answers "what should I do here" on a position the agent made up.
+`review` answers it on a position a human actually faced: walk a replay from
+the corpus, and at each decision show what the player did, what the engine
+would advise, and why they differ.
+
+Three reasons it is next rather than more self-play work:
+
+- **It points the recommender at real positions.** Everything the CLI shows
+  today comes from self-play, which 0026 established cannot surface a mechanic
+  the agent under-uses. A replay contains decisions our agent would never make.
+- **The machinery exists.** `reconstruct_decisions` already rebuilds an
+  `Observation` and the human's choice from a log, and it is what the
+  agreement benchmark is built on. `review` is a renderer over it.
+- **It is the original goal.** Milestone 4 is a recommendation system, and
+  advice next to a real player's decision is the first version of that anyone
+  could judge.
+
+The honest caveat, and it is the same one 0010 and 0013 earned: the corpus is
+1500-1850 Elo, so a disagreement is **not** evidence the human was wrong.
+`review` should show both and say why, not score the human.
+
+### 2. An opponent worth measuring against
 ### An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
@@ -85,6 +112,45 @@ corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
 ## Done, most recent first
+
+### ~~Switching~~ — shipped 2026-09-03, the first agent win since Mega (0032)
+
+A small amount of matchup-based switching beats the flat cost: 56.1%, 57.8% and
+55.4% across three independent seed sets, the middle one pre-registered.
+`SWITCH_HORIZON = 2.0` and `matchup_switching` on by default.
+
+The question had been answered wrongly three times because every attempt tested
+a single horizon. The curve is monotone and crosses even between 2 and 4, so
+0004 and 0027 were both measuring a real effect at the wrong point. Optimal
+switch rate 4.4%, against the flat cost's 0.27% and rated humans' 11.8% --
+**both ends were wrong**, and calibrating to the human rate was the specific
+error.
+
+The generalisable lesson: **sweep the parameter, do not sample it.** Tenure
+setup, redirection and the richer evaluator were each tested at one or two
+settings, on the old harness, and each was called a null.
+
+### ~~Make it usable~~ — done 2026-09-04, and it found two bugs
+
+`python -m champions_ai play` prints the board, the movesets and a ranked
+shortlist with reasons, and lets you take one or disagree. Advice comes from
+`Recommender`, which shares the agent's scorer, so what it suggests is what it
+would play. Teams come from a Showdown export file or the frozen pool;
+`--seed` fixes both the draw and the battle.
+
+`cli/board.py` reads from `Observation` and nothing else, which makes it
+structurally unable to show a player something they are not entitled to see --
+the opponent's bench is a count there, so it prints a count.
+
+**Two real defects fell out of building it**, neither of which forty
+experiments had surfaced: benched Pokemon carried stale stat stages on both
+sides (only visible once something displayed the bench), and the suite was
+failing two runs in five because the fork tests compared Showdown's wall-clock
+`|t:|` line. Both had existing tests that looked like they covered the case --
+`test_boosts_accumulate_and_clear_on_switch_out` switched a Pokemon out *and
+back in* before asserting, so it only ever tested arrival.
+
+**Using the thing finds what testing the thing does not.**
 
 ### ~~Build the search, or decide not to~~ — closed 2026-09-03, it needed the oracle (0039)
 

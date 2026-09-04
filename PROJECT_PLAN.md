@@ -1196,6 +1196,49 @@ moves, trained end to end) rather than hand-crafted features; whether a ceiling
 measured on 1500-1850 Elo games binds a stronger agent; and whether *ranking*
 two positions one ply apart is easier than naming the eventual winner.
 
+### The day it became usable, and what that cost (2026-09-04)
+
+For three weeks this project had a decision engine measured from every angle
+and no way to run it: 1,259 tests, forty experiments, a damage model at 93.9%,
+and no entry point. `AGENTS.md` forbids a polished frontend before the decision
+engine works, which was the right rule and had been satisfied for some time
+without anyone noticing.
+
+```
+python -m champions_ai play [--team FILE] [--seed S] [--auto]
+```
+
+**Building it found two defects that forty experiments had not.**
+
+- **Benched Pokemon carried stale stat stages, on both sides.** The tracker
+  clears stages on the way *in*, because that is where a `|switch|` line
+  points -- but the line names who arrives and never who left, so the departing
+  Pokemon's accumulator was never visited. One Intimidated on turn one sat on
+  the bench reading -1 Atk. Inert for play, since `_matchup_against_field`
+  scores a switch from stats and health and `evaluate_position` reads stages
+  only for active slots, so no measured result moves. It became visible the
+  moment something displayed the bench.
+- **The test suite was failing two runs in five.** The fork tests compared raw
+  protocol, which includes Showdown's `|t:|` wall-clock line, so any run
+  straddling a second tick failed -- at index 0, which reads exactly like the
+  simulation diverging immediately.
+
+Both had tests that looked like they covered the case.
+`test_boosts_accumulate_and_clear_on_switch_out` switched a Pokemon out *and
+back in* before asserting, so it only ever tested that arriving clears stages;
+the bench itself was never inspected.
+
+**The lesson is the one this project keeps paying for, from a new direction.**
+Its recurring defect is a broken instrument rather than a wrong idea -- the
+harness that never exchanged teams (0031), the module-global weight that faked
+a null (0033), the pool built by the wrong format (0024). Every one of those
+was found by re-reading code or by a control. These two were found by *using
+the thing*, which no amount of further measurement would have done.
+
+Recorded alongside it: experiment code now lives in `experiments/`. Thirty-nine
+write-ups existed with none of their code under version control, which for a
+project whose failures are instrument failures is the wrong way round.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
@@ -1474,6 +1517,13 @@ Support:
 ---
 
 ## Milestone 4 — Recommendation System V1
+
+> **Reachable since 2026-09-04.** `Recommender` was built on 2026-08-15 and
+> then sat as a library nobody could run for three weeks, while the engine
+> underneath it was measured from every angle. `python -m champions_ai play`
+> is the smallest thing that closes that gap: a board, the movesets, a ranked
+> shortlist with reasons, and the option to disagree. See *The day it became
+> usable* above.
 
 ### Status (2026-08-15): V1 built
 
@@ -1884,6 +1934,11 @@ Two things limit that measurement, and the first is a trap worth recording:
 
 ## Milestone 14 — User Interface and Productization
 
+> **First step landed 2026-09-04**, far earlier than this milestone's position
+> implies, because the alternative was a decision engine nobody could reach.
+> `python -m champions_ai play` is a terminal client, not the service and
+> frontend described below; those remain unbuilt and unscheduled.
+
 ### Goal
 
 Expose the system in an intuitive interface.
@@ -2031,7 +2086,7 @@ These questions are more important than committing early to any specific neural 
 ## P2 — Once stable
 
 - [ ] Implement shallow search.
-- [ ] Build recommendation CLI/API.
+- [x] Build recommendation CLI. `python -m champions_ai play`, 2026-09-04. The API half is not built and is not currently needed.
 - [ ] Establish data schema for trajectories.
 - [ ] Evaluate legal sources of expert battle data.
 - [ ] Build first supervised dataset.
