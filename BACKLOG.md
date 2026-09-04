@@ -89,6 +89,36 @@ copying anyone's judgement.
 
 ## Done, most recent first
 
+### ~~An honest number on the shortlist~~ — done 2026-09-04 (0042)
+
+The recommender showed a confidence: a softmax share at a temperature of 12.0
+nobody swept. `PROJECT_PLAN.md` said plainly that it is not a win probability
+and that a calibrated one "comes from Milestone 7" -- which 0035 and 0037 then
+measured and closed. **The route to an honest number had been removed and the
+dishonest number stayed on screen.**
+
+0041 supplied a different route. The magnitude of a score gap predicts the real
+win-rate difference, so the scorer already produces the input and no value
+model is needed:
+
+    under 60        -0.7%     (-4.1% to +1.2%)
+    60 to 250       -4.7%     (-6.6% to -2.8%)
+    250 and above  -10.2%    (-12.8% to -7.8%)
+
+Held out by battle over eight random splits, correctly ordered on all eight.
+Three bands rather than a curve, because the deciles between them are noise at
+this sample size, and whole numbers rather than decimals for the same reason.
+
+It refuses to answer where 0041 measured nothing -- a difference spread across
+both slots (5.8% of shortlist entries) and an action scored above the pick (7%
+of candidates) -- because an unmeasured number on screen is indistinguishable
+from a measured one.
+
+**And it immediately said something the old number hid.** On the sample
+position all four shortlisted options are inside the band where rollouts find
+no difference, where the softmax had shown 19% against 11% and made the top
+choice look meaningfully better.
+
 ### ~~Which status move, and when~~ — closed 2026-09-04, the pricing is fine (0041)
 
 0040 left two candidates: price Parting Shot on its own, and ask whether a

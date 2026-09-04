@@ -427,11 +427,17 @@ def review(
                 print(line)
             print("\n  We would advise:")
             for entry in advice.recommendations[:3]:
-                print(f"    {entry.rank}. {entry.description}   {entry.confidence:.0%}")
+                # The cost, not the confidence: the confidence is a softmax
+                # share with an unswept temperature, the cost is measured.
+                note = (
+                    "top choice"
+                    if entry.rank == 1
+                    else (str(entry.cost) if entry.cost is not None else "not measured")
+                )
+                print(f"    {entry.rank}. {entry.description}")
+                print(f"         {note}")
                 for reason in entry.reasons[:2]:
                     print(f"         - {reason}")
-            if not advice.is_clear:
-                print("    (close call: the top two are hard to separate)")
 
             shown += 1
             if limit and shown >= limit:

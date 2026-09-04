@@ -128,11 +128,18 @@ def _show_position(observation, dex, recommender, legal):
     advice = recommender.recommend(observation, legal)
     print("\n  Recommended:")
     for entry in advice.recommendations:
-        print(f"    {entry.rank}. {entry.description}   {entry.confidence:.0%}")
+        # The cost, not the confidence. The confidence is a share of a softmax
+        # with a temperature nobody swept; the cost is measured by rollout
+        # (0041, 0042) and says what the choice looks like to be worth.
+        note = (
+            "top choice"
+            if entry.rank == 1
+            else (str(entry.cost) if entry.cost is not None else "not measured")
+        )
+        print(f"    {entry.rank}. {entry.description}")
+        print(f"         {note}")
         for reason in entry.reasons[:3]:
             print(f"         - {reason}")
-    if not advice.is_clear:
-        print("    (close call: the top two are hard to separate)")
     return advice
 
 

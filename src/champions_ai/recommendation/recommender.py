@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from champions_ai.agents import HeuristicAgent
 from champions_ai.dex import Dex
 from champions_ai.domain import JointAction, Observation
+from champions_ai.recommendation.calibration import Cost, cost_of_gap
 from champions_ai.recommendation.describe import describe_joint_action
 
 # Softmax temperature over heuristic scores. Tuned against real positions: at
@@ -37,6 +38,11 @@ class Recommendation:
     score: float
     confidence: float
     reasons: tuple[str, ...] = field(default=())
+    # What choosing this instead of the top recommendation looks like to cost,
+    # in win-rate points, from the rollout calibration in 0041. None where the
+    # gap falls outside what was measured -- see `calibration`. The top choice
+    # is the baseline and carries None by definition.
+    cost: Cost | None = None
 
     def __str__(self) -> str:
         return f"{self.rank}. {self.description}  {self.confidence:.0%}"
@@ -113,10 +119,18 @@ class Recommender:
 
         confidences = _softmax([score for _, (score, _) in scored], self.temperature)
 
+        top_action, (top_score, _) = scored[0]
         shortlist = []
         for rank, ((action, (score, reasons)), confidence) in enumerate(
             zip(scored[: self.top_k], confidences[: self.top_k], strict=False), start=1
         ):
+            differing = sum(
+                1
+                for mine, theirs in zip(
+                    top_action.slot_actions, action.slot_actions, strict=False
+                )
+                if mine != theirs
+            )
             shortlist.append(
                 Recommendation(
                     rank=rank,
@@ -125,6 +139,11 @@ class Recommender:
                     score=score,
                     confidence=confidence,
                     reasons=reasons,
+                    cost=(
+                        None
+                        if rank == 1
+                        else cost_of_gap(top_score - score, slots_differing=differing)
+                    ),
                 )
             )
 

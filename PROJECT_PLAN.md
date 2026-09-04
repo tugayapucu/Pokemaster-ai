@@ -1622,6 +1622,8 @@ Two fixes came from reading real output rather than from tests: at the first sof
 
 **Confidence is a share of a softmax over scores, not a win probability**, and is documented as such — a number shown to a human is read as a probability unless it says otherwise. A calibrated one comes from Milestone 7.
 
+> **Superseded 2026-09-04 by 0042.** Milestone 7 was measured and closed (0035, 0037), so the calibrated number was never going to arrive by that route. It arrived from 0041 instead: the *magnitude* of a score gap predicts the real win-rate difference, held out by battle and correctly ordered on 8 of 8 splits, which needs no value model because the scorer already produces the input. The shortlist now shows what a choice costs — "about 5 points behind" — and refuses to show anything for the two cases 0041 did not measure. The softmax share is still computed because `is_clear` uses it, and is now the last unswept constant in the recommender.
+
 Known gap carried forward: the heuristic does not model what Mega Evolution does to stats, so `X` and `X (+mega)` score identically. Indistinguishable options are collapsed in the shortlist, which hides the gap rather than fixing it.
 
 Still open from the deliverables below: search value and rollout value as alternative rankers, and the metrics (regret against a stronger reference, ranking stability, latency).
