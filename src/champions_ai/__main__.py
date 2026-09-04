@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from champions_ai.cli.play import DEFAULT_POOL, play
+from champions_ai.cli.review import DEFAULT_CORPUS, review
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +45,34 @@ def build_parser() -> argparse.ArgumentParser:
         "--auto", action="store_true",
         help="take the top recommendation every turn, without asking. Useful for a look.",
     )
+    walk = commands.add_parser(
+        "review",
+        help="walk a real game, showing what a player did against what we would advise",
+    )
+    walk.add_argument(
+        "--corpus", type=Path, default=DEFAULT_CORPUS,
+        help=f"directory of collected replays (default: {DEFAULT_CORPUS}).",
+    )
+    walk.add_argument(
+        "--replay", default=None,
+        help="which replay, by id or a fragment of one. Defaults to one at random.",
+    )
+    walk.add_argument(
+        "--player", type=int, choices=(0, 1), default=0,
+        help="whose decisions to follow (default: 0).",
+    )
+    walk.add_argument(
+        "--disagreements-only", action="store_true",
+        help="skip turns where our top recommendation is what they played.",
+    )
+    walk.add_argument(
+        "--limit", type=int, default=0,
+        help="stop after this many positions. 0 means the whole game.",
+    )
+    walk.add_argument(
+        "--seed", type=int, default=None,
+        help="fixes which replay is drawn when --replay is not given.",
+    )
     return parser
 
 
@@ -56,6 +85,15 @@ def main(argv: list[str] | None = None) -> int:
             pool_path=args.pool,
             seed=args.seed,
             auto=args.auto,
+        )
+    if args.command == "review":
+        return review(
+            corpus_path=args.corpus,
+            replay_id=args.replay,
+            player=args.player,
+            disagreements_only=args.disagreements_only,
+            limit=args.limit,
+            seed=args.seed,
         )
     return 1
 
