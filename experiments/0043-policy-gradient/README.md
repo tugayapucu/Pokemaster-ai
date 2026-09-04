@@ -40,13 +40,51 @@ available.
 | Greedy at evaluation, sampling in training | Argmax is scale-invariant, so the warm start is the same policy however the exploration weight is set. |
 | Normalise the gradient per decision | Not per episode, and not per episode squared, which the first draft did. |
 
+## What the setup work found
+
+Three things were checked rather than assumed, and two of them were wrong.
+
+**The warm start did not work at first.** A per-slot policy with all weight on
+`heuristic_score` plays the heuristic to **42.3%** over 2,100 battles across
+three seeds (CI 37.9%-46.8%), which excludes parity. An earlier single-seed
+reading of 48.4% over 400 battles was underpowered and had been over-read.
+
+The cause was exact, and measured over 120 real decisions:
+
+```
+  argmax of summed slot scores       matches the heuristic    84.2%
+  ...plus the combined-targets term  matches the heuristic   100.0%
+```
+
+`ml/policy.py` scores each slot and sums them, which is the right shape for
+0006's imitation task where each slot carried one human label. The heuristic
+*also* adds `_combined_targets` -- the focus-fire correction from 0011, which
+stops both slots piling damage onto one target because a Pokemon can only faint
+once. That term is joint by nature and cannot be expressed per slot. One
+missing term, one decision in six, eight points of win rate.
+
+With it as a 27th joint-level feature the warm start ties **189 of 189**
+matchups against the heuristic and `changed_nothing` is True: an exact clone.
+Training now starts at the bar rather than eight points under it.
+
+**The gradient was normalised per episode squared**, so the effective learning
+rate shrank quadratically with batch size. It now divides by the number of
+decisions in the batch.
+
+**And the training reward was mostly about teams.** Episodes paired two
+different teams, and 0031 measured team assignment at 93% of outcome variance.
+Training is on mirror matchups now, where the same team on both sides leaves a
+reward about play. Evaluation is untouched and still exchanges teams.
+
 ## Running it
 
 ```bash
-python experiments/0043-policy-gradient/train.py policy.json 200 40
+python experiments/0043-policy-gradient/train.py policy.json 60 30 1.0
 ```
 
-Arguments are the output file, the number of batches, and episodes per batch.
+Arguments are the output file, batches, episodes per batch, and the learning
+rate -- which is swept rather than sampled, because 0032 is what happens when
+three experiments each try one setting and call the result a null.
 
 ## What would count as a result
 

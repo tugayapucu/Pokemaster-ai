@@ -49,6 +49,15 @@ import random
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from policy import (
+    JOINT_FEATURE_NAMES,
+    JointFeatures,
+    JointPolicyAgent,
+    warm_start_weights,
+)
+
 from champions_ai.agents import HeuristicAgent
 from champions_ai.data import TeamPool, load_all
 from champions_ai.data.harvest import harvested_pool
@@ -59,32 +68,20 @@ from champions_ai.domain import REGULATION_M_B
 from champions_ai.env import BattleEnv
 from champions_ai.env.battle_env import Decision
 from champions_ai.evaluation.runner import evaluate, wilson_interval
-from champions_ai.ml.features import FEATURE_NAMES, FeatureExtractor
-from champions_ai.ml.policy import LinearPolicy, LinearPolicyAgent
 from champions_ai.simulator import ShowdownBridge
 
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("policy.json")
 BATCHES = int(sys.argv[2]) if len(sys.argv) > 2 else 60
 BATCH = int(sys.argv[3]) if len(sys.argv) > 3 else 40
+# Swept rather than sampled. 0032 is the reason: switching was called a null
+# three times by three experiments that each tried one setting, and the answer
+# changed sign the moment somebody swept it.
+LEARNING_RATE = float(sys.argv[4]) if len(sys.argv) > 4 else 0.5
 
 WARM_START = 10.0        # 70% agreement with the heuristic's pick when sampling
-LEARNING_RATE = 0.5
 EVAL_BATTLES = 400
 EVAL_EVERY = 15
 HOLDOUT = 50             # teams reserved for judging, never trained on
-
-
-def joint_features(extractor, observation, joint):
-    """One vector per joint action: the slots' features, summed.
-
-    The policy scores a whole turn, so the turn's feature vector is the sum of
-    its slots'. That matches `LinearPolicyAgent`, which sums slot scores.
-    """
-    total = [0.0] * len(FEATURE_NAMES)
-    for slot, action in enumerate(joint.slot_actions):
-        for i, value in enumerate(extractor(observation, slot, action)):
-            total[i] += value
-    return total
 
 
 def softmax(logits):
@@ -94,7 +91,7 @@ def softmax(logits):
     return [v / total for v in exponentiated]
 
 
-def play_episode(env, weights, extractor, opponent, teams, seed, rng):
+def play_episode(env, weights, features, opponent, teams, seed, rng):
     """One battle, sampling our side. Returns (steps, reward).
 
     A step is (chosen feature vector, every candidate's vector, their
@@ -135,7 +132,7 @@ def play_episode(env, weights, extractor, opponent, teams, seed, rng):
             if len(legal) == 1:
                 choices[0] = legal[0]
                 continue
-            vectors = [joint_features(extractor, observation, j) for j in legal]
+            vectors = features.batch(observation, legal)
             probabilities = softmax(
                 [sum(w * f for w, f in zip(weights, v, strict=True)) for v in vectors]
             )
@@ -156,7 +153,7 @@ def main() -> None:
 
     with ShowdownBridge() as bridge:
         dex = Dex.cached(bridge, Path("data/dex.json"))
-        extractor = FeatureExtractor(dex, move_data_from_dex(dex))
+        features = JointFeatures(dex, move_data_from_dex(dex))
         env = BattleEnv(REGULATION_M_B, bridge=bridge)
         pool = harvested_pool(
             bridge, REGULATION_M_B.format_id, train_replays, dex=dex, seed=1,
@@ -165,14 +162,11 @@ def main() -> None:
         training_pool = TeamPool(pool.teams[:-HOLDOUT])
         holdout_pool = TeamPool(pool.teams[-HOLDOUT:])
 
-        weights = [0.0] * len(FEATURE_NAMES)
-        weights[FEATURE_NAMES.index("heuristic_score")] = WARM_START
+        weights = warm_start_weights(WARM_START)
         opponent = HeuristicAgent(dex, name="frozen")
 
         def judge(label):
-            agent = LinearPolicyAgent(
-                LinearPolicy(weights=list(weights)), extractor, name="policy"
-            )
+            agent = JointPolicyAgent(weights, features, name="policy")
             result = evaluate(
                 env, agent, HeuristicAgent(dex, name="shipped"), holdout_pool,
                 battles=EVAL_BATTLES, seed=7,
@@ -195,7 +189,7 @@ def main() -> None:
         baseline = 0.0
         history = []
         for batch in range(1, BATCHES + 1):
-            gradient = [0.0] * len(FEATURE_NAMES)
+            gradient = [0.0] * len(JOINT_FEATURE_NAMES)
             rewards = []
             total_steps = 0
             for episode in range(BATCH):
@@ -210,7 +204,7 @@ def main() -> None:
                 teams = (training_pool.teams[pick], training_pool.teams[pick])
                 seed = "sodium," + f"{rng.getrandbits(128):032x}"
                 steps, reward = play_episode(
-                    env, weights, extractor, opponent, teams, seed, rng
+                    env, weights, features, opponent, teams, seed, rng
                 )
                 rewards.append(reward)
                 advantage = reward - baseline
@@ -245,7 +239,7 @@ def main() -> None:
         OUT.write_text(
             json.dumps(
                 {
-                    "weights": dict(zip(FEATURE_NAMES, weights, strict=True)),
+                    "weights": dict(zip(JOINT_FEATURE_NAMES, weights, strict=True)),
                     "held_out_paired": final,
                     "history": history,
                 },
@@ -256,7 +250,7 @@ def main() -> None:
         print(f"\nwritten to {OUT}")
         print("\n  weights that moved most from the warm start:")
         moved = sorted(
-            ((abs(w), n, w) for n, w in zip(FEATURE_NAMES, weights, strict=True)
+            ((abs(w), n, w) for n, w in zip(JOINT_FEATURE_NAMES, weights, strict=True)
              if n != "heuristic_score"),
             reverse=True,
         )
