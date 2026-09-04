@@ -248,3 +248,23 @@ def test_missing_dex_data_scores_neutrally_rather_than_last(dex):
     )
     assert scored.score == 0.0
     assert any("no data" in reason for reason in scored.reasons)
+
+
+def test_status_scale_is_off_by_default_and_changes_nothing(dex):
+    """A knob added for a sweep must not move the shipped agent."""
+    agent = HeuristicAgent(dex)
+    assert agent.status_scale == 1.0
+
+
+def test_status_scale_is_per_agent_not_shared(dex):
+    """0033's lesson, pinned.
+
+    `REDIRECT_WEIGHT` was a module global, so both sides of a head-to-head read
+    it, every setting compared an agent with itself, and every matchup tied --
+    which reads exactly like a null.
+    """
+    keen = HeuristicAgent(dex, status_scale=4.0)
+    shipped = HeuristicAgent(dex)
+
+    assert keen.status_scale == 4.0
+    assert shipped.status_scale == 1.0

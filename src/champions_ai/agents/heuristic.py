@@ -460,6 +460,21 @@ class HeuristicAgent(Agent):
         # "scale 0 is indistinguishable from the shipped price" is a mildly
         # uncomfortable fact somebody should be able to poke at again.
         speed_control_scale: float = 1.0,
+        # How far the status scorer is trusted against the damage scorer.
+        #
+        # Opened because `review --all` found the disagreement with rated
+        # players is a whole category rather than a move: Charm 3%, Disable 4%,
+        # Hypnosis 4%, Will-O-Wisp 4%, Reflect 5%, Substitute 6%, Roost 8%,
+        # Calm Mind 8%, Swords Dance 8%, Yawn 8%, Parting Shot 8% agreement,
+        # on 44 to 449 plays each. Humans reach for non-damaging moves far more
+        # than this agent ranks them.
+        #
+        # A scalar rather than the `tenure_boosts` flag next to it, because the
+        # flag is the shape 0032 warned about: switching was called a null
+        # three times by testing one setting each time, and the answer changed
+        # the moment it was swept. Per-agent for 0033's reason -- as a module
+        # global both sides of a head-to-head read it and every matchup ties.
+        status_scale: float = 1.0,
     ) -> None:
         self.dex = dex
         self.name = name
@@ -471,6 +486,7 @@ class HeuristicAgent(Agent):
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
         self.speed_control_scale = speed_control_scale
+        self.status_scale = status_scale
         self.belief = OpponentBelief(dex) if infer_spreads else None
         # What the field looked like when we last chose, and what we chose.
         # Diffing the two is the only way an agent sees damage: it is handed
@@ -733,7 +749,19 @@ class HeuristicAgent(Agent):
             )
 
         if not move.is_damaging:
-            return self._score_status_move(observation, slot, action, move, attacker, borrow_depth)
+            scored = self._score_status_move(
+                observation, slot, action, move, attacker, borrow_depth
+            )
+            if self.status_scale == 1.0:
+                return scored
+            # The whole score, not only the positive part: this scales how far
+            # the status scorer is trusted against the damage scorer, so a
+            # status move it prices *below* zero should be avoided harder too.
+            return ScoredAction(
+                scored.action,
+                scored.score * self.status_scale,
+                (*scored.reasons, f"status scored at {self.status_scale:g}x"),
+            )
 
         target = self._resolve_target(observation, slot, action, move)
         if target is None:
