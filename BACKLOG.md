@@ -52,7 +52,38 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
-### An opponent worth measuring against
+### 1. Which status move, and when
+
+0040 swept how far the status scorer is trusted and found the shipped weight at
+the top of a clean inverted U. What it also found, by checking usage rates
+rather than agreement rates, is that **the gap it was built to close does not
+exist**: humans play non-damaging moves on 34.2% of move choices and this agent
+on 29.6%. We use the category about as much as they do.
+
+The real disagreement is *selection and timing inside it* -- 3-8% agreement on
+eleven specific moves while the aggregate rates nearly match. A scalar cannot
+touch that by construction.
+
+Two things worth doing, in order:
+
+- **Price a move on its own.** Parting Shot, 449 plays at 8% agreement, is the
+  candidate: it is a pivot, and pivoting is worth what the incoming Pokemon's
+  matchup is worth, which is machinery `_matchup_against_field` already has.
+- **Ask whether a one-turn scorer can price a multi-turn move at all.** Reflect
+  lasts five turns, Will-O-Wisp halves physical damage for the rest of the
+  battle, Calm Mind pays off only later. The scorer is explicitly one-turn, and
+  0040 scaled a price that cannot see the payoff. This is the strongest
+  untested explanation for that null, and it is a different shape of fix from
+  any constant.
+
+**A standing caveat on all of it.** The corpus is 1500-1827 with a median of
+1585, and status usage is flat across that whole range. Championship play sits
+far above it and reportedly uses status heavily; nothing here can speak to that
+population, and a corpus that could would have to be collected from a different
+one. Worth remembering before concluding anything about how much status a
+strong player should use.
+
+### 2. An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
 redirection's ceiling as exactly zero -- 0 of 2,211 attacks ever diverted --
@@ -108,15 +139,17 @@ Every alternative at or below even, four of five significantly, in a clean
 inverted U with the shipped value at the top. Nothing led, so unlike 0036 there
 was no positive claim to confirm.
 
-**Third time agreement has pointed where the win rate does not** (0010, 0013,
-now this), and the first time it was a whole category rather than one
-judgement. Turning status off costs 23 points, so the scorer is doing real
-work; the shipped weight is simply near its optimum.
+Turning status off costs 23 points, so the scorer is doing real work and the
+shipped weight is near its optimum.
 
-Left open and worth its own item eventually: a scalar moves all eleven moves
-together, so a category correct on average can still contain moves individually
-wrong in opposite directions. Parting Shot, 449 plays at 8% agreement, is the
-candidate.
+**But the framing was wrong and is corrected in the write-up.** Low per-move
+agreement is not a usage gap: humans play non-damaging moves on 34.2% of move
+choices against this agent's 29.6%, and it is flat across every rating band the
+corpus covers. We reach for the category about as often as they do. The
+disagreement is over *which* one and *when* -- and a scalar cannot move that,
+which is the better explanation for the null than "humans over-use it".
+
+So the item below replaces it rather than the whole question closing.
 
 ### ~~Survey the corpus for where we differ~~ — done 2026-09-04
 

@@ -1,7 +1,7 @@
-# Experiment 0040 — The status category is priced about right, and humans over-use it
+# Experiment 0040 — The status category is priced about right, and the gap is not where it looked
 
 **Date:** 2026-09-04
-**Result: sweeping how far the status scorer is trusted finds a clean peak at the value already shipped.** Every alternative loses, four of five significantly, and the curve is an inverted U — 26.5% at scale 0, 39.0% at 0.5, 44.9% at 2, 34.1% at 4, 15.3% at 8. **This is the third time agreement with rated players has pointed somewhere the win rate does not** (0010, 0013, now here), and the first time the disagreement was a whole category rather than a single judgement.
+**Result: sweeping how far the status scorer is trusted finds a clean peak at the value already shipped.** Every alternative loses, four of five significantly, and the curve is an inverted U — 26.5% at scale 0, 39.0% at 0.5, 44.9% at 2, 34.1% at 4, 15.3% at 8. **But the question it was built to answer turned out to be the wrong one.** Low per-move agreement is not a difference in usage: humans play non-damaging moves on 34.2% of move choices and this agent on 29.6%, flat across every rating band the corpus covers. The disagreement is over *which* status move and *when* — which a single scalar cannot move, and which this experiment therefore does not test.
 
 ## Where the question came from
 
@@ -13,7 +13,20 @@
   Swords Dance 8%   Yawn 8%   Parting Shot 8%
 ```
 
-on 44 to 449 plays each. Humans reach for non-damaging moves far more often than this agent ranks them, and they do it consistently across setup, recovery, screens, status, disruption and pivoting.
+on 44 to 449 plays each, consistently across setup, recovery, screens, status, disruption and pivoting.
+
+**Corrected after publication — this paragraph originally read "humans reach for non-damaging moves far more often than this agent ranks them", and that is not true.** Low per-move agreement is not the same as a difference in how often the category is used, and the aggregate rates are close:
+
+```
+  status share of move choices
+    humans, 1500-1599    34.1%   n=20029
+    humans, 1600-1699    34.5%   n=11918
+    humans, 1700-1827    33.6%   n= 2503
+    humans overall       34.2%
+    this agent           29.6%
+```
+
+**A 4.6 point gap, not a chasm** — and flat across the whole rating range the corpus covers. So the disagreement is not *how much* status to use. It is **which one, and when**, which is a different claim and the one the rest of this experiment fails to test.
 
 ## Why it was worth re-opening
 
@@ -47,12 +60,18 @@ The shape matters as much as the significance. Turning status off entirely costs
 
 ## What it says about agreement
 
-**A third precedent, and the clearest one.** 0010 found Trick Room's fitted value climbing without bound because a team that brings it nearly always uses it. 0013 found target selection looked like the largest gap in the project when humans are near-random on it. Both were single judgements. This is an entire category, eleven moves, 3-8% agreement, and moving toward the human rate is measurably worse in every direction tested.
+0010 found Trick Room's fitted value climbing without bound because a team that brings it nearly always uses it. 0013 found target selection looked like the largest gap in the project when humans are near-random on it. Both were single judgements, and both were cases where agreement pointed somewhere the win rate did not.
 
-The honest reading is that 1500-1850 Elo players use non-damaging moves more than is optimal against this opponent — or at least, that the gap is not evidence we are wrong. Agreement remains a ranking signal for judgement calls and not a target.
+This looked like a third and larger instance, and the first draft of this write-up called it one. **It is not.** Agreement remains a ranking signal rather than a target, and pushing the category's price in either direction is measurably worse — but that is a much narrower claim than the one the low agreement figures seemed to invite.
+
+**But "humans over-use status" is not what this shows**, and the usage table above is why: at 34.2% against our 29.6%, they barely use it more at all. What the sweep rules out is that the category is *uniformly* underpriced. It says nothing about the disagreement that actually exists, which is over selection and timing inside a category we already reach for about as often as they do.
+
+**A scalar was the wrong instrument for the gap that was found.** It can only move all eleven moves together, and the evidence says they do not need moving together.
 
 ## Not established
 
 - **Whether individual moves in the category are mispriced.** A scalar moves all eleven together, so a category priced correctly on average can still contain moves that are individually wrong in opposite directions. Parting Shot at 449 plays and 8% agreement is the obvious candidate to price on its own.
 - **Whether a different opponent would punish or reward status differently.** This is self-play: the status-keen agent does use the moves, so the mechanic is exercised and 0026's blindness does not apply in its strict form — but whether *our* agent punishes an opponent's setup correctly is a separate question this does not touch.
+- **Whether a one-turn scorer can price a multi-turn move at all.** Reflect lasts five turns, Will-O-Wisp halves physical damage for the rest of the battle, Calm Mind pays off only on subsequent turns. The scorer is explicitly one-turn, and scaling a price that cannot see the payoff amplifies a number rather than correcting it. This is the strongest untested explanation for the null and it is not addressed here.
+- **Whether any of this holds above 1827.** The corpus tops out there with a median of 1585, and usage is flat across it — but flat over 300 Elo points is no evidence about championship play, where the observation prompting this note is that status moves are used heavily. The corpus cannot answer that question, and a corpus that could would have to be collected from a different population.
 - Whether the peak sits exactly at 1.0. Scale 2.0 is 44.9% with p = 0.34, so anything between roughly 1 and 2 is indistinguishable here. The claim is that the shipped value is inside the peak, not that it is the argmax.

@@ -1266,10 +1266,23 @@ inverted U with the shipped value at the top. Turning status off entirely costs
 23 points, so the scorer is doing real work -- its weight is simply already
 near optimal.
 
-**This is the third time human agreement has pointed somewhere the win rate
-does not** (0010's Trick Room, 0013's target selection, now an entire
-category), and the strongest case yet for the standing rule that agreement is a
-ranking signal for judgement calls and never a target.
+**And then the framing turned out to be wrong**, which is worth recording more
+than the sweep is. Low per-move agreement is not a usage gap. Humans play
+non-damaging moves on 34.2% of their move choices and this agent on 29.6% --
+flat across every rating band the corpus covers -- so we reach for the category
+about as often as they do. The disagreement is over *which* status move and
+*when*, and a single scalar cannot move that by construction.
+
+So this is not a third instance of agreement pointing where the win rate does
+not (0010's Trick Room, 0013's target selection). It is something new: an
+agreement figure that was real but described a different gap than the one it
+appeared to. **Three per-move agreement rates of 3-8% coexisted with a 4.6
+point difference in how often the category is used**, and only the second
+number says how much behaviour actually differs.
+
+A standing caveat the corpus cannot lift: it runs 1500-1827 with a median of
+1585, and championship play sits far above that. Nothing measured here speaks
+to how much status a very strong player should use.
 
 ### Deliberately not done
 
