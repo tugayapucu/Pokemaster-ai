@@ -89,6 +89,26 @@ copying anyone's judgement.
 
 ## Done, most recent first
 
+### ~~Team Preview its own screen~~ — done 2026-09-04
+
+Six species against six and nothing else to go on, previously decided for the
+player and announced in one line. Now a screen: both rosters, the full matchup
+grid, the four we would bring in lead order with a reason each, and the option
+to type four numbers instead.
+
+**The grid is the product, not the recommendation** -- `matchup_table` is what
+the agent decides from, and a player reading it can disagree on grounds the
+agent cannot express. Two caveats are on screen rather than buried: the pick is
+chosen for coverage, and the lead order was measured at 48.4% against a 50%
+baseline, so the four are advice and the order is a coin toss.
+
+A bug caught by looking at the first render: the grid came out as a field of
+-1, 0 and 1, because `matchup().net` runs -1 to +1 with a median near zero and
+290 of 432 real values round to zero at whole-number precision. Now -100 to
++100.
+
+**Third time in two days that using the thing found what testing it did not.**
+
 ### ~~Review a real game~~ — done 2026-09-04
 
 `python -m champions_ai review` walks a replay and puts the board the player
