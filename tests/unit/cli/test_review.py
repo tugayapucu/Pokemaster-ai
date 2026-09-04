@@ -108,3 +108,68 @@ def test_a_move_the_dex_does_not_know_still_renders():
 def test_a_switch_reads_as_a_switch():
     choice = _choice(kind="switch", switched_to="p1a: Charizard")
     assert _describe_human(choice, _Dex()) == "switch to Charizard"
+
+
+# ------------------------------------------------------- ranking the human's action
+
+class _Entry:
+    def __init__(self, rank, slot_actions):
+        self.rank = rank
+        self.action = type("A", (), {"slot_actions": slot_actions})()
+
+
+class _Advice:
+    def __init__(self, entries):
+        self.recommendations = entries
+
+
+def test_a_hidden_target_is_compared_on_the_move_alone():
+    """The bug this guards, and it was silent.
+
+    A move that failed or is mid-charge prints no target, so the human's
+    signature is ('move', 'electroshot', None) and ours is
+    ('move', 'electroshot', ('foe', 0)). Compared whole they never match, and
+    every charge move in the format read as a total disagreement in *both*
+    directions -- Electro Shot showed up 361 times at 0% agreement and 416
+    times at 0% adoption, which is not a behaviour, it is an artefact.
+    """
+    from champions_ai.cli.review import _rank_of
+
+    human = ("move", "electroshot", None)
+    ours = ("move", "electroshot", ("foe", 0))
+
+    def signature(action, observation, slot, move_data):
+        return ours
+
+    import champions_ai.cli.review as module
+
+    original = module.action_signature
+    module.action_signature = signature
+    try:
+        advice = _Advice([_Entry(1, [object()])])
+        assert _rank_of(human, advice, None, {}) is None, "the whole-signature comparison"
+        assert _rank_of(human, advice, None, {}, move_only=True) == 1
+    finally:
+        module.action_signature = original
+
+
+def test_rank_reports_where_it_matched_not_just_whether():
+    from champions_ai.cli.review import _rank_of
+
+    wanted = ("move", "protect", None)
+
+    def signature(action, observation, slot, move_data):
+        return action
+
+    import champions_ai.cli.review as module
+
+    original = module.action_signature
+    module.action_signature = signature
+    try:
+        advice = _Advice([
+            _Entry(1, [("move", "tackle", None)]),
+            _Entry(2, [("move", "protect", None)]),
+        ])
+        assert _rank_of(wanted, advice, None, {}) == 2
+    finally:
+        module.action_signature = original

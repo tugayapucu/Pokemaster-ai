@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from champions_ai.cli.play import DEFAULT_POOL, play
-from champions_ai.cli.review import DEFAULT_CORPUS, review
+from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -73,6 +73,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--seed", type=int, default=None,
         help="fixes which replay is drawn when --replay is not given.",
     )
+    walk.add_argument(
+        "--all", action="store_true",
+        help="survey the whole corpus instead of one game: where do we and rated "
+             "players systematically differ?",
+    )
+    walk.add_argument(
+        "--replays", type=int, default=0,
+        help="with --all, stop after this many replays. 0 means the whole corpus.",
+    )
+    walk.add_argument(
+        "--minimum", type=int, default=40,
+        help="with --all, how often an action must appear before it is listed.",
+    )
     return parser
 
 
@@ -87,6 +100,12 @@ def main(argv: list[str] | None = None) -> int:
             auto=args.auto,
         )
     if args.command == "review":
+        if args.all:
+            return survey(
+                corpus_path=args.corpus,
+                replay_limit=args.replays,
+                minimum=args.minimum,
+            )
         return review(
             corpus_path=args.corpus,
             replay_id=args.replay,

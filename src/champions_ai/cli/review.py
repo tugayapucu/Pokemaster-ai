@@ -20,6 +20,7 @@ seen, the comparison is skipped rather than counted as a disagreement.
 """
 
 import random
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from champions_ai.agents import HeuristicAgent
@@ -28,7 +29,11 @@ from champions_ai.data import load_all
 from champions_ai.data.reconstruct import move_data_from_dex, reconstruct_decisions
 from champions_ai.dex import Dex
 from champions_ai.domain import REGULATION_M_B, legal_joint_actions
-from champions_ai.evaluation.agreement import action_signature, human_signature
+from champions_ai.evaluation.agreement import (
+    action_signature,
+    human_signature,
+    target_unobservable,
+)
 from champions_ai.recommendation import Recommender
 from champions_ai.simulator import ShowdownBridge
 
@@ -80,18 +85,239 @@ def _describe_human(choice, dex) -> str:
     return choice.kind
 
 
-def _rank_of(signature, advice, observation, move_data) -> int | None:
+def _rank_of(signature, advice, observation, move_data, *, move_only: bool = False) -> int | None:
     """Where the human's action sits in our ranking, if it appears at all.
 
     Answering "did the agent agree" with yes or no throws away the interesting
     middle: an action ranked second is a different kind of disagreement from
     one the adviser never considered.
+
+    `move_only` compares the move and ignores the target, for the case the log
+    genuinely cannot answer -- a move that failed or is mid-charge prints no
+    target at all, and the player certainly picked one.
     """
+    trim = (lambda s: None if s is None else s[:2]) if move_only else (lambda s: s)
+    wanted = trim(signature)
     for entry in advice.recommendations:
         for slot, slot_action in enumerate(entry.action.slot_actions):
-            if action_signature(slot_action, observation, slot, move_data) == signature:
+            if trim(action_signature(slot_action, observation, slot, move_data)) == wanted:
                 return entry.rank
     return None
+
+
+def _signature_name(signature, dex) -> str:
+    """A comparable action, spelled for a human."""
+    if signature[0] == "switch":
+        return f"switch to {_species(dex, signature[1])}"
+    try:
+        return dex.get_move(signature[1]).name
+    except KeyError:
+        return signature[1]
+
+
+def _species(dex, species: str) -> str:
+    try:
+        return dex.get_species(species).name
+    except KeyError:
+        return species
+
+
+def survey(
+    *,
+    corpus_path: Path = DEFAULT_CORPUS,
+    replay_limit: int = 0,
+    minimum: int = 40,
+) -> int:
+    """Where do we and rated players systematically differ, across the corpus?
+
+    One game tells you whether the adviser is sane. The corpus tells you what
+    it is *habitually* wrong about, or -- since agreement is not truth here --
+    what it habitually does differently. Those are the two lists at the end:
+    actions humans keep taking that we rank low, and actions we keep
+    recommending that humans do not play.
+    """
+    if not corpus_path.exists():
+        print(f"No replay corpus at {corpus_path}. Collect one with data/collect.py.")
+        return 2
+
+    corpus = load_all(corpus_path)
+    replays = list(corpus.replays)
+    if replay_limit:
+        replays = replays[:replay_limit]
+    if not replays:
+        print(f"No replays found under {corpus_path}.")
+        return 2
+
+    ranks: Counter = Counter()
+    by_kind: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    theirs: dict[tuple, list[int]] = defaultdict(lambda: [0, 0])
+    ours: dict[tuple, list[int]] = defaultdict(lambda: [0, 0])
+    switch_by_known: dict[int, list[int]] = defaultdict(lambda: [0, 0])
+    failed = unscorable = target_only = hidden_target = 0
+
+    with ShowdownBridge() as bridge:
+        dex = Dex.cached(bridge, DEFAULT_DEX)
+        move_data = move_data_from_dex(dex)
+        recommender = Recommender(dex, agent=HeuristicAgent(dex, name="adviser"))
+
+        print(f"  Walking {len(replays)} replays...", flush=True)
+        for number, replay in enumerate(replays, 1):
+            if number % 400 == 0:
+                print(f"    {number}...", flush=True)
+            try:
+                decisions = reconstruct_decisions(replay, REGULATION_M_B, dex)
+            except Exception:
+                failed += 1
+                continue
+
+            for decision in decisions:
+                if not decision.is_free_choice:
+                    continue
+                observation = decision.observation
+                try:
+                    legal = legal_joint_actions(observation, move_data)
+                except KeyError:
+                    unscorable += len(decision.choices)
+                    continue
+                if not legal:
+                    continue
+
+                advice = recommender.recommend(observation, legal)
+                best = advice.best.action
+                for choice in decision.choices:
+                    signature = human_signature(choice, move_data)
+                    if signature is None:
+                        unscorable += 1
+                        continue
+                    # A move that failed or is mid-charge prints no target,
+                    # so `('move', 'electroshot', None)` could never match our
+                    # `('move', 'electroshot', ('foe', 0))`. Comparing those on
+                    # the full signature reported every charge move in the
+                    # format as a total disagreement, in both directions.
+                    move_only = target_unobservable(choice, move_data)
+                    if move_only:
+                        hidden_target += 1
+                    rank = _rank_of(
+                        signature, advice, observation, move_data, move_only=move_only
+                    )
+                    agreed = rank == 1
+                    ranks[rank] += 1
+                    by_kind[signature[0]][1] += 1
+                    by_kind[signature[0]][0] += int(agreed)
+                    # Grouped by move rather than by move-and-target, because
+                    # the same move aimed two ways is one thing to a reader and
+                    # the target is tracked separately below.
+                    theirs[signature[:2]][1] += 1
+                    theirs[signature[:2]][0] += int(agreed)
+
+                    if choice.slot < len(best.slot_actions):
+                        mine = action_signature(
+                            best.slot_actions[choice.slot], observation, choice.slot, move_data
+                        )
+                        index = observation.own_side.active_slots[choice.slot]
+                        if index is not None and index < len(decision.known_move_counts):
+                            known = min(decision.known_move_counts[index], 4)
+                            switch_by_known[known][1] += 1
+                            switch_by_known[known][0] += int(mine is not None
+                                                             and mine[0] == "switch")
+                        if mine is not None and mine[0] != "pass":
+                            ours[mine[:2]][1] += 1
+                            ours[mine[:2]][0] += int(
+                                mine[:2] == signature[:2] if move_only else mine == signature
+                            )
+                            # 0013 measured humans as near-random on target
+                            # selection, so a disagreement that is only about
+                            # where the same move points is a different and
+                            # much weaker finding than a different move.
+                            if not agreed and mine[:2] == signature[:2]:
+                                target_only += 1
+
+        total = sum(ranks.values())
+        if not total:
+            print("  Nothing comparable was found.")
+            return 1
+
+        print(f"\n  {len(replays)} replays, {total} slot decisions compared\n")
+        print("  Where the human's action sat in our shortlist")
+        for rank in (1, 2, 3, 4):
+            count = ranks.get(rank, 0)
+            label = "our #1 (we agree)" if rank == 1 else f"our #{rank}"
+            print(f"    {label:<22} {count / total:>6.1%}   n={count}")
+        outside = ranks.get(None, 0)
+        print(f"    {'outside the top 4':<22} {outside / total:>6.1%}   n={outside}")
+
+        print("\n  By what they did")
+        for kind in sorted(by_kind):
+            agreed, count = by_kind[kind]
+            print(f"    {kind:<22} {agreed / count:>6.1%} agreed   n={count}")
+
+        if hidden_target:
+            print(
+                f"\n  {hidden_target} were compared on the move alone: a move that failed"
+            )
+            print(
+                "  or is mid-charge prints no target, so the player certainly chose one\n"
+                "  and the log does not say which."
+            )
+
+        disagreed = total - ranks.get(1, 0)
+        if disagreed:
+            print(
+                f"\n  Of the {disagreed} we did not match, {target_only} "
+                f"({target_only / disagreed:.0%}) were the same move aimed elsewhere."
+            )
+            print(
+                "  0013 measured humans as near-random on target choice, so those are\n"
+                "  the weakest disagreements on this page."
+            )
+
+        print(f"\n  What they keep playing that we rank low  (>= {minimum} times)")
+        print(f"    {'action':<28} {'played':>7} {'we agreed':>10}")
+        ranked = [
+            (agreed / count, count, signature)
+            for signature, (agreed, count) in theirs.items()
+            if count >= minimum
+        ]
+        for rate, count, signature in sorted(ranked)[:12]:
+            print(f"    {_signature_name(signature, dex):<28} {count:>7} {rate:>9.0%}")
+
+        print(f"\n  What we keep recommending that they do not play  (>= {minimum} times)")
+        print(f"    {'action':<28} {'we said':>7} {'they did':>10}")
+        mine_ranked = [
+            (matched / count, count, signature)
+            for signature, (matched, count) in ours.items()
+            if count >= minimum
+        ]
+        for rate, count, signature in sorted(mine_ranked)[:12]:
+            print(f"    {_signature_name(signature, dex):<28} {count:>7} {rate:>9.0%}")
+
+        if switch_by_known:
+            print("\n  Read the switch rows above with this in mind:")
+            print(f"    {'moves we know':<16} {'decisions':>10} {'we switch':>11}")
+            for known in sorted(switch_by_known):
+                switched, count = switch_by_known[known]
+                print(f"    {known:<16} {count:>10} {switched / count:>10.1%}")
+            print(
+                "\n  A replay only reveals the moves a Pokemon was seen using, so the\n"
+                "  adviser judges most positions from a partial moveset -- and a Pokemon\n"
+                "  whose moves are unknown looks like it can do nothing, which makes\n"
+                "  switching away from it look good. That is the instrument, not a\n"
+                "  finding: with all four moves known we switch less often than the\n"
+                "  11.8% rate 0027 measured for humans."
+            )
+
+        if failed or unscorable:
+            print(
+                f"\n  {failed} replays could not be reconstructed and {unscorable} slot\n"
+                "  decisions could not be compared. A replay only reveals moves that\n"
+                "  were used, so some actions the human had are not reconstructable."
+            )
+        print(
+            "\n  Agreement is not truth. The corpus is 1500-1850 Elo, and matching it\n"
+            "  has twice been the wrong target (0010, 0013). This is a map of where we\n"
+            "  differ, not a scoreboard."
+        )
+        return 0
 
 
 def review(
