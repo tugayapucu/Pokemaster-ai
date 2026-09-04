@@ -52,7 +52,32 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
-### An opponent worth measuring against
+### 1. Setup and status, measured off self-play
+
+The corpus survey (2026-09-04) says humans play setup, status and utility far
+more than we rank it, and it says so across a whole category rather than one
+move: Charm 3%, Disable 4%, Hypnosis 4%, Will-O-Wisp 4%, Reflect 5%,
+Substitute 6%, Roost 8%, Calm Mind 8%, Swords Dance 8%, Yawn 8%, Parting Shot
+8% agreement, on 44 to 449 plays each.
+
+**This is not yet a finding, and the reason is the interesting part.** 0023 and
+0025 priced setup properly and measured a wash. Both were measured in
+self-play, and 0026 established that self-play cannot surface a mechanic the
+agent under-uses -- the opponent is our agent, so if we never set up, nothing
+punishes us for never setting up.
+
+So there are two live readings and they need separating:
+
+- humans over-use setup at 1500-1850 Elo, which agreement would report exactly
+  this way and which 0010 and 0013 are both precedents for; or
+- setup is worth more than self-play can show, and 0023/0025 measured against
+  a blind instrument.
+
+The scripted-opponent item below is the tool for telling them apart, and now
+has a specific mechanic to point at rather than a general argument. That is a
+better position than it has been in since 0036 closed its first target.
+
+### 2. An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
 redirection's ceiling as exactly zero -- 0 of 2,211 attacks ever diverted --
@@ -88,6 +113,34 @@ corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
 ## Done, most recent first
+
+### ~~Survey the corpus for where we differ~~ — done 2026-09-04
+
+`review --all` walks all 1,769 replays in ninety seconds. Overall agreement
+43.9%, against the benchmark's 45.5% train and 47.3% test, which is the check
+that it is wired correctly.
+
+**It found two defects in itself before it found anything about the agent.**
+Charge moves never matched in either direction, because a move that is
+mid-charge prints no target and the signatures could not be equal -- Electro
+Shot read as 361 plays at 0% agreement *and* 416 recommendations at 0%
+adoption. `target_unobservable` already existed for exactly this and was not
+used. And the switch findings turned out to be mostly the instrument: a replay
+reveals only the moves a Pokemon was seen using, 2.34 of 4 on average, and a
+Pokemon whose moves are unknown looks harmless, so switching away from it looks
+good. The effect is monotone -- 70% at zero moves known, 8% at four -- and with
+full knowledge we switch *less* than humans. The survey now prints that table
+under the switch rows rather than letting a reader be misled.
+
+**What survives both corrections is a category, not a list.** Humans play
+setup, status and utility far more than we rank it: Charm 3%, Disable 4%,
+Hypnosis 4%, Will-O-Wisp 4%, Reflect 5%, Substitute 6%, Roost 8%, Calm Mind 8%,
+Swords Dance 8%, Yawn 8%, Parting Shot 8%, on 44 to 449 plays each.
+
+Worth holding against it: 0023 and 0025 already measured setup pricing and
+found a wash -- in self-play, which 0026 showed cannot see a mechanic the agent
+under-uses. The two findings are not yet in contradiction, and separating them
+is the obvious next question.
 
 ### ~~Team Preview its own screen~~ — done 2026-09-04
 
