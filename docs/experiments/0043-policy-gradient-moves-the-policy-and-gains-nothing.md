@@ -1,4 +1,4 @@
-# Experiment 0043 — Policy gradient moves the policy and gains nothing
+# Experiment 0043 — Policy gradient moves the policy and gains nothing, twice
 
 **Date:** 2026-09-05
 **Result: a linear policy warm-started as an exact clone of the heuristic, trained by REINFORCE on a winning signal, plays it to 52.6% over 2,400 battles across three seeds (CI 45.6%–59.4%, p = 0.475).** Not worse, not better. It is not a no-op either: the trained policy differs from the heuristic on **18% of matchups**, so training changed real decisions and those changes came out roughly neutral. **Most of the value in this experiment came from the setup, which found three defects that would each have produced a confident wrong answer.**
@@ -56,9 +56,73 @@ That is worth noting on its own. It is the opposite of what human agreement sugg
 
 The 18% matters. A trained policy that had learned nothing would tie everything and report 50% by construction; this one changed a fifth of its games and came out level.
 
+## A second attempt, with the highest-variance part fixed
+
+Every decision in a battle received the same advantage above -- the outcome
+minus a running mean. A turn played while comfortably ahead and one played
+while nearly dead got identical credit for the same eventual win, so most of
+the gradient was reporting the outcome rather than the choice.
+
+`evaluate_position` is a baseline this project already owns, costs nothing, and
+is not learned, so it cannot co-adapt with the policy. `critic.py` fits it into
+reward units on self-play mirror battles -- the distribution training actually
+samples -- and checks it before it is used, because a flat baseline subtracts a
+constant and changes nothing:
+
+```
+  4,129 positions, 1,376 held out
+    accuracy            67.7%      (0035 measured ~63% on human games)
+    Brier, fitted      0.1919
+    Brier, flat        0.2489      <- what the first run used
+    variance explained  22.9%
+```
+
+Well calibrated across the range, not merely accurate on average: predicted
+against actual, held out, 9.0%/5.2%, 48.9%/45.0%, 84.4%/86.0%.
+
+The rerun changed the baseline and nothing else -- same three learning rates,
+same sixty batches -- so the comparison isolates the critic. It did what it was
+supposed to mechanically, moving the weights about 15% further at the same
+learning rate, and it did not convert:
+
+```
+  constant baseline,  lr 4.0, seeds 11/29/53      103/196 = 52.6%   p = 0.4751
+  state-dependent,    lr 4.0, seeds 11/29/53      125/226 = 55.3%   p = 0.1104
+  state-dependent,    lr 4.0, seeds 101/211/307   109/208 = 52.4%   p = 0.4881
+```
+
+**The middle line is the one worth dwelling on.** 55.3% with all three seeds
+leaning the same way is exactly the shape that produced 0029, and the response
+this project settled on after 0036 is a pre-registered confirmation on fresh
+seeds with a stopping rule fixed in advance. The confirmation came back 52.4%.
+Regression to the mean, caught by the procedure rather than published.
+
+Pooling both seed sets of the same policy gives **234/434 = 53.9%, p = 0.103,
+over 4,800 battles.** Persistently a shade above even, never significant, and
+the pre-registered test failed. The stopping rule fires: no third attempt.
+
+## Two diagnostics that said more than the win rates
+
+**Training does not improve the thing it optimises.** Sampled win rate over
+sixty batches went 52.0% to 51.7%, 55.0% to 52.3%, and 57.3% to 55.0% --
+flat to declining in all three runs.
+
+**The runs disagree on direction.** Between the constant-baseline and
+state-dependent runs at the same learning rate, `self_stat_drop` went +0.090
+against -0.604, `has_priority` -0.114 against +0.244, `guaranteed_ko` +0.009
+against -0.129. Sign flips mean noise. Only `is_status_move` (down) and
+`damage_fraction` (up) survive both, which were the consistent pair from the
+start.
+
+Two things were checked rather than assumed. Player 0 has no structural edge in
+a mirror -- an identical heuristic on both sides wins 51.3% of 300 battles,
+0.45 standard deviations from even. And the three runs all opening above 50%
+was one correlated sample rather than three: they share an RNG seed, so their
+early batches are near-identical games.
+
 ## What it does and does not settle
 
-**Does not settle that RL cannot work here.** 1,800 episodes is a small amount of REINFORCE, the weights moved by at most 0.4 against a warm start of 10, and every decision in a battle received the same advantage — a constant baseline is the highest-variance credit assignment available.
+**Does not settle that RL cannot work here.** 1,800 episodes is a small amount of REINFORCE and the weights moved by at most 0.6 against a warm start of 10. What it does settle is narrower than "RL fails" and wider than the first run alone: the two most likely cheap fixes — a real baseline, and a learning-rate sweep rather than a single setting — were both tried, and neither converted.
 
 **Does settle that the obvious cheap version does not pay.** A linear model over these 26 features, warm-started perfectly and given a winning signal, is level with the hand-written rule after an afternoon. Anything further is a real project rather than an afternoon, and now has to be justified against that.
 
@@ -66,5 +130,5 @@ The 18% matters. A trained policy that had learned nothing would tie everything 
 
 - **Whether more training moves it.** The consistent gradient direction is evidence that the signal is real and the step count is the limit, but that is an argument, not a measurement.
 - **Whether the features span what matters.** They are 0006's imitation features, and `heuristic_score` already summarises most of them — a linear model over a feature that is itself the answer has little room to disagree usefully.
-- **Whether a state-dependent baseline changes it.** Every step in an episode currently shares one advantage. `evaluate_position` predicts the winner at about 63% (0035) and is free, so an actor-critic using it as a critic is the cheapest available variance reduction and is untried.
+- **Whether the linear model can express a better ranker at all.** `heuristic_score` already summarises the other twenty-six features, so a linear policy over it can only re-weight inputs the heuristic already considers. 0038 located the headroom in *ranking*, and re-weighting may simply not reach it. This is the best available explanation for the null and it is an argument rather than a measurement.
 - Whether any of this holds against an opponent other than the frozen heuristic. Training against one fixed opponent can learn to exploit it rather than to play well; 0026's caution applies and nothing here tests it.

@@ -43,7 +43,11 @@ from champions_ai.evaluation.runner import evaluate, wilson_interval
 from champions_ai.simulator import ShowdownBridge
 
 BATTLES = int(sys.argv[2]) if len(sys.argv) > 2 else 800
-SEEDS = (11, 29, 53)
+SEEDS = (
+    tuple(int(s) for s in sys.argv[3].split(","))
+    if len(sys.argv) > 3
+    else (11, 29, 53)
+)
 HOLDOUT = 50
 
 

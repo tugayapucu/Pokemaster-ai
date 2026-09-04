@@ -89,7 +89,7 @@ copying anyone's judgement.
 
 ## Done, most recent first
 
-### ~~Milestone 8, the cheap version~~ — done 2026-09-05, level with the heuristic (0043)
+### ~~Milestone 8, the cheap version~~ — closed 2026-09-05, level with the heuristic (0043)
 
 A linear policy warm-started as an **exact clone** of the heuristic, trained by
 REINFORCE on win/loss, plays it to 52.6% over 2,400 battles across three seeds
@@ -115,9 +115,26 @@ with them: status down, damage up, protect down. That is the opposite of what
 human agreement suggested and agrees with 0040's category sweep. Three
 instruments now point the same way.
 
-What it settles: the cheap version does not pay. What it does not: whether more
-training, a state-dependent baseline, or features that are not already
-summarised by `heuristic_score` would.
+**A second attempt fixed the most likely defect and did not convert.** Every
+decision had shared one advantage; `evaluate_position` was fitted into reward
+units as a state-dependent baseline (67.7% accurate, 22.9% of variance
+explained, well calibrated) and the rerun changed only that. It moved the
+weights ~15% further and read 55.3% (p = 0.110) with all three seeds leaning
+the same way -- the exact shape that produced 0029. The pre-registered
+confirmation on fresh seeds came back **52.4%, p = 0.488**. Pooled over both
+seed sets: 234/434 = 53.9%, p = 0.103, across 4,800 battles.
+
+The stopping rule fired: **closed as a null, no third attempt.**
+
+Two diagnostics said more than the win rates. Training does not improve the
+thing it optimises -- sampled win rate went 52.0->51.7%, 55.0->52.3%,
+57.3->55.0%. And the two runs disagree on direction for half the features that
+moved, which means noise.
+
+The best explanation left is that `heuristic_score` already summarises the
+other twenty-six features, so a linear policy over it can only re-weight inputs
+the heuristic already considers, and 0038 put the headroom in *ranking*. That
+is an argument, not a measurement.
 
 ### ~~An honest number on the shortlist~~ — done 2026-09-04 (0042)
 

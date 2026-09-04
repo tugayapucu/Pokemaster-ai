@@ -1796,9 +1796,15 @@ Metrics:
 > three seeds (p = 0.475) while differing on 18% of matchups. The precondition
 > this milestone lists last -- "runtime is acceptable" -- was measured for the
 > first time and is fine: 12.4 heuristic self-play battles/sec, ~25 agent
-> decisions each, 16 cores. What remains untried is more training, a
-> state-dependent baseline (`evaluate_position` is free and predicts the winner
-> at ~63%), and features not already summarised by `heuristic_score`.
+> decisions each, 16 cores.
+>
+> A second attempt added the state-dependent baseline and did not convert:
+> 55.3% (p = 0.110) on one seed set, **52.4% (p = 0.488) on the fresh seeds of
+> a pre-registered confirmation**, 53.9% pooled over 4,800 battles. Closed as a
+> null under its own stopping rule. What remains untried is much more training,
+> and features not already summarised by `heuristic_score` -- which is the best
+> available explanation for the null, since a linear policy over it can only
+> re-weight inputs the heuristic already considers.
 
 ### Goal
 
