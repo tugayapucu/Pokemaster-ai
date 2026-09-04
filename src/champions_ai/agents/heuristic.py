@@ -2850,7 +2850,7 @@ class HeuristicAgent(Agent):
         return TeamPreviewAction(picks=picks)
 
     def _rank_team_preview(self, preview: TeamPreview, picked_team_size: int) -> tuple[int, ...]:
-        scores = self._matchup_table(preview)
+        scores = self.matchup_table(preview)
         if not scores:
             return tuple(range(picked_team_size))
 
@@ -2873,8 +2873,13 @@ class HeuristicAgent(Agent):
             )
         )
 
-    def _matchup_table(self, preview: TeamPreview) -> list[list[float]]:
-        """`table[ours][theirs]` -- our net matchup against each of their six."""
+    def matchup_table(self, preview: TeamPreview) -> list[list[float]]:
+        """`table[ours][theirs]` -- our net matchup against each of their six.
+
+        Public because it is the reasoning behind the Team Preview pick, and
+        a player looking at six unfamiliar species wants the grid far more
+        than they want the conclusion drawn from it.
+        """
         table: list[list[float]] = []
         for ours in preview.own_team.pokemon:
             row: list[float] = []
@@ -2913,7 +2918,7 @@ class HeuristicAgent(Agent):
         self, preview: TeamPreview, picked_team_size: int
     ) -> tuple[tuple[str, float], ...]:
         """Per-pick reasons, for the recommendation system."""
-        scores = self._matchup_table(preview)
+        scores = self.matchup_table(preview)
         picks = self._rank_team_preview(preview, picked_team_size)
         reasons = []
         for index in picks:

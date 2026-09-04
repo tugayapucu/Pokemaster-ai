@@ -15,9 +15,15 @@ from pathlib import Path
 
 from champions_ai.agents import HeuristicAgent
 from champions_ai.cli.board import render_board, render_moves
+from champions_ai.cli.preview import parse_picks, render_preview, species_name
 from champions_ai.data import BattleTeam, TeamPool, parse_showdown_team
 from champions_ai.dex import Dex
-from champions_ai.domain import REGULATION_M_B, JointAction, Regulation
+from champions_ai.domain import (
+    REGULATION_M_B,
+    JointAction,
+    Regulation,
+    TeamPreviewAction,
+)
 from champions_ai.env import BattleEnv
 from champions_ai.env.battle_env import Decision
 from champions_ai.recommendation import Recommender, describe_joint_action
@@ -54,13 +60,7 @@ def load_pool(bridge: ShowdownBridge, regulation: Regulation, path: Path) -> Tea
 
 def _roster(dex: Dex, team: BattleTeam) -> str:
     """Species as the dex spells them, not as the packed form ids them."""
-    names = []
-    for entry in team.team.pokemon:
-        try:
-            names.append(dex.get_species(entry.species).name)
-        except KeyError:
-            names.append(entry.species)
-    return ", ".join(names)
+    return ", ".join(species_name(dex, e.species) for e in team.team.pokemon)
 
 
 def _echo(protocol: tuple[str, ...], seen: int) -> int:
@@ -79,6 +79,37 @@ def _ask(options: int) -> str:
         print()
         return "q"
     return answer or "1"
+
+
+def _choose_team(preview, adviser, dex, regulation, *, auto: bool):
+    """Show the Team Preview screen and take a pick, ours or theirs."""
+    size = regulation.picked_team_size
+    table = adviser.matchup_table(preview)
+    suggested = adviser.select_team_preview(preview, size)
+    reasons = adviser.explain_team_preview(preview, size)
+    print(render_preview(preview, table, suggested.picks, reasons, dex))
+
+    if auto:
+        return suggested
+
+    while True:
+        try:
+            answer = input(
+                f"\n  enter to accept, or {size} numbers to choose your own > "
+            ).strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return suggested
+        if not answer:
+            return suggested
+        picks = parse_picks(answer, len(preview.own_team.pokemon), size)
+        if picks is not None:
+            names = [
+                species_name(dex, preview.own_team.pokemon[i].species) for i in picks
+            ]
+            print(f"  Bringing: {', '.join(names)}")
+            return TeamPreviewAction(picks=picks)
+        print(f"  Give {size} different numbers from 1 to {len(preview.own_team.pokemon)}.")
 
 
 def _show_position(observation, dex, recommender, legal):
@@ -176,15 +207,9 @@ def play(
                     continue
 
                 if env.decision(0) is Decision.TEAM_PREVIEW:
-                    # Picking four of six is a different shape of decision and
-                    # gets its own screen later. For now it is made for you and
-                    # said out loud, rather than made silently.
-                    pick = adviser.select_team_preview(
-                        env.team_preview(0), regulation.picked_team_size
+                    choices[0] = _choose_team(
+                        env.team_preview(0), adviser, dex, regulation, auto=auto
                     )
-                    leads = [yours.team.pokemon[i].species for i in pick.picks]
-                    print(f"\n  Team preview, chosen for you: {', '.join(leads)}")
-                    choices[0] = pick
                     continue
 
                 observation = env.observation(0)
