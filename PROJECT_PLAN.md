@@ -1284,6 +1284,35 @@ A standing caveat the corpus cannot lift: it runs 1500-1827 with a median of
 1585, and championship play sits far above that. Nothing measured here speaks
 to how much status a very strong player should use.
 
+### The scorer's magnitudes mean something (2026-09-04)
+
+0041 set out to show that a one-turn scorer must be blind to moves paying off
+over several turns, and failed to show it. `field (many turns)` -- Reflect,
+Tailwind, Trick Room -- sits exactly on the damage control, and so does
+`volatile` on 263 candidates. The class that appeared to clear the floor was 36
+Parting Shots out of 39 candidates, had a sign test of 8-8-20 at p = 1.000, and
+vanished entirely once compared at matched score gaps (+0.7%, p = 0.847).
+
+What the run established instead was not what it was pointed at:
+
+```
+  score gap from the pick    damage (now)    other non-damaging
+  near (<100 below)              -0.5%             -0.7%
+  mid  (100-250)                 -4.3%             -5.8%
+  far  (250+)                    -9.8%             +0.6%  (n=22)
+```
+
+**An action the scorer puts slightly below its pick really is slightly worse;
+one it puts far below really is much worse -- and the relationship holds
+whether the move deals damage or not.** 0038 measured that the ordering is
+imperfect (best-of-four 57% of the time). This says the magnitudes carry
+information too, which nothing had shown before.
+
+Taken with 0040, the status question closes: usage rates nearly match human
+play (29.6% against 34.2%), the category is priced correctly including the
+delayed half, and the low per-move agreement reflects genuine ambiguity rather
+than a defect.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the

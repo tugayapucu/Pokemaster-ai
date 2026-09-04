@@ -52,38 +52,7 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
-### 1. Which status move, and when
-
-0040 swept how far the status scorer is trusted and found the shipped weight at
-the top of a clean inverted U. What it also found, by checking usage rates
-rather than agreement rates, is that **the gap it was built to close does not
-exist**: humans play non-damaging moves on 34.2% of move choices and this agent
-on 29.6%. We use the category about as much as they do.
-
-The real disagreement is *selection and timing inside it* -- 3-8% agreement on
-eleven specific moves while the aggregate rates nearly match. A scalar cannot
-touch that by construction.
-
-Two things worth doing, in order:
-
-- **Price a move on its own.** Parting Shot, 449 plays at 8% agreement, is the
-  candidate: it is a pivot, and pivoting is worth what the incoming Pokemon's
-  matchup is worth, which is machinery `_matchup_against_field` already has.
-- **Ask whether a one-turn scorer can price a multi-turn move at all.** Reflect
-  lasts five turns, Will-O-Wisp halves physical damage for the rest of the
-  battle, Calm Mind pays off only later. The scorer is explicitly one-turn, and
-  0040 scaled a price that cannot see the payoff. This is the strongest
-  untested explanation for that null, and it is a different shape of fix from
-  any constant.
-
-**A standing caveat on all of it.** The corpus is 1500-1827 with a median of
-1585, and status usage is flat across that whole range. Championship play sits
-far above it and reportedly uses status heavily; nothing here can speak to that
-population, and a corpus that could would have to be collected from a different
-one. Worth remembering before concluding anything about how much status a
-strong player should use.
-
-### 2. An opponent worth measuring against
+### An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
 redirection's ceiling as exactly zero -- 0 of 2,211 attacks ever diverted --
@@ -119,6 +88,35 @@ corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
 ## Done, most recent first
+
+### ~~Which status move, and when~~ — closed 2026-09-04, the pricing is fine (0041)
+
+0040 left two candidates: price Parting Shot on its own, and ask whether a
+one-turn scorer can price a multi-turn move at all. Both were answered by one
+run of 0038's fork machinery, which prices any move by rollout.
+
+**The multi-turn hypothesis is dead.** `field (many turns)` -- Reflect,
+Tailwind, Trick Room, Aurora Veil -- sits exactly on the damage control
+(-4.3% against -4.6%, p = 0.947), and `volatile` does too on 263 candidates. If
+a one-turn scorer were blind to delayed payoff, those are the classes where it
+would show.
+
+**And Parting Shot was an artefact.** It looked like the one class above the
+floor at p = 0.016, which does not survive Bonferroni for four classes. Then:
+the "class" is 36 Parting Shots out of 39; its sign test is 8 better, 8 worse,
+20 tied at p = 1.000; and at matched score gaps the effect is +0.7% at
+p = 0.847. The classes were never score-matched -- those alternatives sat 76
+below the pick against damage's 184 -- and the column added to catch that
+caught it.
+
+**What survives is better than what was looked for.** Regret tracks the score
+gap monotonically: -0.5% for alternatives scored just below the pick, -4.3% in
+the middle, -9.8% far below, and the same pattern for non-damaging moves. The
+scorer's *magnitudes* mean something, which no earlier experiment established.
+
+So 0040's null needs no explanation. The category is priced correctly,
+including the half that pays off later, and the low per-move agreement with
+humans reflects genuine ambiguity rather than our error.
 
 ### ~~Setup and status~~ — closed 2026-09-04, priced about right (0040)
 
