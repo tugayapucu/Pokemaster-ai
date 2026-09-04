@@ -68,6 +68,7 @@ from champions_ai.domain import REGULATION_M_B
 from champions_ai.env import BattleEnv
 from champions_ai.env.battle_env import Decision
 from champions_ai.evaluation.runner import evaluate, wilson_interval
+from champions_ai.mechanics import evaluate_position
 from champions_ai.simulator import ShowdownBridge
 
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("policy.json")
@@ -82,6 +83,31 @@ WARM_START = 10.0        # 70% agreement with the heuristic's pick when sampling
 EVAL_BATTLES = 400
 EVAL_EVERY = 15
 HOLDOUT = 50             # teams reserved for judging, never trained on
+CRITIC = Path(sys.argv[5]) if len(sys.argv) > 5 else Path("critic.json")
+
+
+def load_critic(path: Path):
+    """A state-dependent baseline, or None to fall back to a running mean.
+
+    `evaluate_position` explains 22.9% of outcome variance on the self-play
+    mirror distribution this trains on, held out, with an accuracy of 67.7%.
+    That is what makes it worth subtracting per state rather than subtracting
+    one number per batch -- see `critic.py`, which fits and checks it.
+    """
+    if not path.exists():
+        return None
+    fitted = json.loads(path.read_text(encoding="utf-8"))
+
+    def value(observation) -> float:
+        try:
+            score = evaluate_position(observation).advantage
+        except RuntimeError:
+            return 0.0
+        z = fitted["a"] * ((score - fitted["mean"]) / fitted["spread"]) + fitted["b"]
+        # Into the reward's own units: a certain loss is -1, a certain win +1.
+        return 2.0 / (1.0 + math.exp(-max(-30.0, min(30.0, z)))) - 1.0
+
+    return value
 
 
 def softmax(logits):
@@ -91,11 +117,11 @@ def softmax(logits):
     return [v / total for v in exponentiated]
 
 
-def play_episode(env, weights, features, opponent, teams, seed, rng):
+def play_episode(env, weights, features, opponent, teams, seed, rng, value=None):
     """One battle, sampling our side. Returns (steps, reward).
 
-    A step is (chosen feature vector, every candidate's vector, their
-    probabilities) -- everything the gradient needs and nothing else.
+    A step is (chosen vector, every candidate's vector, their probabilities,
+    and the baseline for that state) -- everything the gradient needs.
     """
     steps = []
     opponent.on_battle_start()
@@ -138,7 +164,8 @@ def play_episode(env, weights, features, opponent, teams, seed, rng):
             )
             index = rng.choices(range(len(legal)), weights=probabilities, k=1)[0]
             choices[0] = legal[index]
-            steps.append((vectors[index], vectors, probabilities))
+            baseline = value(observation) if value is not None else None
+            steps.append((vectors[index], vectors, probabilities, baseline))
 
         result = env.step(choices)
 
@@ -164,6 +191,8 @@ def main() -> None:
 
         weights = warm_start_weights(WARM_START)
         opponent = HeuristicAgent(dex, name="frozen")
+        critic = load_critic(CRITIC)
+        print("critic:", "state-dependent baseline" if critic else "running mean only")
 
         def judge(label):
             agent = JointPolicyAgent(weights, features, name="policy")
@@ -204,12 +233,18 @@ def main() -> None:
                 teams = (training_pool.teams[pick], training_pool.teams[pick])
                 seed = "sodium," + f"{rng.getrandbits(128):032x}"
                 steps, reward = play_episode(
-                    env, weights, features, opponent, teams, seed, rng
+                    env, weights, features, opponent, teams, seed, rng, critic
                 )
                 rewards.append(reward)
-                advantage = reward - baseline
                 total_steps += len(steps)
-                for chosen, vectors, probabilities in steps:
+                for chosen, vectors, probabilities, state_value in steps:
+                    # Per state, not per episode. A turn played while
+                    # comfortably ahead and one played while nearly dead both
+                    # got the same credit for the same eventual win, so most of
+                    # the gradient was the outcome rather than the choice.
+                    advantage = reward - (
+                        state_value if state_value is not None else baseline
+                    )
                     # d/dw log pi(a) = phi(a) - sum_b pi(b) phi(b)
                     for i in range(len(gradient)):
                         expected = sum(
