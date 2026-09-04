@@ -249,9 +249,17 @@ def main() -> None:
         )
         print(f"\nwritten to {OUT}")
         print("\n  weights that moved most from the warm start:")
+        # Movement from the warm start, not absolute size. Sorting by |w| put
+        # `combined_targets` at the top of every run at +10.00 -- which is
+        # exactly where the warm start left it, and therefore the one feature
+        # that had not moved at all.
+        start = warm_start_weights(WARM_START)
         moved = sorted(
-            ((abs(w), n, w) for n, w in zip(JOINT_FEATURE_NAMES, weights, strict=True)
-             if n != "heuristic_score"),
+            (
+                (abs(w - s), n, w)
+                for n, w, s in zip(JOINT_FEATURE_NAMES, weights, start, strict=True)
+                if n != "heuristic_score"
+            ),
             reverse=True,
         )
         for _, name, value in moved[:8]:

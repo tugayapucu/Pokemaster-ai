@@ -89,6 +89,36 @@ copying anyone's judgement.
 
 ## Done, most recent first
 
+### ~~Milestone 8, the cheap version~~ — done 2026-09-05, level with the heuristic (0043)
+
+A linear policy warm-started as an **exact clone** of the heuristic, trained by
+REINFORCE on win/loss, plays it to 52.6% over 2,400 battles across three seeds
+(CI 45.6%-59.4%, p = 0.475). Not worse, not better -- and not a no-op either:
+it differs on 18% of matchups, so it changed real decisions and they came out
+level.
+
+**The setup is where the findings are.** Three defects, each of which would
+have produced a confident wrong answer:
+
+- the warm start was eight points *below* the heuristic, because `ml/policy.py`
+  sums per-slot scores while the heuristic also adds `_combined_targets`
+  (0011's focus-fire correction). One missing term, one decision in six.
+  Measured: summed slot scores match the heuristic 84.2% of the time, plus the
+  term 100.0%. Added as a joint feature, the warm start ties 189 of 189.
+- the gradient was normalised per episode *squared*.
+- episodes paired two different teams, where 0031 puts team assignment at 93%
+  of outcome variance -- so most of the reward reported which team was luckier.
+  Now mirror matchups.
+
+**The gradient direction is consistent across three learning rates** and scales
+with them: status down, damage up, protect down. That is the opposite of what
+human agreement suggested and agrees with 0040's category sweep. Three
+instruments now point the same way.
+
+What it settles: the cheap version does not pay. What it does not: whether more
+training, a state-dependent baseline, or features that are not already
+summarised by `heuristic_score` would.
+
 ### ~~An honest number on the shortlist~~ — done 2026-09-04 (0042)
 
 The recommender showed a confidence: a softmax share at a temperature of 12.0

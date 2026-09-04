@@ -1790,6 +1790,16 @@ Metrics:
 
 ## Milestone 8 — Reinforcement Learning
 
+> **Opened at its smallest size 2026-09-05 (0043), and the cheap version is
+> level with the heuristic.** A linear policy warm-started as an exact clone,
+> trained by REINFORCE on win/loss, reached 52.6% over 2,400 battles across
+> three seeds (p = 0.475) while differing on 18% of matchups. The precondition
+> this milestone lists last -- "runtime is acceptable" -- was measured for the
+> first time and is fine: 12.4 heuristic self-play battles/sec, ~25 agent
+> decisions each, 16 cores. What remains untried is more training, a
+> state-dependent baseline (`evaluate_position` is free and predicts the winner
+> at ~63%), and features not already summarised by `heuristic_score`.
+
 ### Goal
 
 Learn policies optimized for winning rather than merely copying observed actions.
