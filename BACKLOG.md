@@ -52,30 +52,6 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
-### 1. Review a real game
-
-`play` answers "what should I do here" on a position the agent made up.
-`review` answers it on a position a human actually faced: walk a replay from
-the corpus, and at each decision show what the player did, what the engine
-would advise, and why they differ.
-
-Three reasons it is next rather than more self-play work:
-
-- **It points the recommender at real positions.** Everything the CLI shows
-  today comes from self-play, which 0026 established cannot surface a mechanic
-  the agent under-uses. A replay contains decisions our agent would never make.
-- **The machinery exists.** `reconstruct_decisions` already rebuilds an
-  `Observation` and the human's choice from a log, and it is what the
-  agreement benchmark is built on. `review` is a renderer over it.
-- **It is the original goal.** Milestone 4 is a recommendation system, and
-  advice next to a real player's decision is the first version of that anyone
-  could judge.
-
-The honest caveat, and it is the same one 0010 and 0013 earned: the corpus is
-1500-1850 Elo, so a disagreement is **not** evidence the human was wrong.
-`review` should show both and say why, not score the human.
-
-### 2. An opponent worth measuring against
 ### An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
@@ -112,6 +88,25 @@ corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
 ## Done, most recent first
+
+### ~~Review a real game~~ — done 2026-09-04
+
+`python -m champions_ai review` walks a replay and puts the board the player
+saw, what they pressed, and our ranked shortlist side by side. The human's
+action is located *in* our ranking rather than scored pass/fail -- "our #3" is
+a different kind of disagreement from "not in our shortlist".
+
+It says outright that a disagreement is not a verdict, and everything excluded
+is counted rather than dropped: leads and forced replacements are reported
+separately, and labels reconstruction cannot express are reported as
+uncomparable.
+
+Two rendering bugs found by reading the output rather than by a test: the log
+names the actor only by nickname, so a turn read "Try me: Fake Out" with no way
+to tell which of four Pokemon acted, and a self-targeting move rendered as
+"Tailwind -> After Me".
+
+**Second time in two days that using the thing found what testing it did not.**
 
 ### ~~Switching~~ — shipped 2026-09-03, the first agent win since Mega (0032)
 
