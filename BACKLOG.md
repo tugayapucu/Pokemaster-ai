@@ -52,32 +52,7 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
-### 1. Setup and status, measured off self-play
-
-The corpus survey (2026-09-04) says humans play setup, status and utility far
-more than we rank it, and it says so across a whole category rather than one
-move: Charm 3%, Disable 4%, Hypnosis 4%, Will-O-Wisp 4%, Reflect 5%,
-Substitute 6%, Roost 8%, Calm Mind 8%, Swords Dance 8%, Yawn 8%, Parting Shot
-8% agreement, on 44 to 449 plays each.
-
-**This is not yet a finding, and the reason is the interesting part.** 0023 and
-0025 priced setup properly and measured a wash. Both were measured in
-self-play, and 0026 established that self-play cannot surface a mechanic the
-agent under-uses -- the opponent is our agent, so if we never set up, nothing
-punishes us for never setting up.
-
-So there are two live readings and they need separating:
-
-- humans over-use setup at 1500-1850 Elo, which agreement would report exactly
-  this way and which 0010 and 0013 are both precedents for; or
-- setup is worth more than self-play can show, and 0023/0025 measured against
-  a blind instrument.
-
-The scripted-opponent item below is the tool for telling them apart, and now
-has a specific mechanic to point at rather than a general argument. That is a
-better position than it has been in since 0036 closed its first target.
-
-### 2. An opponent worth measuring against
+### An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
 redirection's ceiling as exactly zero -- 0 of 2,211 attacks ever diverted --
@@ -113,6 +88,35 @@ corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
 ## Done, most recent first
+
+### ~~Setup and status~~ — closed 2026-09-04, priced about right (0040)
+
+The corpus survey found the disagreement with rated players was a whole
+category -- eleven non-damaging moves at 3-8% agreement, on 44 to 449 plays
+each. Worth re-opening because the closest existing knob, `tenure_boosts`, is a
+**boolean** that 0023 and 0025 measured at two settings, which is the shape
+0032 warned about.
+
+Swept as a scalar on the non-damaging branch, per-agent, on a range checked to
+bite first (0% to 54% status usage):
+
+    0.0   26.5%  p = 0.0000        4.0   34.1%  p = 0.0003
+    0.5   39.0%  p = 0.0278        8.0   15.3%  p = 0.0000
+    2.0   44.9%  p = 0.3401
+
+Every alternative at or below even, four of five significantly, in a clean
+inverted U with the shipped value at the top. Nothing led, so unlike 0036 there
+was no positive claim to confirm.
+
+**Third time agreement has pointed where the win rate does not** (0010, 0013,
+now this), and the first time it was a whole category rather than one
+judgement. Turning status off costs 23 points, so the scorer is doing real
+work; the shipped weight is simply near its optimum.
+
+Left open and worth its own item eventually: a scalar moves all eleven moves
+together, so a category correct on average can still contain moves individually
+wrong in opposite directions. Parting Shot, 449 plays at 8% agreement, is the
+candidate.
 
 ### ~~Survey the corpus for where we differ~~ — done 2026-09-04
 

@@ -1239,6 +1239,38 @@ Recorded alongside it: experiment code now lives in `experiments/`. Thirty-nine
 write-ups existed with none of their code under version control, which for a
 project whose failures are instrument failures is the wrong way round.
 
+### Agreement pointed at a category, and the win rate said no (2026-09-04)
+
+`review --all` walks the whole corpus and reports where the human's action sat
+in the adviser's shortlist. Overall agreement is 43.9%, but the interesting
+part was the shape of the disagreement: not a move, a category. Eleven
+non-damaging moves -- Charm, Disable, Hypnosis, Will-O-Wisp, Reflect,
+Substitute, Roost, Calm Mind, Swords Dance, Yawn, Parting Shot -- all between
+3% and 8% agreement, on 44 to 449 plays each.
+
+Worth re-opening rather than assuming, because the closest existing measurement
+(`tenure_boosts`, 0023 and 0025, +0.9 points at p = 0.48) is a **boolean**, and
+two settings is the shape that made switching a null three times before 0032
+swept it.
+
+Swept as a scalar, per-agent, on a range checked to change behaviour first:
+
+```
+  scale   0.0     0.5     2.0     4.0     8.0
+  paired  26.5%   39.0%   44.9%   34.1%   15.3%
+  p       0.0000  0.0278  0.3401  0.0003  0.0000
+```
+
+**Every alternative at or below even, four of five significantly**, in a clean
+inverted U with the shipped value at the top. Turning status off entirely costs
+23 points, so the scorer is doing real work -- its weight is simply already
+near optimal.
+
+**This is the third time human agreement has pointed somewhere the win rate
+does not** (0010's Trick Room, 0013's target selection, now an entire
+category), and the strongest case yet for the standing rule that agreement is a
+ranking signal for judgement calls and never a target.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
