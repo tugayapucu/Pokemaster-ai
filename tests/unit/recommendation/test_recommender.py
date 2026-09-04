@@ -151,10 +151,39 @@ def test_indistinguishable_actions_are_collapsed(dex, observation):
     assert sum("Flamethrower -> the opposing Venusaur" in d for d in descriptions) == 1
 
 
-def test_a_decisive_position_reads_as_clear(dex, observation):
+def test_a_close_position_does_not_read_as_clear(dex, observation):
+    """Rewritten 2026-09-04 when `is_clear` stopped being a guess.
+
+    It used to mean "the softmax shares differ by more than 0.15", and this
+    position passed that. It now means "the runner-up is outside the band where
+    rollouts find no difference at all" (0041, 0042) -- and here the runner-up
+    is 17.8 points behind, comfortably inside it.
+
+    So the assertion flipped, and the new answer is the defensible one: the
+    scorer prefers one option, but nothing measured says that preference is
+    worth anything. The old test asserted a distinction the game does not make.
+    """
     advice = Recommender(dex).recommend(observation, _actions())
+
+    assert advice.best.score - advice.recommendations[1].score < 60
+    assert not advice.is_clear
+    assert advice.recommendations[1].cost.points <= 1
+
+
+def test_a_genuinely_separated_position_reads_as_clear(dex, observation):
+    """The other direction, so the property is pinned rather than half-pinned."""
+    advice = Recommender(dex, top_k=2).recommend(
+        observation,
+        [_actions()[0], _actions()[3]],
+    )
+
+    assert advice.best.score - advice.recommendations[1].score >= 60
     assert advice.is_clear
-    assert advice.best.confidence > 0.4
+
+
+def test_a_single_option_is_clear_by_default(dex, observation):
+    advice = Recommender(dex).recommend(observation, [_actions()[0]])
+    assert advice.is_clear
 
 
 def test_shortlist_is_capped_and_the_remainder_is_accounted_for(dex, observation):

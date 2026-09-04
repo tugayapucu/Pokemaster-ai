@@ -66,10 +66,23 @@ class RecommendationSet:
 
         A close call is worth surfacing: it usually means the position is
         genuinely delicate rather than that the recommender is confused.
+
+        **Measured rather than guessed.** This used to be a 0.15 gap in
+        softmax share -- a threshold on a number whose own temperature nobody
+        swept. It now asks whether the runner-up falls outside the band where
+        rollouts find no difference at all (0041, 0042), which is the same
+        question with an answer behind it. On the real evaluation pool that
+        makes about 30% of positions clear, since 70% have the runner-up
+        inside the close band.
+
+        An unmeasured gap reads as *not* clear, which is the conservative way
+        round: it surfaces the position rather than asserting a distinction
+        nothing has established.
         """
         if len(self.recommendations) < 2:
             return True
-        return self.best.confidence - self.recommendations[1].confidence > 0.15
+        runner_up = self.recommendations[1]
+        return runner_up.cost is not None and runner_up.cost.points > 1
 
     def render(self) -> str:
         lines = ["Recommended actions", ""]
