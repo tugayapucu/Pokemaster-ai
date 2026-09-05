@@ -319,6 +319,17 @@ const HANDLERS = {
 	choose: (msg) => {
 		void streams[msg.player].write(msg.choice);
 	},
+	// Which formats this build of Showdown actually accepts. Asked so the
+	// project can compare what it supports against what has been released
+	// upstream, rather than anyone hand-keeping a list that drifts.
+	formats: (msg) => {
+		const wanted = msg.match ? new RegExp(msg.match, 'i') : null;
+		const found = Dex.formats
+			.all()
+			.filter((f) => !wanted || wanted.test(f.id))
+			.map((f) => ({ id: f.id, name: f.name, mod: f.mod, gameType: f.gameType }));
+		send({ type: 'formats', formats: found });
+	},
 	seed: () => send({ type: 'seed', seed: battleStream.battle.prngSeed }),
 	// Replace the random number generator mid-battle. This is what makes a
 	// fork branch: replaying the same seed and the same choices reproduces a

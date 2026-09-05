@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from champions_ai.cli.play import DEFAULT_POOL, play
+from champions_ai.cli.regulations import check as check_regulations
 from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
 
 
@@ -86,6 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--minimum", type=int, default=40,
         help="with --all, how often an action must appear before it is listed.",
     )
+    watch = commands.add_parser(
+        "regulations",
+        help="has a new Champions regulation appeared upstream yet?",
+    )
+    watch.add_argument(
+        "--all", action="store_true",
+        help="list every Champions format, not only the competitive ones.",
+    )
     return parser
 
 
@@ -99,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             auto=args.auto,
         )
+    if args.command == "regulations":
+        return check_regulations(competitive_only=not args.all)
     if args.command == "review":
         if args.all:
             return survey(

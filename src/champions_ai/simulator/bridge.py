@@ -156,6 +156,19 @@ class ShowdownBridge:
     def choose(self, player: str, choice: str) -> list[dict]:
         return self.request(cmd="choose", player=player, choice=choice)
 
+    def formats(self, match: str | None = None) -> list[dict]:
+        """Formats this build of Showdown accepts, optionally filtered by regex.
+
+        Asked of the engine rather than hand-kept, because a hand-kept list of
+        engine facts is exactly what drifts -- the same reasoning that put the
+        dex behind a dump instead of a table.
+        """
+        events = self.request(cmd="formats", match=match)
+        for event in events:
+            if event["type"] == "formats":
+                return event["formats"]
+        raise BridgeError(f"no format list returned: {events}")
+
     def reseed(self, seed: str) -> str:
         """Replace the running battle's RNG, returning the seed now in force.
 
