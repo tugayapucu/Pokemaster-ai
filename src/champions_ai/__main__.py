@@ -13,6 +13,16 @@ from pathlib import Path
 from champions_ai.cli.play import DEFAULT_POOL, play
 from champions_ai.cli.regulations import check as check_regulations
 from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
+from champions_ai.domain import REGULATION_M_A, REGULATION_M_B
+
+# Keyed by the short name a person would type. Built from the instances rather
+# than a parallel list, so a regulation added to the domain is offered here
+# without anyone remembering to update a second place.
+REGULATIONS = {
+    "m-a": REGULATION_M_A,
+    "m-b": REGULATION_M_B,
+}
+DEFAULT_REGULATION = "m-b"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,6 +47,11 @@ def build_parser() -> argparse.ArgumentParser:
     battle.add_argument(
         "--pool", type=Path, default=DEFAULT_POOL,
         help=f"a file of teams to draw from, separated by '===' (default: {DEFAULT_POOL}).",
+    )
+    battle.add_argument(
+        "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
+        help=f"which regulation to use (default: {DEFAULT_REGULATION}). Each has its "
+             "own dex, so this changes which Pokemon and items exist.",
     )
     battle.add_argument(
         "--seed", default=None,
@@ -69,6 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
     walk.add_argument(
         "--limit", type=int, default=0,
         help="stop after this many positions. 0 means the whole game.",
+    )
+    walk.add_argument(
+        "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
+        help=f"which regulation to use (default: {DEFAULT_REGULATION}). Each has its "
+             "own dex, so this changes which Pokemon and items exist.",
     )
     walk.add_argument(
         "--seed", type=int, default=None,
@@ -107,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
             pool_path=args.pool,
             seed=args.seed,
             auto=args.auto,
+            regulation=REGULATIONS[args.regulation],
         )
     if args.command == "regulations":
         return check_regulations(competitive_only=not args.all)
@@ -116,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
                 corpus_path=args.corpus,
                 replay_limit=args.replays,
                 minimum=args.minimum,
+                regulation=REGULATIONS[args.regulation],
             )
         return review(
             corpus_path=args.corpus,
@@ -124,6 +146,7 @@ def main(argv: list[str] | None = None) -> int:
             disagreements_only=args.disagreements_only,
             limit=args.limit,
             seed=args.seed,
+            regulation=REGULATIONS[args.regulation],
         )
     return 1
 

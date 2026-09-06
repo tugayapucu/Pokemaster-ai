@@ -27,11 +27,22 @@ from champions_ai.domain import (
 from champions_ai.env import BattleEnv
 from champions_ai.env.battle_env import Decision
 from champions_ai.recommendation import Recommender, describe_joint_action
-from champions_ai.simulator import ShowdownBridge
+from champions_ai.simulator import BridgeError, ShowdownBridge
 
 DEFAULT_POOL = Path("data/pool-eval.txt")
-DEFAULT_DEX = Path("data/dex.json")
 POOL_SEPARATOR = "\n\n===\n\n"
+
+
+def dex_path(regulation: Regulation, directory: Path = Path("data")) -> Path:
+    """Where this regulation's dex cache lives.
+
+    Per mod rather than one shared file. Two regulations sharing a path would
+    re-dump on every switch, and a single `data/dex.json` is the shape that let
+    a stale cache be served for the wrong regulation before `Dex.cached`
+    learned to check its own mod.
+    """
+    return directory / f"dex-{regulation.mod}.json"
+
 
 # Protocol lines worth echoing after a turn. The whole stream is noise to a
 # human; these are the ones that say what actually happened.
@@ -150,17 +161,31 @@ def play(
     pool_path: Path = DEFAULT_POOL,
     seed: str | None = None,
     auto: bool = False,
+    regulation: Regulation = REGULATION_M_B,
 ) -> int:
     """Run one battle against the heuristic agent. Returns a process exit code."""
-    regulation = REGULATION_M_B
     rng = random.Random(seed)
 
     with ShowdownBridge() as bridge:
-        dex = Dex.cached(bridge, DEFAULT_DEX)
+        dex = Dex.cached(bridge, dex_path(regulation), mod=regulation.mod)
 
         pool = None
         if (team_path is None or opponent_path is None) and pool_path.exists():
-            pool = load_pool(bridge, regulation, pool_path)
+            try:
+                pool = load_pool(bridge, regulation, pool_path)
+            except BridgeError as error:
+                # A pool is harvested from one regulation's replays, so it is
+                # only legal in that regulation. Failing here is correct -- the
+                # alternative is playing a different game than the one asked
+                # for -- but a traceback is the wrong way to say so.
+                print(f"\n  The teams in {pool_path} are not legal in {regulation.name}.")
+                print(
+                    "  A pool is harvested from one regulation's replays and only\n"
+                    "  holds together in that regulation. Harvest a pool from that\n"
+                    "  regulation's corpus, or pass --team and --opponent directly."
+                )
+                print(f"\n  The engine's objection was:\n    {error}")
+                return 2
 
         if team_path is not None:
             yours = load_team(bridge, regulation, team_path)

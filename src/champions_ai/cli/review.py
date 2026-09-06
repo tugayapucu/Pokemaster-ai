@@ -25,10 +25,11 @@ from pathlib import Path
 
 from champions_ai.agents import HeuristicAgent
 from champions_ai.cli.board import render_board
+from champions_ai.cli.play import dex_path
 from champions_ai.data import load_all
 from champions_ai.data.reconstruct import move_data_from_dex, reconstruct_decisions
 from champions_ai.dex import Dex
-from champions_ai.domain import REGULATION_M_B, legal_joint_actions
+from champions_ai.domain import REGULATION_M_B, Regulation, legal_joint_actions
 from champions_ai.evaluation.agreement import (
     action_signature,
     human_signature,
@@ -38,7 +39,6 @@ from champions_ai.recommendation import Recommender
 from champions_ai.simulator import ShowdownBridge
 
 DEFAULT_CORPUS = Path("data/replays")
-DEFAULT_DEX = Path("data/dex.json")
 
 
 def _actor(choice, observation) -> str:
@@ -127,6 +127,7 @@ def survey(
     corpus_path: Path = DEFAULT_CORPUS,
     replay_limit: int = 0,
     minimum: int = 40,
+    regulation: Regulation = REGULATION_M_B,
 ) -> int:
     """Where do we and rated players systematically differ, across the corpus?
 
@@ -156,7 +157,7 @@ def survey(
     failed = unscorable = target_only = hidden_target = 0
 
     with ShowdownBridge() as bridge:
-        dex = Dex.cached(bridge, DEFAULT_DEX)
+        dex = Dex.cached(bridge, dex_path(regulation), mod=regulation.mod)
         move_data = move_data_from_dex(dex)
         recommender = Recommender(dex, agent=HeuristicAgent(dex, name="adviser"))
 
@@ -165,7 +166,7 @@ def survey(
             if number % 400 == 0:
                 print(f"    {number}...", flush=True)
             try:
-                decisions = reconstruct_decisions(replay, REGULATION_M_B, dex)
+                decisions = reconstruct_decisions(replay, regulation, dex)
             except Exception:
                 failed += 1
                 continue
@@ -328,6 +329,7 @@ def review(
     disagreements_only: bool = False,
     limit: int = 0,
     seed: int | None = None,
+    regulation: Regulation = REGULATION_M_B,
 ) -> int:
     """Walk one replay's decisions for one player. Returns a process exit code."""
     if not corpus_path.exists():
@@ -353,12 +355,12 @@ def review(
         chosen = random.Random(seed).choice(replays)
 
     with ShowdownBridge() as bridge:
-        dex = Dex.cached(bridge, DEFAULT_DEX)
+        dex = Dex.cached(bridge, dex_path(regulation), mod=regulation.mod)
         move_data = move_data_from_dex(dex)
         recommender = Recommender(dex, agent=HeuristicAgent(dex, name="adviser"))
 
         try:
-            decisions = reconstruct_decisions(chosen, REGULATION_M_B, dex)
+            decisions = reconstruct_decisions(chosen, regulation, dex)
         except Exception as error:
             print(f"Could not reconstruct {chosen.metadata.replay_id}: {error}")
             return 1
