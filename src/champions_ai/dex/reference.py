@@ -324,6 +324,12 @@ class ItemInfo(BaseModel, frozen=True):
 class Dex(BaseModel, frozen=True):
     """The reference tables a heuristic or evaluator needs."""
 
+    # Which Showdown mod this was dumped from. Recorded because each Champions
+    # regulation is a different mod with a different roster -- M-B carries 38
+    # species and 31 items that M-A does not -- so a dex is only correct for
+    # the regulation it came from, and a cache that cannot say which one it is
+    # cannot be checked. Empty means a cache written before this was recorded.
+    mod: str = ""
     species: dict[str, SpeciesInfo] = Field(default_factory=dict)
     # Cosmetic forme id -> the id of the entry that actually holds the data.
     # Stored rather than derived so a cached dex needs no rebuild step.
@@ -540,20 +546,29 @@ class Dex(BaseModel, frozen=True):
         """Pull fresh reference data from the simulator."""
         for event in bridge.request(cmd="dexdump", mod=mod):
             if event["type"] == "dex":
-                return cls.from_payload(event)
+                return cls.from_payload(event).model_copy(update={"mod": mod})
             if event["type"] == "error":
                 raise RuntimeError(f"dex dump failed: {event.get('message')}")
         raise RuntimeError("simulator returned no dex data")
 
     @classmethod
     def cached(cls, bridge, path: Path, *, mod: str = "champions") -> "Dex":
-        """Load from `path`, dumping from the simulator first if it is missing.
+        """Load from `path`, re-dumping if the cache is for a different mod.
 
-        The cache is a convenience, not a source of truth: delete it after
-        updating `pokemon-showdown` so a new regulation's roster is picked up.
+        **The mod check is the point.** This previously ignored `mod` entirely
+        whenever the file existed, so asking for one regulation's dex and
+        getting another's was silent: every damage number, every legality
+        check and every species lookup would run happily against the wrong
+        roster. Correctness depended on somebody remembering to delete the
+        file, which the old docstring asked for by name.
+
+        A cache written before the mod was recorded has an empty one, and is
+        re-dumped once rather than trusted.
         """
         if path.exists():
-            return cls.model_validate_json(path.read_text(encoding="utf-8"))
+            cached = cls.model_validate_json(path.read_text(encoding="utf-8"))
+            if cached.mod == mod:
+                return cached
         dex = cls.load(bridge, mod=mod)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(dex.model_dump_json(), encoding="utf-8")
