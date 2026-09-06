@@ -21,6 +21,12 @@ class Regulation(BaseModel, frozen=True):
 
     format_id: str
     name: str
+    # The Showdown mod this regulation's dex comes from. A regulation is not a
+    # rules difference -- M-A and M-B have identical rule tables, verified from
+    # the engine -- it is a *dex* difference: M-B carries 38 species and 31
+    # items M-A does not. So the mod is the thing that actually distinguishes
+    # them, and anything loading reference data has to be told which one.
+    mod: str = "champions"
     game_type: GameType
     level: int
     min_team_size: int
@@ -58,9 +64,36 @@ class Regulation(BaseModel, frozen=True):
         return problems
 
 
+REGULATION_M_A = Regulation(
+    format_id="gen9championsvgc2026regma",
+    name="[Gen 9 Champions] VGC 2026 Reg M-A",
+    mod="championsregma",
+    game_type="doubles",
+    # Every value below is read off the engine rather than assumed, because a
+    # regulation defined by guesswork is worse than one that is absent:
+    #   level, team sizes, total points  the format's own rule table --
+    #                                    adjustLevel 50, maxTeamSize 6,
+    #                                    pickedTeamSize 4, evLimit 66, all
+    #                                    identical to M-B's
+    #   32 per stat                      hardcoded in Showdown's core
+    #                                    team-validator for any format using
+    #                                    Stat Points, so not per-mod
+    #   mega, no Tera                    `championsregma/scripts.js` declares
+    #                                    `inherit: "champions"`, and the parent
+    #                                    sets canTerastallize to null. The mod
+    #                                    carries 59 mega stones to M-B's 75.
+    level=50,
+    min_team_size=6,
+    picked_team_size=4,
+    max_stat_points_per_stat=32,
+    max_total_stat_points=66,
+    special_mechanics=frozenset({"mega"}),
+)
+
 REGULATION_M_B = Regulation(
     format_id="gen9championsvgc2026regmb",
     name="[Gen 9 Champions] VGC 2026 Reg M-B",
+    mod="champions",
     game_type="doubles",
     level=50,
     min_team_size=6,
