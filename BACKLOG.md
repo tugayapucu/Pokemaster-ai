@@ -87,6 +87,43 @@ Not a human-imitation model. 0010 and 0013 are both cases where following the
 corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
+### Ready for the next regulation before it lands
+
+**Position in this list not yet agreed.** It is written last because the rule
+above says the order changes only after it is raised, and it plainly competes
+with the scripted-opponent item for first place. Raised on 2026-09-07.
+
+A Regional in Frankfurt is the first real deadline this project has had, and it
+is expected to run a regulation later than the one everything here was measured
+against. Checked on 2026-09-07 across three sources -- smogon master's
+`config/formats.ts`, npm, and the installed simulator -- **no later Champions
+regulation exists yet**. Nothing about one is assumed anywhere in the code or
+these documents, and nothing should be until the mod is installable.
+
+What is already done:
+
+| piece | state |
+| --- | --- |
+| `python -m champions_ai regulations` | asks all three sources; exit 2 means *could not tell*, deliberately not 0 |
+| `Regulation.mod` and `REGULATION_M_A` | a regulation is a dex, not a rule set -- M-A and M-B have identical rule tables |
+| per-mod dex cache `data/dex-{mod}.json` | fixes a cache that would have served the wrong regulation's species silently |
+| `--regulation` on `play` and `review` | M-B verified unchanged; same seed, same teams |
+
+What is left, and cannot start until the mod exists:
+
+- **The corpus does not carry over.** Teams harvested from one regulation's
+  replays are refused by the engine in another, correctly. Every measured
+  number in this project -- damage 93.9%, agreement 43.9%, the calibration
+  bands -- was measured on an M-B corpus, and none of them are known to hold
+  under a different dex until re-run.
+- **Which of them to re-run first.** The engine-checked ones (damage, turn
+  order, knockouts) should transfer, because they test the engine rather than
+  the metagame; the fitted and agreement-based ones may not. Worth deciding
+  the list *before* the mod lands, so the day it does is a run rather than a
+  design session.
+- **Re-running the watch.** It is a command, not a schedule; nothing runs it
+  automatically yet.
+
 ## Done, most recent first
 
 ### ~~Milestone 8, the cheap version~~ — closed 2026-09-05, level with the heuristic (0043)

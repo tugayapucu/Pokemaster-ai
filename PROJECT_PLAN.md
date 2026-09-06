@@ -1313,6 +1313,63 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Preparing for a regulation that does not exist yet (2026-09-07)
+
+The first real deadline arrived: a Regional in Frankfurt, expected to run a
+regulation later than the one this project was built against. That turns a
+hypothetical section of this plan -- *Handling future regulations*, written on
+2026-08-11 -- into something that had to actually work.
+
+**What was checked, and only what was checked.** Nothing here assumes anything
+about an unreleased regulation's dex, rules or metagame.
+
+| source | why it is asked | state on 2026-09-07 |
+| --- | --- | --- |
+| `config/formats.ts` on smogon master | formats land here first, often well before release | Champions VGC 2026 Reg M-A and Reg M-B only |
+| npm `pokemon-showdown@latest` | when it becomes *installable*, i.e. simulatable here | 0.11.11, which is the installed version |
+| the local simulator | what this build already accepts, asked of the engine | the same two |
+
+So there is no later regulation to prepare against yet, and the useful thing
+is to find out early rather than to guess. `python -m champions_ai regulations`
+asks all three. Its exit codes carry the answer, and **2 is deliberately not
+0**: an unreachable network or a restructured `formats.ts` is absence of
+evidence, and returning "nothing new" for a silent failure would let the watch
+read as reassuring for as long as the failure lasted.
+
+```
+  0  nothing upstream that the installed build lacks
+  1  something new is upstream
+  2  could not tell
+```
+
+**Two things this found that testing had not.** Both are the recurring shape
+in this project -- the instrument, not the theory.
+
+- **The dex cache was blind to its own mod.** `data/dex.json` was one file for
+  whatever regulation asked last. A second regulation would have been served
+  the first one's species and items, silently, and every recommendation under
+  it would have been quietly wrong. `Dex` now records the mod it was dumped
+  from and `Dex.cached` refuses a cache that does not match; the path is
+  `data/dex-{mod}.json`, so the two cannot contend at all.
+- **A regulation is a dex, not a rule set.** M-A and M-B have *identical* rule
+  tables -- level 50, bring 6 pick 4, 32 points per stat, 66 total, Mega on,
+  Tera off. Every difference between them is in the mod: 38 species, 31 items
+  and 16 Mega stones that M-B has and M-A does not. `Regulation.mod` is
+  therefore the field that distinguishes them, and the test asserting this is
+  written against `model_dump()` so a future regulation that genuinely changes
+  a rule fails loudly instead of passing quietly.
+
+`play` and `review` now take `--regulation`, built from the domain instances so
+adding a regulation offers it on the command line without a second list. M-B
+behaviour was verified unchanged: the same seed draws the same teams.
+
+**What remains genuinely unknown, and is not guessed at:** the next
+regulation's species and item pool, its metagame, and whether the existing
+replay corpus describes it at all. A corpus harvested under one regulation is
+not legal in another -- `--regulation m-a` with an M-B-harvested pool is
+refused by the engine, correctly -- which is the concrete form the data
+problem will take on the day the new mod lands.
+
 ### Deliberately not done
 
 - Bulk collection beyond research use: the replay logs carry no licence, so the
