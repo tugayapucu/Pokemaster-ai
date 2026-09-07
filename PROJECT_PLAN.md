@@ -1313,6 +1313,69 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### The command that advises on a game we cannot see (2026-09-07)
+
+Checked before building anything: **Pokemon Champions has no replay export,
+no battle history and no share link.** On the official forum it is an open
+feature request; the community's own analysis tool reads an OBS video stream
+frame by frame, and nobody does that when an export exists. So the replay
+pipeline -- which parses Showdown protocol lines out of
+`replay.pokemonshowdown.com` -- has nothing to consume from a real game, and
+the game client itself is out of scope by `AGENTS.md` section 3.
+
+What a player does have is the screen. `champions-ai position --team mine.txt`
+takes a description of it and returns the same board, shortlist and reasons
+`play` gives.
+
+| the two sides | how it is modelled | why |
+| --- | --- | --- |
+| ours | real `BattlePokemon`, **seeded from the engine** | we know our team exactly; only the stat line could go wrong |
+| theirs | `ObservedPokemon` | the type with nowhere to put stats or exact HP, so a typed position cannot claim more than a player can see |
+
+**Our own side is not computed, it is asked for.** A throwaway mirror battle is
+started, team preview answered, and the engine's own side taken: exact stats
+with the nature applied, real max HP, and its verdict on Mega. Champions' stat
+formula is not the mainline one and natures truncate rather than round; a
+Pokemon whose Speed is one point out never looks wrong on screen, it just loses
+a turn order it should have won. Everything the mirror did -- an Intimidate on
+the way in, a Drought -- is then cleaned off.
+
+The typed language is built around forty seconds a turn: `char 55`,
+`gambit ko`, `char +2 atk`, and a whole turn on one line as
+`char 55; gambit ko; +1 atk blaziken`. Stat stages are **set** to what the
+arrows show rather than added to, because that is what a player reads.
+
+**What it refuses matters more than what it accepts**, and each refusal is a
+shape this project has been bitten by before:
+
+| refused | what accepting it would have done |
+| --- | --- |
+| a species not at Team Preview | put a Pokemon into the game that is not in it -- at a tournament that is a typo |
+| a fragment matching one on each side | edited the wrong Charizard, invisibly, in a mirror |
+| an ambiguity on one side | routed around it and edited the *other* side |
+| an unknown weather, stat or status | stored an id nothing reads, shown on the board, ignored by every calculation |
+| a Pokemon leaving the field keeping its stages | the tracker's own bug, found when something finally displayed a bench |
+
+Three defects came out of writing it, all of the same kind -- a claim that was
+never checked against the thing it was a claim about:
+
+- **Pydantic does not re-run validators on `model_copy`**, and every edit is
+  one. The constructor guarded the first position built and nothing after it,
+  so `observation()` checks again on the way out.
+- **The Mega derivation was backwards.** It asked `Dex.mega_stone_for` which
+  stone evolves a species, which returns the first match; a Charizard holding
+  Charizardite Y was told it could not Mega Evolve because X was found first.
+  Asked item-first it is exact. The integration test now checks the derivation
+  against the engine's verdict for the Pokemon the engine does describe.
+- **The board spelled the two sides differently** -- "kingambit" above
+  "Charizard" -- because the opponent arrives as protocol ids and our own side
+  as team-sheet names.
+
+That last one continues the pattern this project keeps recording: **using the
+thing finds what testing the thing does not.** Stale benched stat stages, a
+flaky suite, a dead matchup grid, and now a board that reads in two spellings
+-- four defects, all found by looking at output rather than by a test.
+
 ### Preparing for a regulation that does not exist yet (2026-09-07)
 
 The first real deadline arrived: a Regional in Frankfurt, expected to run a

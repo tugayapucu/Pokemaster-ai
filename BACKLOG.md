@@ -52,6 +52,30 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
+### Use it, and fix what using it finds
+
+**Done 2026-09-07: `champions-ai position`.** The one command that helps
+during a real game. Champions has no replay export, no history and no share
+link -- checked, not assumed -- so the replay pipeline has nothing to consume
+from a game actually being played. This takes a description of the screen
+instead and returns the same board, shortlist and reasons.
+
+Our side comes from the engine, not from arithmetic: a throwaway mirror battle
+gives exact stats with the nature applied. Their side is `ObservedPokemon`, so
+a typed position cannot claim more than a player can see.
+
+It found three defects while being written, which is the fourth time in a row
+that **using the thing found what testing the thing did not**:
+
+| found | why no test caught it |
+| --- | --- |
+| pydantic skips validators on `model_copy` | the constructor's test passed; every edit after it was unguarded |
+| the Mega derivation asked species-first and got the wrong stone of two | nothing compared it to the engine until something had to |
+| the board spelled the two sides differently | no test read the board as a person would |
+
+What is left here is the same instruction it has always been: **run it, and
+fix what that turns up.** Nothing on this list is a measurement.
+
 ### An opponent worth measuring against
 
 **0026 found the instrument is blind, not just the pool.** Self-play reported
