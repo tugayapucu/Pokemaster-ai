@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 from champions_ai.cli.play import DEFAULT_POOL, play
+from champions_ai.cli.position import position
 from champions_ai.cli.regulations import check as check_regulations
 from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
 from champions_ai.domain import REGULATION_M_A, REGULATION_M_B
@@ -60,6 +61,19 @@ def build_parser() -> argparse.ArgumentParser:
     battle.add_argument(
         "--auto", action="store_true",
         help="take the top recommendation every turn, without asking. Useful for a look.",
+    )
+    advise = commands.add_parser(
+        "position",
+        help="advise on a game you are playing elsewhere, from a position you type in",
+    )
+    advise.add_argument(
+        "--team", type=Path, required=True,
+        help="your team, as a Showdown export file. Required: this advises on your game.",
+    )
+    advise.add_argument(
+        "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
+        help=f"which regulation to use (default: {DEFAULT_REGULATION}). Each has its "
+             "own dex, so this changes which Pokemon and items exist.",
     )
     walk = commands.add_parser(
         "review",
@@ -127,6 +141,11 @@ def main(argv: list[str] | None = None) -> int:
             pool_path=args.pool,
             seed=args.seed,
             auto=args.auto,
+            regulation=REGULATIONS[args.regulation],
+        )
+    if args.command == "position":
+        return position(
+            team_path=args.team,
             regulation=REGULATIONS[args.regulation],
         )
     if args.command == "regulations":

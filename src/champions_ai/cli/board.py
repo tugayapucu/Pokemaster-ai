@@ -151,3 +151,34 @@ def render_moves(observation: Observation, dex, slot: int) -> str:
         disabled = "  DISABLED" if move_id in mon.disabled_moves else ""
         lines.append(f"    {position + 1}. {name:<18}{extra}{pp}{disabled}")
     return "\n".join(lines) if lines else "  (no moves available)"
+
+
+def show_position(observation, dex, recommender, legal):
+    """Board, movesets and the ranked shortlist. Returns the recommendations."""
+    print()
+    print(render_board(observation))
+    for slot, index in enumerate(observation.own_side.active_slots):
+        if index is None:
+            continue
+        mon = observation.own_side.team[index]
+        if mon.fainted:
+            continue
+        print(f"\n  {mon.pokemon_set.species}:")
+        print(render_moves(observation, dex, slot))
+
+    advice = recommender.recommend(observation, legal)
+    print("\n  Recommended:")
+    for entry in advice.recommendations:
+        # The cost, not the confidence. The confidence is a share of a softmax
+        # with a temperature nobody swept; the cost is measured by rollout
+        # (0041, 0042) and says what the choice looks like to be worth.
+        note = (
+            "top choice"
+            if entry.rank == 1
+            else (str(entry.cost) if entry.cost is not None else "not measured")
+        )
+        print(f"    {entry.rank}. {entry.description}")
+        print(f"         {note}")
+        for reason in entry.reasons[:3]:
+            print(f"         - {reason}")
+    return advice
