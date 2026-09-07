@@ -150,3 +150,46 @@ def test_a_pokemon_at_a_sliver_of_health_still_shows_a_block():
 
     charizard = next(line for line in board.splitlines() if "Charizard" in line)
     assert "#" in charizard
+
+
+class _NamingDex:
+    """Spells the two ids these tests use, and refuses everything else the way
+    the real dex does."""
+
+    class _Species:
+        def __init__(self, name):
+            self.name = name
+
+    def get_species(self, species):
+        known = {"kingambit": "Kingambit", "charizard": "Charizard"}
+        if species not in known:
+            raise KeyError(species)
+        return self._Species(known[species])
+
+
+def test_both_sides_are_spelled_the_same_way_when_a_dex_is_given():
+    """The opponent arrives as protocol ids and our own side as team-sheet
+    names, so an un-named board reads "kingambit" against "Charizard" -- two
+    spellings of the same kind of thing, on one screen, under a clock."""
+    own = Side(team=(_mine("charizard", hp=153, max_hp=153),), active_slots=(0,))
+    opponent = ObservedSide(
+        revealed=(ObservedPokemon(species="kingambit", level=50, hp_percent=80, fainted=False),),
+        active_slots=(0, None),
+    )
+    board = render_board(_observation(own=own, opponent=opponent), _NamingDex())
+
+    assert "Kingambit" in board
+    assert "Charizard" in board
+    assert "kingambit" not in board
+
+
+def test_without_a_dex_the_board_still_renders():
+    """`render_board` is the one thing that must never fail to draw: a name it
+    cannot spell is a cosmetic problem, and a missing board is not."""
+    own = Side(team=(_mine("charizard", hp=153, max_hp=153),), active_slots=(0,))
+    assert "charizard" in render_board(_observation(own=own))
+
+
+def test_a_species_the_dex_does_not_know_falls_back_to_what_it_was_called():
+    own = Side(team=(_mine("mysteryformeting", hp=100, max_hp=100),), active_slots=(0,))
+    assert "mysteryformeting" in render_board(_observation(own=own), _NamingDex())

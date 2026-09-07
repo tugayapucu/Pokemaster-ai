@@ -11,6 +11,7 @@ of showing a player something they are not entitled to see: the opponent's
 bench is a count, not a list, because that is all `ObservedSide` carries.
 """
 
+from champions_ai.cli.preview import species_name
 from champions_ai.domain import Observation
 
 # Ordered so the printed line reads the way players say it: offence, then
@@ -57,13 +58,19 @@ def _conditions(side_conditions: dict) -> str:
     return ", ".join(shown)
 
 
-def render_board(observation: Observation, *, width: int = 62) -> str:
+def render_board(observation: Observation, dex=None, *, width: int = 62) -> str:
     """The whole position as one block of text, opponent first.
 
     Opponent above and yours below, because that is the way every Pokemon
     client in existence lays it out and a player should not have to translate.
+
+    `dex` is optional and only spells names. Without it the opponent's side
+    reads as protocol ids -- "kingambit" against our own "Kingambit" -- which
+    is two spellings of the same Pokemon on one screen, and a player reading
+    a board under a clock should not have to do that translation either.
     """
     lines: list[str] = []
+    name_of = (lambda s: species_name(dex, s)) if dex is not None else (lambda s: s)
 
     field = []
     if observation.weather:
@@ -87,7 +94,7 @@ def render_board(observation: Observation, *, width: int = 62) -> str:
     for index, seen in enumerate(opponent.revealed):
         marker = ">" if index in active else " "
         if seen.fainted:
-            lines.append(f" {marker} {seen.species:<18} fainted")
+            lines.append(f" {marker} {name_of(seen.species):<18} fainted")
             continue
         fraction = seen.hp_percent / 100
         detail = [f"{_bar(fraction)} {seen.hp_percent:>3}%"]
@@ -98,7 +105,7 @@ def render_board(observation: Observation, *, width: int = 62) -> str:
             detail.append(boosts)
         if seen.revealed_item:
             detail.append(f"[{seen.revealed_item}]")
-        lines.append(f" {marker} {seen.species:<18} {'  '.join(detail)}")
+        lines.append(f" {marker} {name_of(seen.species):<18} {'  '.join(detail)}")
     if opponent.unrevealed_count:
         lines.append(f"   {'(' + str(opponent.unrevealed_count) + ' not yet seen)':<18}")
 
@@ -110,7 +117,7 @@ def render_board(observation: Observation, *, width: int = 62) -> str:
     active = [index for index in own.active_slots if index is not None]
     for index, mon in enumerate(own.team):
         marker = ">" if index in active else " "
-        species = mon.pokemon_set.species
+        species = name_of(mon.pokemon_set.species)
         if mon.fainted:
             lines.append(f" {marker} {species:<18} fainted")
             continue
@@ -156,7 +163,7 @@ def render_moves(observation: Observation, dex, slot: int) -> str:
 def show_position(observation, dex, recommender, legal):
     """Board, movesets and the ranked shortlist. Returns the recommendations."""
     print()
-    print(render_board(observation))
+    print(render_board(observation, dex))
     for slot, index in enumerate(observation.own_side.active_slots):
         if index is None:
             continue

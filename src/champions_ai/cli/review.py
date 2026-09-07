@@ -423,7 +423,7 @@ def review(
                 disagreed += 1
 
             print()
-            print(render_board(observation))
+            print(render_board(observation, dex))
             print(f"\n  They played, turn {decision.turn}:")
             for line in lines:
                 print(line)
