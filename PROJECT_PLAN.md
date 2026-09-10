@@ -1313,6 +1313,64 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### The damage model is ten points worse on M-C's new species (0046)
+
+The last thing between this project and trusting `position` at a Regional, and
+the answer is **no, not yet**.
+
+| arm | inside the predicted range | n | 95% Wilson |
+| --- | --- | --- | --- |
+| neither side new | **94.1%** | 254 | [90.5%, 96.4%] |
+| attacker or defender new | **84.9%** | 126 | [77.6%, 90.1%] |
+
+Intervals do not overlap. Paired by construction — both arms come from the same
+battles and seeds — so any harness bias cancels. Mega formes are excluded from
+both arms, since Mega already costs seven points on its own and twelve of M-C's
+35 additions are formes.
+
+**This settles the 93.9% question for free.** The old arm reads 94.1% against
+the 93.9% recorded on npm 0.11.11, so **the engine pin did not move damage
+accuracy**, and the ad-hoc 73.0% from earlier is explained: it left Mega in, and
+it attributed a whole turn's hits to a snapshot taken before the turn.
+
+**It is really four species.** 124 of 130 new-arm samples involve Rillaboom,
+then Baxcalibur, Golisopod and Salamence. The honest headline is the narrow one.
+
+#### A real bug, fixed, and not the cause
+
+Grassy Terrain has two rules and this project modelled one. The 1.3× on Grass
+moves was handled. The **halving of Earthquake, Bulldoze and Magnitude against
+a grounded target** was not — and Rillaboom has Grassy Surge, so the terrain is
+up the moment it appears and Earthquake is a staple. Every one was predicted at
+double its real damage.
+
+Transcribed from `data/moves.ts`, verified directly (base power 100 → 50), three
+unit tests including the one that reads the *defender's* footing rather than the
+attacker's.
+
+**Re-running 0046 with the fix left the gap at −10.6%.** A genuine bug, and not
+this one. Recorded that way: a fix that does not move the number it was aimed at
+should be reported as not moving it.
+
+#### Where it actually points
+
+```
+  Golisopod ironhead -> Baxcalibur:    predicted 78-92,  engine dealt 192
+  Gholdengo shadowball -> Baxcalibur:  predicted 64-76,  engine dealt 134
+  Incineroar flareblitz -> Baxcalibur: predicted 54-64,  engine dealt 126
+  Golisopod ironhead -> Incineroar:    predicted 13-16,  engine dealt 35
+```
+
+Two clusters, both near a clean factor of two: **Golisopod attacking**
+under-predicted ~2.2× across different moves and targets, and **Baxcalibur
+defending** ~2× across different attackers. A multiplier following the *species*
+rather than the move points at a stat line, not a move rule, and neither carries
+a damage-modifying ability.
+
+Two hypotheses have now been wrong. The next step is not a third guess: compare
+our `computed_stats` for those two against the engine's for the same packed
+team, which settles it in five lines.
+
 ### The adviser's edge is uniform, and forcedness was the wrong answer (0045)
 
 0044 left a reading on the table: that agreement is flat across ratings because
