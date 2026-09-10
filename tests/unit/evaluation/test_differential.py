@@ -614,3 +614,78 @@ def test_stages_do_not_carry_across_chunks():
     )
     assert len(samples) == 1
     assert samples[0].attacker.boosts.attack == 0
+
+
+def test_a_hit_after_a_mid_turn_switch_is_scored_against_the_newcomer():
+    """The snapshot the caller hands over is from before the turn resolved.
+
+    Within one turn a Pokemon can faint or switch and be replaced, and the next
+    hit lands on the replacement. Resolving that through the snapshot scores it
+    against whoever used to be in the slot -- silently, because the wrong
+    Pokemon still produces a perfectly plausible number.
+    """
+    charizard, garchomp, incineroar = _mon("Charizard"), _mon("Garchomp"), _mon("Incineroar")
+    lookup = active_by_ident({"p1": [charizard], "p2": [garchomp, incineroar]})
+
+    samples = collect_samples(_log(
+        "|switch|p2a: Cat|Incineroar, L50, M|202/202",
+        "|move|p1a: Charizard|Heat Wave|p2a: Cat",
+        "|-damage|p2a: Cat|150/202",
+    ), lookup)
+
+    assert len(samples) == 1
+    assert samples[0].defender.pokemon_set.species == "Incineroar"
+
+
+def test_a_renamed_newcomer_is_still_found():
+    """The ident carries a nickname; only the details field carries a species."""
+    charizard, garchomp = _mon("Charizard"), _mon("Garchomp")
+    lookup = active_by_ident({"p1": [charizard], "p2": [garchomp]})
+
+    samples = collect_samples(_log(
+        "|switch|p2a: Sir Chompsalot|Garchomp, L50, M|194/194",
+        "|move|p1a: Charizard|Heat Wave|p2a: Sir Chompsalot",
+        "|-damage|p2a: Sir Chompsalot|150/194",
+    ), lookup)
+
+    assert len(samples) == 1
+    assert samples[0].defender.pokemon_set.species == "Garchomp"
+
+
+def test_a_pokemon_that_mega_evolves_mid_turn_is_dropped_not_mispriced():
+    """`detailschange` renames the species while the ident stays put, and the
+    pre-turn team holds the *base* forme -- whose stats are not the ones the
+    engine just used. 0046 scored a whole experiment against those and reported
+    a ten-point gap that was not there.
+
+    Dropped and counted, rather than scored or silently skipped.
+    """
+    charizard, garchomp = _mon("Charizard"), _mon("Garchomp")
+    lookup = active_by_ident({"p1": [charizard], "p2": [garchomp]})
+
+    collector = DamageCollector()
+    samples = collector.feed(_log(
+        "|switch|p2a: Garchomp|Garchomp, L50, M|194/194",
+        "|detailschange|p2a: Garchomp|Garchomp-Mega, L50, M",
+        "|move|p1a: Charizard|Heat Wave|p2a: Garchomp",
+        "|-damage|p2a: Garchomp|150/194",
+    ), lookup)
+
+    assert samples == []
+    assert collector.unresolved == 1
+
+
+def test_nothing_changes_when_no_switch_happens():
+    """The common case must not move: with no switch line, the caller's
+    snapshot is exactly right and is used unchanged."""
+    charizard, garchomp = _mon("Charizard"), _mon("Garchomp")
+    lookup = active_by_ident({"p1": [charizard], "p2": [garchomp]})
+
+    samples = collect_samples(_log(
+        "|switch|p2a: Garchomp|Garchomp, L50, M|194/194",
+        "|move|p1a: Charizard|Heat Wave|p2a: Garchomp",
+        "|-damage|p2a: Garchomp|150/194",
+    ), lookup)
+
+    assert len(samples) == 1
+    assert samples[0].defender.pokemon_set.species == "Garchomp"

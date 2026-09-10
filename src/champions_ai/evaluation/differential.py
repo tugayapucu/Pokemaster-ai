@@ -243,6 +243,12 @@ class DamageCollector:
         self._hp: dict[str, int] = {}
         self._screens: dict[str, set[str]] = {"p1": set(), "p2": set()}
         self.unknown_hp = 0
+        # Hits dropped because the Pokemon in that slot could not be found
+        # in the caller's snapshot -- almost always a Mega mid-turn, whose
+        # new forme the pre-turn team does not contain. Counted rather than
+        # silently skipped, because a resolver that quietly drops half its
+        # samples looks exactly like a resolver that works.
+        self.unresolved = 0
         """Hits dropped because the target's HP before them was not known."""
 
     def feed(
@@ -293,6 +299,34 @@ class DamageCollector:
         # Close Combat must not weaken its own hit.
         stages_at_move: dict[str, dict[str, int]] = {}
 
+        # Who is standing in each slot *right now*, keyed "p1a". The caller's
+        # lookup is a snapshot from before the turn resolved -- the same
+        # limitation the stage tracking above exists for -- and within one turn
+        # a Pokemon can faint and be replaced, or switch out and be attacked in
+        # its own slot by the replacement's opponent. Resolving those lines
+        # through the snapshot scores the hit against whoever *used* to be
+        # there. Seeded lazily: until a switch is seen, the snapshot is right.
+        occupant: dict[str, str] = {}
+
+        def resolve(ident: str):
+            """The Pokemon in this ident's slot as of this line."""
+            side, slot, _ = split_ident(ident)
+            key = f"{side}{'abc'[slot]}" if slot is not None else side
+            species = occupant.get(key)
+            if species is None:
+                return active_lookup(ident)
+            # A switch was seen in this slot, so the ident's nickname is the
+            # newcomer's and the snapshot cannot answer for it. Asking by the
+            # species from the switch line's details can, because that is what
+            # the details field is for -- and it is also how a Mega is caught:
+            # after `detailschange` the species is the Mega forme, which the
+            # pre-turn team does not contain, so the sample is dropped rather
+            # than scored against the base forme's stats.
+            found = active_lookup(f"{side}: {species}")
+            if found is None:
+                self.unresolved += 1
+            return found
+
         def with_stages(mon, ident):
             """`mon` with this chunk's stage changes applied."""
             delta = stages_at_move.get(ident)
@@ -312,8 +346,8 @@ class DamageCollector:
             for target, (first, last) in landed.items():
                 if last >= first:
                     continue
-                attacker = active_lookup(attacker_ident)
-                defender = active_lookup(target)
+                attacker = resolve(attacker_ident)
+                defender = resolve(target)
                 if attacker is None or defender is None:
                     continue
                 attacker = with_stages(attacker, attacker_ident)
@@ -348,11 +382,18 @@ class DamageCollector:
                 continue
             tag, args = parts[1], parts[2:]
 
-            if tag in ("switch", "drag", "replace"):
+            if tag in ("switch", "drag", "replace", "detailschange"):
                 flush()
-                if len(args) > 2:
+                if tag != "detailschange" and len(args) > 2:
                     self._hp[args[0]] = _current_hp(args[2])
-                pending = None
+                # The details field names the species, which the ident does
+                # not: a nickname can be anything, and a Mega keeps its ident
+                # while its species changes underneath it.
+                side, slot, _ = split_ident(args[0])
+                if slot is not None and len(args) > 1:
+                    occupant[f"{side}{'abc'[slot]}"] = args[1].split(",")[0].strip()
+                if tag != "detailschange":
+                    pending = None
             elif tag in ("-heal", "-sethp"):
                 # Not a sample, but it moves the target's HP. Missing these
                 # would make the *next* hit on that Pokemon read as a huge

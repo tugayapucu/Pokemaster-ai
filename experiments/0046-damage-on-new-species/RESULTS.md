@@ -1,22 +1,39 @@
-# 0046 — There is no damage gap on M-C's new species. The first answer was wrong.
+# 0046 — No damage gap on M-C's new species, after fixing the instrument twice
 
-Run 2026-09-10. **This file has been rewritten**: the first version reported a
-−9.2 point gap and that result was an artifact of the harness, not a property
-of the model. The retraction is the finding worth keeping.
+Run 2026-09-10. **Rewritten twice.** The first version reported a −9.2 point
+gap that was a harness artifact; the second corrected the comparison but not
+the level. The history is kept because how the measurement was wrong is worth
+more than the answer, which is a null.
 
 ## The answer
 
+Measured on a harness whose attribution was fixed afterwards (see below). Final
+numbers:
+
 | arm | inside the predicted range | n | 95% Wilson |
 | --- | --- | --- | --- |
-| **old** (neither side new) | 80.8% | 265 | [75.6%, 85.0%] |
-| **new** (attacker or defender new) | 83.2% | 101 | [74.7%, 89.2%] |
+| **old** (neither side new) | **95.5%** | 269 | [92.4%, 97.4%] |
+| **new** (attacker or defender new) | **93.7%** | 95 | [86.9%, 97.1%] |
 
-**Gap: +2.4% in favour of the new species, intervals heavily overlapping.**
+**Gap: −1.9%, intervals heavily overlapping.** The damage model handles Reg
+M-C's 35 new species as well as it handles anything else. The pre-registered
+prediction — "no meaningful difference" — was right.
 
-The damage model handles Reg M-C's 35 new species as well as it handles
-anything else. The pre-registered prediction — "no meaningful difference" — was
-right after all. Nothing about Rillaboom, Baxcalibur, Golisopod or Salamence
-needs fixing before Frankfurt.
+**And the published 93.9% holds on the pinned build**, properly this time:
+95.5% on the old arm, from a harness whose two failure modes are now covered by
+tests rather than assumed away.
+
+### It took three runs to get here
+
+| run | old | new | gap | what was wrong |
+| --- | --- | --- | --- | --- |
+| 1 | 94.1% | 84.9% | **−9.2%** | Mega contamination: the exclusion tested the species *name*, and the lookup resolved *by* species |
+| 2 | 80.8% | 83.2% | +2.4% | Mega excluded properly, but slot resolution lost every mid-turn switch |
+| 3 | **95.5%** | **93.7%** | −1.9% | attribution tracks the chunk; both arms land on the reference figure |
+
+The first run's answer was wrong in the interesting direction and I published it.
+The second was right about the comparison and wrong about the level. Only the
+third is both.
 
 ## What went wrong the first time
 
@@ -52,28 +69,28 @@ and by resolving through `Side`, which goes by slot.
 With that, 202 samples are dropped per 60 battles where 0 were before, and the
 gap inverts from −9.2 to +2.4.
 
-## What is still open, and is now a different question
+## The harness fix, which was the real work
 
-Both arms now read ~81–83%, against the 93.9% this project publishes. **So the
-"93.9% confirmed on the pinned build" claim from the first version is also
-withdrawn** — it was the same contaminated run.
+Both lookups were wrong in opposite ways. **Species matching** loses a Mega,
+which renames itself mid-turn. **Slot matching** loses anything that switches or
+faints mid-turn, because `active_slots` is read before the turn is submitted.
 
-Slot resolution has the opposite failure to species resolution: `active_slots`
-is read before the turn is submitted and is stale the moment anything switches
-or faints mid-turn. The surviving mismatches look like exactly that —
+`DamageCollector` already corrected its snapshot for one within-turn change --
+stat stages, because "a hit landing after a Swords Dance was scored against
+stale stages". Occupancy is the same class of problem and now works the same
+way: the collector follows `switch`, `drag`, `replace` and `detailschange`
+through the chunk, and resolves each ident by the **species from the details
+field** rather than by the nickname in the ident.
 
-```
-  Rillaboom woodhammer -> Kingambit:  predicted 45-54,  engine dealt 147
-  Rillaboom woodhammer -> Primarina:  predicted 116-140, engine dealt 48
-```
+A Mega then resolves to a forme the pre-turn team does not contain, so the
+sample is dropped -- and **counted**, in `unresolved`, because a resolver that
+quietly drops half its samples looks exactly like a resolver that works. That
+counter is the lesson from run 1, where "0 samples dropped" was printed on
+every run and read past four times.
 
-— errors in both directions on the same move, which is what mis-attributing
-the defender looks like rather than what a wrong multiplier looks like.
-
-**Neither lookup is right.** Species matching loses Mega; slot matching loses
-mid-turn movement. The harness needs the state as of each protocol *line*,
-which is what the tracker already maintains, rather than a snapshot taken once
-per turn. That is the real fix and it is a separate piece of work.
+Worth its own line: **fixing attribution moved both arms by about thirteen
+points**, from ~81% to ~95%. The mis-attribution was not a rounding error on
+the measurement; it was most of it.
 
 ## What survives
 
