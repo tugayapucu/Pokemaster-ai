@@ -1313,6 +1313,54 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Regulation M-C arrived, three days after the watch was built (2026-09-10)
+
+The watch fired, which supersedes the 2026-09-07 entry below: that recorded no
+later regulation upstream, and there now is one. Recorded rather than rewritten,
+because the useful part is the gap it caught.
+
+| source | 2026-09-07 | 2026-09-10 |
+| --- | --- | --- |
+| smogon master `formats.ts` | M-A, M-B | **M-C, M-C (Bo3), BSS M-C** — and M-A has rotated *out* |
+| npm `pokemon-showdown` | 0.11.11 | 0.11.11, unchanged (published 2026-07-28) |
+| installed simulator | M-A, M-B | M-A, M-B |
+| live replay server | — | **M-C games, newest dated today** |
+
+**M-C is real, is being played, and cannot be simulated here.** That is the gap
+the watch exists to report, and it is the whole reason it reports npm separately
+from master: a format reaching source is not a format this project can run.
+Everything the engine answers — team validation, the dex, reconstruction,
+seeding a `position` — is unavailable until a build ships `championsregmc`.
+
+**What is possible in the gap is collection**, because it is HTTP and JSON and
+touches no engine. `champions-ai collect --format <id>` takes a raw format id
+rather than a `Regulation` for exactly this reason: a `Regulation` here is a
+claim to know a format's rules and dex, and M-C is a string the replay server
+indexes by and nothing more.
+
+**The ladder is one day old, which decides what the corpus is for.** A sample of
+25 listings, 17 of them rated:
+
+```
+  min 1000    median 1055    max 1182    at or above 1500: 0
+```
+
+Everyone is at or near the 1000 starting rating. The standing 1500-on-both-
+players bar would have kept zero replays while spending thousands of requests
+discovering that, so the first M-C collection runs unfiltered and the manifest
+says so.
+
+**This corpus is therefore not an agreement instrument.** Agreement has only
+ever been a ranking signal for judgement calls, and it is worth something only
+against players whose judgement is worth ranking against — the M-B corpus was
+1500-1850. A 1000-1100 corpus says what the format *contains* and what gets
+*used*; it does not say what is correct. Reading it as one would repeat the
+mistake 0010 and 0013 already caught twice, where following the corpus was
+itself the error.
+
+The replays persist, so waiting costs nothing: a second collection at
+`--min-rating 1500` once the ladder settles is the same command.
+
 ### The command that advises on a game we cannot see (2026-09-07)
 
 Checked before building anything: **Pokemon Champions has no replay export,
@@ -1377,6 +1425,10 @@ flaky suite, a dead matchup grid, and now a board that reads in two spellings
 -- four defects, all found by looking at output rather than by a test.
 
 ### Preparing for a regulation that does not exist yet (2026-09-07)
+
+> **Superseded on 2026-09-10**, when Reg M-C appeared upstream. The check
+> below was accurate on the day it was made and is kept for that reason;
+> what it concluded about availability is not current. See the entry above.
 
 The first real deadline arrived: a Regional in Frankfurt, expected to run a
 regulation later than the one this project was built against. That turns a

@@ -52,6 +52,68 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
+### Regulation M-C: collect now, measure when it is simulatable
+
+**Moved to the top on 2026-09-10, on the user's instruction that M-C is here.**
+The ordering question raised on 2026-09-07 is settled by events rather than by
+preference: this now has a live deadline behind it and the scripted-opponent
+item does not. Say so if it should go back.
+
+**What was checked on 2026-09-10, and only what was checked.**
+
+| source | state |
+| --- | --- |
+| smogon master `config/formats.ts` | **VGC 2026 Reg M-C, Reg M-C (Bo3) and BSS Reg M-C are there** |
+| npm `pokemon-showdown` | latest is 0.11.11, published 2026-07-28 — **the version already installed** |
+| the installed simulator | M-A and M-B only |
+| the live replay server | **M-C games exist, newest dated today** |
+
+So M-C is real, is being played, and **cannot be simulated here yet**. That gap
+between "exists upstream" and "installable" is exactly the case the watch was
+built to detect, and the only preparation available inside it is collecting
+replays — which needs no engine.
+
+Also observed: **M-A has rotated out of master's `formats.ts`** while remaining
+in the installed build. Nothing depends on that yet; it is recorded because a
+regulation disappearing upstream is how a future `--regulation m-a` stops being
+reproducible.
+
+**The ladder is one day old, and that decides what this corpus is for.** A
+sample of 25 listings gave 17 rated games:
+
+```
+  min 1000   median 1055   max 1182   at or above 1500: 0
+```
+
+Our standing bar is 1500+ on *both* players, which would have kept nothing
+while downloading thousands of games to find that out. So collection is running
+unfiltered (`--min-rating 0`), and the manifest records it.
+
+**That makes this corpus unusable as an agreement signal.** Agreement is a
+ranking signal for judgement calls and is only worth anything against players
+whose judgement is worth ranking against; 1000-1100 is the rating everyone
+starts at, not a level of play. What the corpus *is* good for is what the
+format contains and what gets used — facts about the dex and the metagame, not
+about correct play.
+
+What happens next, in order:
+
+- **Collecting M-C replays** (running, target 2000, unfiltered). Needs no
+  engine, so it is the one thing possible today.
+- **Watch npm for a build carrying `championsregmc`.** Until then there is no
+  M-C dex, no team validation, no reconstruction, and no `position` seeding —
+  every one of those asks the engine.
+- **A second, quality-filtered collection once the ladder settles.** Same
+  command, `--min-rating 1500`. The replays persist, so nothing is lost by
+  waiting for the players to sort themselves out.
+- **Re-collect the *decision* to re-run measurements.** Engine-checked results
+  (damage 93.9%, turn order 97.8%, knockouts 99.0%) test the engine and should
+  transfer. The fitted and agreement-based ones were measured on an M-B corpus
+  against 1500-1850 players and are not known to hold. Decide the list before
+  the mod lands so that day is a run, not a design session.
+- **Not yet, and deliberately:** anything that assumes M-C's dex, rules or
+  metagame. The mod is the only thing that will settle those.
+
 ### Use it, and fix what using it finds
 
 **Done 2026-09-07: `champions-ai position`.** The one command that helps
@@ -110,43 +172,6 @@ largest prior. Worth remembering before spending an afternoon on the second.
 Not a human-imitation model. 0010 and 0013 are both cases where following the
 corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
-
-### Ready for the next regulation before it lands
-
-**Position in this list not yet agreed.** It is written last because the rule
-above says the order changes only after it is raised, and it plainly competes
-with the scripted-opponent item for first place. Raised on 2026-09-07.
-
-A Regional in Frankfurt is the first real deadline this project has had, and it
-is expected to run a regulation later than the one everything here was measured
-against. Checked on 2026-09-07 across three sources -- smogon master's
-`config/formats.ts`, npm, and the installed simulator -- **no later Champions
-regulation exists yet**. Nothing about one is assumed anywhere in the code or
-these documents, and nothing should be until the mod is installable.
-
-What is already done:
-
-| piece | state |
-| --- | --- |
-| `python -m champions_ai regulations` | asks all three sources; exit 2 means *could not tell*, deliberately not 0 |
-| `Regulation.mod` and `REGULATION_M_A` | a regulation is a dex, not a rule set -- M-A and M-B have identical rule tables |
-| per-mod dex cache `data/dex-{mod}.json` | fixes a cache that would have served the wrong regulation's species silently |
-| `--regulation` on `play` and `review` | M-B verified unchanged; same seed, same teams |
-
-What is left, and cannot start until the mod exists:
-
-- **The corpus does not carry over.** Teams harvested from one regulation's
-  replays are refused by the engine in another, correctly. Every measured
-  number in this project -- damage 93.9%, agreement 43.9%, the calibration
-  bands -- was measured on an M-B corpus, and none of them are known to hold
-  under a different dex until re-run.
-- **Which of them to re-run first.** The engine-checked ones (damage, turn
-  order, knockouts) should transfer, because they test the engine rather than
-  the metagame; the fitted and agreement-based ones may not. Worth deciding
-  the list *before* the mod lands, so the day it does is a run rather than a
-  design session.
-- **Re-running the watch.** It is a command, not a schedule; nothing runs it
-  automatically yet.
 
 ## Done, most recent first
 
