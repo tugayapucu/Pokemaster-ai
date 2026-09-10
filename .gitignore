@@ -22,3 +22,9 @@ data/harvested_teams.txt
 # derived from unlicensed battle logs, so local research use only, never
 # redistributed. Rebuild with `harvested_pool(..., cache=...)`.
 data/pool-*.txt
+
+# Team files worked on locally -- a candidate for a tournament, or one lifted
+# out of a harvested pool to scout. The second kind inherits the corpus's
+# constraint (unlicensed logs, never redistributed), and the first is the
+# user's own competitive work, which is not this repository's to publish.
+data/*team*.txt

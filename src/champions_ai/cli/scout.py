@@ -1,0 +1,114 @@
+"""How does my team do against the field?
+
+Built for a deadline: a team has to be submitted for Frankfurt on 2026-09-25,
+and until now this project could tell you what to do *in* a battle and nothing
+about what to bring to one.
+
+It answers a narrow question honestly rather than a broad one vaguely. The
+opponents are real teams harvested from the ladder, both sides are played by
+the same agent, and seats are swapped on a shared seed -- so the only thing
+left between the two passes is the teams. What comes out is a win rate against
+the field it was harvested from, and, more usefully, **the matchups that beat
+it**.
+
+What it is not: a metagame verdict. The pool is what the current ladder brings,
+played the way this project plays -- best of four candidate actions 57% of the
+time (0038). A losing matchup here is a real structural problem worth looking
+at; a winning record here is not a reason to be confident at a Regional.
+"""
+
+from pathlib import Path
+
+from champions_ai.agents import HeuristicAgent
+from champions_ai.cli.play import dex_path, load_pool, load_team
+from champions_ai.cli.preview import species_name
+from champions_ai.dex import Dex
+from champions_ai.domain import REGULATION_M_C, Regulation
+from champions_ai.env import BattleEnv
+from champions_ai.evaluation.team_strength import scout_team
+from champions_ai.simulator import BridgeError, ShowdownBridge
+
+DEFAULT_POOL = Path("data/pool-eval-m-c.txt")
+
+
+def _roster(dex: Dex, species: tuple[str, ...], width: int = 0) -> str:
+    """Species as the dex spells them.
+
+    ASCII only where it truncates: this prints to a Windows console that
+    renders a typographic ellipsis as a replacement character, and a roster is
+    exactly the line a reader needs to be able to scan.
+    """
+    names = ", ".join(species_name(dex, s) for s in species)
+    if not width or len(names) <= width:
+        return names
+    return names[: width - 3] + "..."
+
+
+def scout(
+    *,
+    team_path: Path,
+    pool_path: Path = DEFAULT_POOL,
+    opponents: int = 40,
+    seed: int = 0,
+    regulation: Regulation = REGULATION_M_C,
+) -> int:
+    """Play one team against a sample of the field. Returns an exit code."""
+    if not team_path.exists():
+        print(f"No team at {team_path}. Pass --team with a Showdown export file.")
+        return 2
+    if not pool_path.exists():
+        print(
+            f"No team pool at {pool_path}.\n"
+            "  Harvest one from a replay corpus first -- this measures a team\n"
+            "  against real teams, and there is nothing to measure it against."
+        )
+        return 2
+
+    with ShowdownBridge() as bridge:
+        dex = Dex.cached(bridge, dex_path(regulation), mod=regulation.mod)
+        try:
+            team = load_team(bridge, regulation, team_path)
+            pool = load_pool(bridge, regulation, pool_path)
+        except BridgeError as error:
+            print(f"\n  The engine refused something in {regulation.name}:\n    {error}")
+            return 2
+
+        env = BattleEnv(regulation, bridge=bridge)
+        agent = HeuristicAgent(dex, name="both sides")
+
+        print(f"\n  {regulation.name}")
+        print(f"  Your team: {_roster(dex, tuple(e.species for e in team.team.pokemon))}")
+        print(f"  Against {opponents} of {len(pool.teams)} harvested teams, "
+              "each played from both seats.\n")
+
+        def progress(done, total, wins, battles):
+            if done % 10 == 0 or done == total:
+                print(f"    {done}/{total} opponents, {wins}/{battles} battles won",
+                      flush=True)
+
+        report = scout_team(
+            env, agent, team, pool, opponents=opponents, seed=seed, on_progress=progress
+        )
+
+        low, high = report.interval
+        print(f"\n  {report.wins} of {report.battles} battles "
+              f"({report.win_rate:.1%})   95% Wilson [{low:.1%}, {high:.1%}]")
+        print(f"  {report.opponents} distinct opponents, {report.even()} split one-all, "
+              f"{report.draws} drawn")
+
+        # The losing matchups are the point. A win rate says whether to keep
+        # looking; these say what to change.
+        print("\n  Worst matchups")
+        for matchup in report.worst():
+            print(f"    {matchup.wins}/2  {_roster(dex, matchup.roster)}")
+        print("\n  Best matchups")
+        for matchup in report.best():
+            print(f"    {matchup.wins}/2  {_roster(dex, matchup.roster)}")
+
+        print(
+            "\n  Both sides were played by the same agent, so an even matchup ties\n"
+            "  and every deviation is the teams. The pool is what the ladder\n"
+            "  brings, not what wins a Regional -- read a losing matchup as a\n"
+            "  structural problem, and a winning record as nothing much."
+        )
+        return 0

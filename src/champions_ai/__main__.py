@@ -16,6 +16,8 @@ from champions_ai.cli.play import DEFAULT_POOL, play
 from champions_ai.cli.position import position
 from champions_ai.cli.regulations import check as check_regulations
 from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
+from champions_ai.cli.scout import DEFAULT_POOL as SCOUT_POOL
+from champions_ai.cli.scout import scout
 from champions_ai.domain import REGULATION_M_B, REGULATION_M_C
 
 # Keyed by the short name a person would type. Built from the instances rather
@@ -102,6 +104,32 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"which regulation to use (default: {DEFAULT_REGULATION}). Each has its "
              "own dex, so this changes which Pokemon and items exist.",
     )
+    field = commands.add_parser(
+        "scout",
+        help="how does my team do against the field? win rate and losing matchups",
+    )
+    field.add_argument(
+        "--team", type=Path, required=True,
+        help="your team, as a Showdown export file.",
+    )
+    field.add_argument(
+        "--pool", type=Path, default=SCOUT_POOL,
+        help=f"harvested teams to play against (default: {SCOUT_POOL}).",
+    )
+    field.add_argument(
+        "--opponents", type=int, default=40,
+        help="how many distinct opponents to draw (default: %(default)s). Breadth "
+             "matters more than depth here: almost all the variance is which "
+             "opponent was drawn, so each is played twice and no more.",
+    )
+    field.add_argument(
+        "--seed", type=int, default=0,
+        help="fixes which opponents are drawn and every battle seed.",
+    )
+    field.add_argument(
+        "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
+        help=f"which regulation to use (default: {DEFAULT_REGULATION}).",
+    )
     walk = commands.add_parser(
         "review",
         help="walk a real game, showing what a player did against what we would advise",
@@ -180,6 +208,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "position":
         return position(
             team_path=args.team,
+            regulation=REGULATIONS[args.regulation],
+        )
+    if args.command == "scout":
+        return scout(
+            team_path=args.team,
+            pool_path=args.pool,
+            opponents=args.opponents,
+            seed=args.seed,
             regulation=REGULATIONS[args.regulation],
         )
     if args.command == "regulations":
