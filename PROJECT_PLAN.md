@@ -1328,22 +1328,40 @@ is not a plan.
   0.11.11   2026-07-28    516 days      <- the version installed here
 ```
 
-Three of the last four gaps are over a year. There is no announced schedule, no
-release branch and no milestone in the repository pointing at the next one.
+Ten versions in twelve years. Confirmed twice over, from npm's registry and
+from GitHub's own Releases, which agree on every date.
 
-**And the timing is already against us.** M-C was added to master in
-`812501ede` on **2026-09-09** -- one day before this was written. 0.11.11 was
-cut from `739a5e1fe` on **2026-07-28**, six weeks earlier. M-C therefore missed
-the current release by six weeks, and on the historical cadence the next npm
-build is a year or more away.
+**Why it is irregular, which is not the same as slow.** The repository has two
+workflows:
 
-**So waiting for npm is not a route to M-C support.** The realistic options,
-none of them taken yet:
+- `update_version.yml` is `workflow_dispatch` -- a maintainer triggers it by
+  hand to bump `package.json`.
+- `publish.yml` fires on any push to master that changes `package.json`, runs
+  the tests, and publishes.
+
+So publishing is automatic and bumping is a **human decision with no
+schedule**. The long gaps are what that produced historically; they are not a
+clock. The next release could be any time, and master still reads `0.11.11`,
+so none is staged today.
+
+**The timing so far is against us.** M-C was added to master in `812501ede` on
+**2026-09-09**. 0.11.11 was cut from `739a5e1fe` on **2026-07-28**, six weeks
+earlier -- so M-C missed it.
+
+**An earlier draft of this section said the next release was "a year or more
+away". That was an extrapolation stated as a forecast, and it was wrong to
+write down.** The history is a fact; the forecast is not one. What can honestly
+be said is that the wait is unbounded and unscheduled.
+
+**And it matters less than that framing implied, because npm is not the only
+channel.** `sim/README.md` documents `npm install pokemon-showdown` for the
+library, but a specific commit can be installed directly from the repository.
+The options, none of them taken yet:
 
 | option | cost |
 | --- | --- |
-| wait for an npm release | on the evidence, a year or more. Misses any near-term event |
-| install from a git ref | M-C immediately, but unpins `package-lock.json` -- every measurement in this project was made against 0.11.11, and a git install also brings 6 weeks of unrelated changes |
+| wait for an npm release | unbounded and unscheduled. May be soon, may be a year |
+| install from a pinned git commit | M-C now. Unpins from 0.11.11, which every measurement here was made against, and brings six weeks of unrelated upstream changes. Master also now needs Node >= 22.18 (we run 24.19) and has no `prepare` script, so it needs a manual `node build` |
 | stay on 0.11.11, collect M-C replays | what is happening now: the corpus grows, nothing can be simulated |
 
 The middle option is a real choice rather than a mistake, but it is the user's

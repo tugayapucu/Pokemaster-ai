@@ -101,12 +101,17 @@ What happens next, in order:
 - **Collecting M-C replays** (running, target 2000, unfiltered). Needs no
   engine, so it is the one thing possible today.
 - **Decide how to get M-C, because waiting for npm is not a route to it.**
-  Measured 2026-09-10: the last npm gaps were 671, 0, 684 and 516 days, and
-  M-C landed in master on 2026-09-09 — six weeks *after* 0.11.11 was cut. On
-  that cadence the next release is a year or more away. The real choice is
-  between staying pinned (no M-C at all) and installing from a specific commit
-  (M-C now, at the cost of every measurement's reproducibility against
-  0.11.11). **That is the user's call and it has not been made.**
+  Measured 2026-09-10: ten npm versions in twelve years, the last gaps 684 and
+  516 days, and M-C landed in master on 2026-09-09 — six weeks *after* 0.11.11
+  was cut, so it missed that release. Publishing is automated but the version
+  bump is a **manual, unscheduled** decision (`update_version.yml` is
+  `workflow_dispatch`), so the wait is unbounded rather than predictably long —
+  an earlier note here said "a year or more", which was an extrapolation
+  written as a forecast and should not have been. The real choice is between
+  staying pinned (no M-C at all) and installing from a specific commit (M-C
+  now, at the cost of every measurement's reproducibility against 0.11.11, plus
+  a manual `node build` since master has no `prepare` script).
+  **That is the user's call and it has not been made.**
 - **Before any bump: the base mod rotates.** `champions` means M-B in the
   installed build and **M-C** in master; `championsregma` is gone and
   `championsregmb` is new. So M-C's mod is *not* `championsregmc` — an earlier
