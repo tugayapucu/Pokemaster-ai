@@ -89,21 +89,24 @@ Next, in order:
   alphabetically first legal one. Fixed; re-harvested; terrain now up on turn
   one. Expanding Force had been priced at 80 base power instead of 156 in every
   evaluation on that pool.
-- **Implement the five abilities that actually affect damage.** From the
-  2026-09-10 audit, and none is urgent — every one is on a species with
-  near-zero play right now:
+- ~~Implement the abilities that affect damage~~ — **four of five done.**
+  Stakeout (x2 on the turn the target arrives), Steely Spirit (x1.5 Steel),
+  Grass Pelt (Def x1.5 on Grassy Terrain) and Aura Guard (halves contact
+  damage), each transcribed from `data/abilities.ts` and unit-tested. Two hooks
+  gained an argument they lacked — the defender's tenure and the terrain — both
+  threaded from every caller, and both defaulting to "no boost" so a caller
+  that does not track them is never handed a doubling.
 
-  | ability | effect | on |
-  | --- | --- | --- |
-  | Aura Guard | halves contact damage | Lucario-Mega-Z |
-  | Libero | user's type becomes the move's, so free STAB | Cinderace |
-  | Steely Spirit | x1.5 Steel, user and allies | Perrserker |
-  | Stakeout | x2 into a switching-in target | Mabosstiff, Thievul |
-  | Grass Pelt | Defense x1.5 on Grassy Terrain | Gogoat |
+  Steely Spirit is partial by design: the engine boosts the holder *and* its
+  partner, and nothing in the damage path is told who the ally is. It
+  under-predicts when wrong, which is the safe direction.
 
-  Plus **Normal Gem** (x1.3 one-shot) and **Rocky Helmet** (contact recoil).
-  Do these *after* the harness, so each one can be confirmed rather than
-  assumed.
+- **Libero** is the fifth and is a different size of job. It changes the user's
+  type mid-turn, so it needs a **volatile that carries a payload**:
+  `_on_minor_start` stores only the volatile's name and drops the type, and
+  `effective_types` handles Roost and nothing else. That touches typing,
+  grounding and STAB together. It is worth doing when something needs the
+  machinery — Cinderace fills 2 of 2,400 slots — and not before.
 - **Emergency Exit** (Golisopod, 95x) forces a switch at half HP. Behavioural
   rather than damage, so it changes opponent prediction, not numbers.
 - ~~Fix the differential harness's attribution~~ — **done, and it was worth

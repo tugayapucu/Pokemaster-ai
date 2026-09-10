@@ -1313,6 +1313,42 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Four of Reg M-C's damage abilities, and why the fifth waits (2026-09-10)
+
+Done *after* the harness fix, deliberately, so each could be checked rather
+than assumed. All four transcribed from `data/abilities.ts`:
+
+| ability | engine rule | where it landed |
+| --- | --- | --- |
+| Stakeout | `onModifyAtk`/`onModifySpA`: `!defender.activeTurns` → x2 | attacking stat |
+| Steely Spirit | `onAllyBasePower`: Steel → x1.5 | base power |
+| Grass Pelt | `onModifyDef`: Grassy Terrain → x1.5 | defending stat |
+| Aura Guard | `onSourceModifyDamage`: contact → x0.5 | damage taken, beside Fluffy |
+
+Two hooks gained an argument they did not have — the **defender's tenure** for
+Stakeout and the **terrain** for Grass Pelt — threaded from every caller so
+Stakeout is not dead code. Both default to *no boost*: a caller that does not
+track them is never handed a doubling, because over-predicting damage is how a
+recommendation talks someone into an attack that does not knock out.
+
+**Steely Spirit is partial and says so.** The engine's hook covers the holder
+*and* its partner; nothing in the damage path is told who the attacker's ally
+is. It under-predicts when wrong, which is the safer direction, and the comment
+records it as a known omission rather than leaving it to be rediscovered.
+
+**Libero is a different size of job.** It rewrites the user's type mid-turn, so
+it needs a volatile that carries a *payload* — `_on_minor_start` stores only a
+volatile's name and drops the type in `args[2]`, and `effective_types` handles
+Roost and nothing else. Typing, grounding and STAB all read that, so it is one
+change across three. Cinderace fills 2 of 2,400 slots in the harvested pool, so
+it waits for something that needs the machinery.
+
+**What the harness could and could not confirm.** 0046 is unchanged at 95.5% /
+93.7%, which establishes **no regression** — not that the abilities fire in
+play, since none of their carriers appear in the pool at all. The unit tests
+carry that half. Worth stating plainly, because "the measurement did not move"
+is easy to read as "the change works".
+
 ### The instrument was most of the error (2026-09-10)
 
 0046 needed three runs to produce one number, and the third only worked after
