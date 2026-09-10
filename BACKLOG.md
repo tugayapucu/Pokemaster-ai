@@ -52,83 +52,37 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
-### Regulation M-C: collect now, measure when it is simulatable
+### Regulation M-C is installed. What is left is the corpus
 
-**Moved to the top on 2026-09-10, on the user's instruction that M-C is here.**
-The ordering question raised on 2026-09-07 is settled by events rather than by
-preference: this now has a live deadline behind it and the scripted-opponent
-item does not. Say so if it should go back.
+**Done 2026-09-10.** `pokemon-showdown` is pinned to `d849b22` instead of
+`^0.11.11`, because Frankfurt is M-C and npm had no route to it. `play`,
+`review` and `position` all take `--regulation m-c`, which is now the default.
 
-**What was checked on 2026-09-10, and only what was checked.**
+Measured, not assumed: M-C is a strict **superset** of M-B — 392 species to
+357, 166 items to 148, 81 Mega stones to 75, nothing removed — with an
+identical rule table. So an M-B-legal team is legal in M-C.
 
-| source | state |
-| --- | --- |
-| smogon master `config/formats.ts` | **VGC 2026 Reg M-C, Reg M-C (Bo3) and BSS Reg M-C are there** |
-| npm `pokemon-showdown` | latest is 0.11.11, published 2026-07-28 — **the version already installed** |
-| the installed simulator | M-A and M-B only |
-| the live replay server | **M-C games exist, newest dated today** |
+The mod-rotation guard written the day before caught the upgrade exactly as
+designed: eight failures, all of them the rotation, naming every regulation
+that needed changing.
 
-So M-C is real, is being played, and **cannot be simulated here yet**. That gap
-between "exists upstream" and "installable" is exactly the case the watch was
-built to detect, and the only preparation available inside it is collecting
-replays — which needs no engine.
+What is left, in order:
 
-Also observed: **M-A has rotated out of master's `formats.ts`** while remaining
-in the installed build. Nothing depends on that yet; it is recorded because a
-regulation disappearing upstream is how a future `--regulation m-a` stops being
-reproducible.
-
-**The ladder is one day old, and that decides what this corpus is for.** A
-sample of 25 listings gave 17 rated games:
-
-```
-  min 1000   median 1055   max 1182   at or above 1500: 0
-```
-
-Our standing bar is 1500+ on *both* players, which would have kept nothing
-while downloading thousands of games to find that out. So collection is running
-unfiltered (`--min-rating 0`), and the manifest records it.
-
-**That makes this corpus unusable as an agreement signal.** Agreement is a
-ranking signal for judgement calls and is only worth anything against players
-whose judgement is worth ranking against; 1000-1100 is the rating everyone
-starts at, not a level of play. What the corpus *is* good for is what the
-format contains and what gets used — facts about the dex and the metagame, not
-about correct play.
-
-What happens next, in order:
-
-- **Collecting M-C replays** (running, target 2000, unfiltered). Needs no
-  engine, so it is the one thing possible today.
-- **Decide how to get M-C, because waiting for npm is not a route to it.**
-  Measured 2026-09-10: ten npm versions in twelve years, the last gaps 684 and
-  516 days, and M-C landed in master on 2026-09-09 — six weeks *after* 0.11.11
-  was cut, so it missed that release. Publishing is automated but the version
-  bump is a **manual, unscheduled** decision (`update_version.yml` is
-  `workflow_dispatch`), so the wait is unbounded rather than predictably long —
-  an earlier note here said "a year or more", which was an extrapolation
-  written as a forecast and should not have been. The real choice is between
-  staying pinned (no M-C at all) and installing from a specific commit (M-C
-  now, at the cost of every measurement's reproducibility against 0.11.11, plus
-  a manual `node build` since master has no `prepare` script).
-  **That is the user's call and it has not been made.**
-- **Before any bump: the base mod rotates.** `champions` means M-B in the
-  installed build and **M-C** in master; `championsregma` is gone and
-  `championsregmb` is new. So M-C's mod is *not* `championsregmc` — an earlier
-  note here guessed that and was wrong. An upgrade silently redefines what
-  `REGULATION_M_B.mod` points at; `tests/integration/test_regulation_mods.py`
-  now fails the moment it happens, and every `data/dex-*.json` must be deleted
-  on a bump because the filename is the only thing that would still match.
-- **A second, quality-filtered collection once the ladder settles.** Same
-  command, `--min-rating 1500`. The replays persist, so nothing is lost by
-  waiting for the players to sort themselves out.
-- **Re-collect the *decision* to re-run measurements.** Engine-checked results
-  (damage 93.9%, turn order 97.8%, knockouts 99.0%) test the engine and should
-  transfer. The fitted and agreement-based ones were measured on an M-B corpus
-  against 1500-1850 players and are not known to hold. Decide the list before
-  the mod lands so that day is a run, not a design session.
-- **Not yet, and deliberately:** anything that assumes M-C's dex, rules or
-  metagame. The mod is the only thing that will settle those.
+- **The M-C corpus is 1000-1182 rated.** 2,000 replays collected, unfiltered,
+  because the ladder was one day old. Fine for what the format *contains*;
+  useless as an agreement signal. Re-collect at `--min-rating 1500` once the
+  ladder settles — same command, and the replays persist.
+- **Nothing is harvested for M-C yet.** `data/pool-eval.txt` is M-B teams. They
+  are legal in M-C, but they are not an M-C metagame, so any evaluation using
+  that pool measures M-B teams playing under M-C rules.
+- **Re-run the engine-checked measurements on the pinned build.** Damage, turn
+  order and the knockout claim were all measured on 0.11.11. Self-play damage
+  accuracy is *identical* between M-B and M-C on the new build, so nothing is
+  anomalous — but the absolute figure from an ad-hoc harness (73.0%) does not
+  match the published 93.9%, and the original setup has not been located. Find
+  it before quoting either number again.
+- **`review --regulation m-c` has never been run.** The corpus exists and the
+  reconstruction stack has never seen an M-C replay.
 
 ### Value a game by how strong its players were, instead of a cutoff
 
