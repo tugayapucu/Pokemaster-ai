@@ -468,3 +468,70 @@ def test_naming_a_format_takes_only_that_one(tmp_path):
 def test_naming_a_format_that_is_not_there_gives_nothing_rather_than_everything(tmp_path):
     _write_corpus(tmp_path, [("a-1", "regmb")])
     assert load_all(tmp_path, "regmz").replays == []
+
+
+# -- choosing the rating bar at use rather than at collection ------------------
+
+
+def _rated_corpus(directory, entries):
+    """`entries` is (replay_id, minimum_rating or None)."""
+    rows = []
+    for replay_id, rating in entries:
+        p1 = f"|player|p1|alice||{rating}" if rating else "|player|p1|alice||"
+        p2 = f"|player|p2|bob||{rating}" if rating else "|player|p2|bob||"
+        (directory / f"{replay_id}.json").write_text(
+            json.dumps({
+                "id": replay_id,
+                "formatid": "regmc",
+                "players": ["alice", "bob"],
+                "uploadtime": 1,
+                "log": "\n".join([p1, p2, "|turn|1"]),
+            }),
+            encoding="utf-8",
+        )
+        rows.append(replay_id)
+    manifest = CollectionManifest(
+        schema_version=SCHEMA_VERSION,
+        format_id="regmc",
+        source="test",
+        collected_at="2026-09-11T00-00-00+00-00",
+        git_commit=None,
+        min_rating=None,
+        exclude_bots=True,
+        usage_note="test",
+        replay_ids=tuple(rows),
+    )
+    manifest.save(manifest.default_path(directory))
+
+
+def test_no_bar_keeps_everything(tmp_path):
+    _rated_corpus(tmp_path, [("a", 1000), ("b", 1600), ("c", None)])
+    assert len(load_all(tmp_path).replays) == 3
+
+
+def test_a_bar_keeps_only_what_clears_it(tmp_path):
+    _rated_corpus(tmp_path, [("a", 1000), ("b", 1600), ("c", 1500)])
+    kept = load_all(tmp_path, min_rating=1500).replays
+    assert sorted(r.metadata.replay_id for r in kept) == ["b", "c"]
+
+
+def test_an_unrated_replay_is_dropped_by_a_bar(tmp_path):
+    """"We could not check" is not "it passed"."""
+    _rated_corpus(tmp_path, [("a", 1600), ("c", None)])
+    kept = load_all(tmp_path, min_rating=1500).replays
+    assert [r.metadata.replay_id for r in kept] == ["a"]
+
+
+def test_the_manifest_reports_the_bar_that_was_actually_applied(tmp_path):
+    """The collection ran unfiltered. Saying so after filtering at load would
+    understate the set the manifest describes -- and the manifest is the only
+    record of what a corpus is."""
+    _rated_corpus(tmp_path, [("a", 1000), ("b", 1600)])
+    assert load_all(tmp_path).manifest.min_rating is None
+    assert load_all(tmp_path, min_rating=1500).manifest.min_rating == 1500
+
+
+def test_a_bar_combines_with_a_format(tmp_path):
+    _rated_corpus(tmp_path, [("a", 1600), ("b", 1000)])
+    assert len(load_all(tmp_path, "regmc", 1500).replays) == 1
+    assert load_all(tmp_path, "regmb", 1500).replays == []

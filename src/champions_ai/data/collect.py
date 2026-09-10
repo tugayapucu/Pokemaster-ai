@@ -370,7 +370,9 @@ def manifest_paths(cache_dir: Path) -> list[Path]:
     return sorted(cache_dir.glob("manifest*.json"))
 
 
-def load_all(cache_dir: Path, format_id: str | None = None) -> Collection:
+def load_all(
+    cache_dir: Path, format_id: str | None = None, min_rating: int | None = None
+) -> Collection:
     """Every replay collected across every run, deduplicated by id.
 
     The manifest returned is a union: its counts are summed and its filters
@@ -388,6 +390,18 @@ def load_all(cache_dir: Path, format_id: str | None = None) -> Collection:
 
     A single-format corpus needs no argument, which is what every caller
     written before there was a second format expects.
+
+    **`min_rating` filters here rather than at collection**, and that is the
+    point of it. Ratings are not in the replay listing, so a rating bar costs
+    one download per candidate whether or not it keeps the result -- filtering
+    at collection therefore throws away data already paid for, and cannot be
+    undone. Collecting broadly and choosing the bar at *use* keeps that choice
+    open, which matters because a corpus is used for several things that want
+    different bars: 0044 found agreement flat across 800 Elo, while a team pool
+    plainly wants strong players.
+
+    An unrated replay is dropped when a bar is given. "We could not check" is
+    not the same as "it passed".
     """
     seen: dict[str, Replay] = {}
     manifests = [CollectionManifest.load(path) for path in manifest_paths(cache_dir)]
@@ -418,6 +432,13 @@ def load_all(cache_dir: Path, format_id: str | None = None) -> Collection:
             if replay.metadata.format_id == format_id
         }
 
+    if min_rating is not None:
+        seen = {
+            replay_id: replay
+            for replay_id, replay in seen.items()
+            if replay.metadata.is_high_level(min_rating)
+        }
+
     ratings = [m.min_rating for m in manifests]
     combined = CollectionManifest(
         schema_version=manifests[-1].schema_version,
@@ -425,8 +446,16 @@ def load_all(cache_dir: Path, format_id: str | None = None) -> Collection:
         source=manifests[-1].source,
         collected_at=manifests[-1].collected_at,
         git_commit=manifests[-1].git_commit,
-        # The loosest bar any run used, so nothing claims to be stricter than it is.
-        min_rating=None if any(r is None for r in ratings) else min(ratings),
+        # The loosest bar any run used, so nothing claims to be stricter than
+        # it is -- unless a bar was applied here, which is stricter than any
+        # of them and is what the returned set actually satisfies. A manifest
+        # that reported the collection filter after a load filter had been
+        # applied would understate the set it describes.
+        min_rating=(
+            min_rating
+            if min_rating is not None
+            else (None if any(r is None for r in ratings) else min(ratings))
+        ),
         exclude_bots=all(m.exclude_bots for m in manifests),
         usage_note=USAGE_NOTE,
         replay_ids=tuple(seen),
