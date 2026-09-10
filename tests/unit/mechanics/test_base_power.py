@@ -14,7 +14,7 @@ import pytest
 
 from champions_ai.dex import BaseStats, MoveInfo, SpeciesInfo
 from champions_ai.mechanics import dynamic_base_power
-from champions_ai.mechanics.base_power import UNMODELLED_DEFAULT
+from champions_ai.mechanics.base_power import UNMODELLED_DEFAULT, conditional_multiplier
 
 
 def _move(move_id, base_power=0, category="Physical"):
@@ -300,3 +300,45 @@ def test_the_conditionals_we_do_not_model_are_named():
     """Each for a stated reason, so the list is a decision and not an oversight."""
     for move_id, static in (("ficklebeam", 80), ("lashout", 75), ("gravapple", 90)):
         assert dynamic_base_power(_move(move_id, base_power=static)) == static
+
+
+def test_grassy_terrain_halves_earthquake_on_a_grounded_target():
+    """Grassy Terrain's second rule, missed until 0046.
+
+    Rillaboom has Grassy Surge, so the terrain is up the moment it is sent out,
+    and Earthquake is a staple. Every one was predicted at double its real
+    damage while Rillaboom was on the field -- which cost nine points of damage
+    accuracy across every hit involving Reg M-C's new species.
+    """
+    earthquake = MoveInfo(
+        move_id="earthquake", name="Earthquake", type="Ground", category="Physical",
+        base_power=100, accuracy=100, priority=0, target="allAdjacent",
+    )
+    assert conditional_multiplier(earthquake, terrain="grassyterrain") == 0.5
+    assert conditional_multiplier(earthquake, terrain=None) == 1.0
+    assert conditional_multiplier(earthquake, terrain="electricterrain") == 1.0
+
+
+def test_a_flying_target_escapes_the_grassy_weakening():
+    """It reads the *defender's* footing, not the attacker's -- the opposite of
+    the boost beside it, which follows the attacker."""
+    earthquake = MoveInfo(
+        move_id="earthquake", name="Earthquake", type="Ground", category="Physical",
+        base_power=100, accuracy=100, priority=0, target="allAdjacent",
+    )
+    assert conditional_multiplier(
+        earthquake, terrain="grassyterrain", defender_grounded=False
+    ) == 1.0
+    # ...and an ungrounded *attacker* changes nothing about it.
+    assert conditional_multiplier(
+        earthquake, terrain="grassyterrain", attacker_grounded=False
+    ) == 0.5
+
+
+def test_the_grass_boost_and_the_ground_weakening_are_separate_rules():
+    """Both live on Grassy Terrain and neither implies the other."""
+    woodhammer = MoveInfo(
+        move_id="woodhammer", name="Wood Hammer", type="Grass", category="Physical",
+        base_power=120, accuracy=100, priority=0, target="normal",
+    )
+    assert conditional_multiplier(woodhammer, terrain="grassyterrain") == 1.3

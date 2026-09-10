@@ -137,6 +137,20 @@ TERRAIN_BOOSTED_TYPES: dict[str, str] = {
 }
 TERRAIN_BOOST_MULTIPLIER = 1.3
 
+# Grassy Terrain's *other* rule, and the one this project missed until 0046:
+#
+#     const weakenedMoves = ['earthquake', 'bulldoze', 'magnitude'];
+#     if (weakenedMoves.includes(move.id) && defender.isGrounded() && ...) {
+#         return this.chainModify(0.5);
+#
+# Transcribed from `data/moves.ts`. It matters far more than its size suggests:
+# Rillaboom has Grassy Surge, so the terrain goes up the moment it is sent out,
+# and Earthquake is a staple of the format. Every one of them was predicted at
+# double its real damage whenever Rillaboom was on the field.
+GRASSY_TERRAIN = "grassyterrain"
+GRASSY_WEAKENED_MOVES = frozenset({"earthquake", "bulldoze", "magnitude"})
+GRASSY_WEAKENED_MULTIPLIER = 0.5
+
 # Two moves that key off a terrain rather than sharing its type.
 # Both check `source.isGrounded()`, so both follow the attacker.
 TERRAIN_SPECIFIC_MOVES: dict[str, str] = {
@@ -235,6 +249,7 @@ def dynamic_base_power(
                 terrain=terrain,
                 weather=weather,
                 attacker_grounded=attacker_grounded,
+                defender_grounded=defender_grounded,
             )
         ),
     )
@@ -249,6 +264,9 @@ def conditional_multiplier(
     terrain: str | None = None,
     weather: str | None = None,
     attacker_grounded: bool = True,
+    # Grassy Terrain's weakening reads the *target's* footing, so this needs
+    # its own argument rather than reusing the attacker's.
+    defender_grounded: bool = True,
 ) -> float:
     """What the situation multiplies this move's base power by.
 
@@ -273,6 +291,16 @@ def conditional_multiplier(
         multiplier *= SOLAR_WEAKENED_MULTIPLIER
     if attacker_grounded and TERRAIN_BOOSTED_TYPES.get(terrain or "") == move.type:
         multiplier *= TERRAIN_BOOST_MULTIPLIER
+    # Grassy Terrain does not only boost Grass: it **halves** the three ground
+    # moves that shake the field, for a grounded target. Reads the *defender's*
+    # footing, not the attacker's, like Rising Voltage below and unlike the
+    # boost above.
+    if (
+        terrain == GRASSY_TERRAIN
+        and move_id in GRASSY_WEAKENED_MOVES
+        and defender_grounded
+    ):
+        multiplier *= GRASSY_WEAKENED_MULTIPLIER
     # `terrain is not None` first: without it this is `None == None` for
     # every ordinary move on a bare field, and multiplies all of them.
     # Weather Ball doubles in any weather, on top of changing its type.
