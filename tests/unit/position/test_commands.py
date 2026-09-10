@@ -253,3 +253,116 @@ def test_every_side_and_field_condition_is_one_the_agent_reads():
 
     assert SCREEN_CONDITIONS <= set(SIDE_CONDITIONS)
     assert set(FIELD_CONDITIONS.values()) <= set(PSEUDO_WEATHER_VALUE)
+
+
+# -- what you may legally pick, which is the only wrong-answer gap -------------
+
+
+class _RestrictionDex(_Dex):
+    """Adds a moveset with a status move in it, and move categories."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.moves.update(
+            {
+                "flareblitz": _Move("Flare Blitz"),
+                "protect": _Move("Protect"),
+                "fakeout": _Move("Fake Out"),
+                "partingshot": _Move("Parting Shot"),
+            }
+        )
+        self._category = {
+            "flareblitz": "Physical",
+            "fakeout": "Physical",
+            "protect": "Status",
+            "partingshot": "Status",
+            "tackle": "Physical",
+        }
+
+    def get_move(self, move_id):
+        move = self.moves[move_id]
+        move.category = self._category.get(move_id, "Physical")
+        return move
+
+
+MOVES = ("flareblitz", "protect", "fakeout", "partingshot")
+
+
+@pytest.fixture
+def restricted():
+    """Our lead has four moves, two of them status."""
+    own = Side(
+        team=(
+            _mon("blaziken").model_copy(
+                update={
+                    "pokemon_set": _mon("blaziken").pokemon_set.model_copy(
+                        update={"moves": MOVES}
+                    )
+                }
+            ),
+            _mon("torkoal"),
+        ),
+        active_slots=(0, 1),
+    )
+    base = Position(regulation=REGULATION_M_B, own=own, their_team=THEIR_SIX)
+    return base.with_them_out(0, "kingambit")
+
+
+@pytest.fixture
+def rdex():
+    return _RestrictionDex()
+
+
+def test_a_choice_lock_leaves_exactly_one_move(restricted, rdex):
+    """The gap this closes. Without it the shortlist offers three moves the
+    engine would refuse outright -- a confident wrong answer, not a missing
+    one."""
+    after = _apply(restricted, rdex, "blaziken locked flare blitz")
+    assert after.own.team[0].disabled_moves == frozenset(MOVES) - {"flareblitz"}
+
+
+def test_encore_is_the_same_shape_as_a_choice_lock(restricted, rdex):
+    """Different rules, identical consequence for what may be submitted."""
+    a = _apply(restricted, rdex, "blaziken locked protect")
+    b = _apply(restricted, rdex, "blaziken encore protect")
+    assert a.own.team[0].disabled_moves == b.own.team[0].disabled_moves
+
+
+def test_a_taunt_takes_the_status_moves_and_leaves_the_rest(restricted, rdex):
+    after = _apply(restricted, rdex, "blaziken taunt")
+    assert after.own.team[0].disabled_moves == frozenset({"protect", "partingshot"})
+
+
+def test_disable_takes_one_move_and_stacks(restricted, rdex):
+    after = _apply(restricted, rdex, "blaziken disable protect")
+    assert after.own.team[0].disabled_moves == frozenset({"protect"})
+    both = _apply(after, rdex, "blaziken disable fake out")
+    assert both.own.team[0].disabled_moves == frozenset({"protect", "fakeout"})
+
+
+def test_free_clears_everything(restricted, rdex):
+    locked = _apply(restricted, rdex, "blaziken locked flare blitz")
+    assert _apply(locked, rdex, "blaziken free").own.team[0].disabled_moves == frozenset()
+
+
+def test_a_move_it_does_not_have_is_refused(restricted, rdex):
+    """Resolving against the whole dex would accept Earthquake here, disable
+    nothing, and read on screen as though it had worked."""
+    with pytest.raises(ValueError, match="no move matches"):
+        _apply(restricted, rdex, "blaziken locked earthquake")
+
+
+def test_restrictions_are_only_tracked_for_our_side(restricted, rdex):
+    """We submit nothing for the opponent, so their Taunt changes no choice we
+    could make. Modelling it would be a different thing, and it must not be
+    smuggled in through a legality field."""
+    with pytest.raises(ValueError, match="only tracked for your side"):
+        _apply(restricted, rdex, "their gambit taunt")
+
+
+def test_a_restriction_ends_when_the_pokemon_leaves_the_field(restricted, rdex):
+    """Choice lock, Encore, Taunt and Disable all end on a switch out. Leaving
+    them on the bench is the same bug shape as stale stat stages."""
+    locked = _apply(restricted, rdex, "blaziken locked flare blitz")
+    switched = _apply(locked, rdex, "we torkoal")
+    assert switched.own.team[0].disabled_moves == frozenset()

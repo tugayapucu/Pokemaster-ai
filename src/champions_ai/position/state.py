@@ -17,6 +17,7 @@ above validates a typed line by *applying* it, and an edit that turns out to be
 illegal has to leave the position it came from untouched.
 """
 
+from collections.abc import Iterable
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -252,6 +253,51 @@ class Position(BaseModel, frozen=True):
             raise ValueError("our own abilities come from the team sheet")
         return self._with_theirs(target.index, revealed_ability=ability)
 
+    def restrict(self, target: Target, moves: Iterable[str]) -> "Position":
+        """Disable moves on one of ours -- Choice lock, Encore, Taunt, Disable.
+
+        Ours only. `disabled_moves` is what `legal_actions` reads to decide
+        what may be submitted (ADR 0003), and we submit nothing for the
+        opponent, so an opposing Taunt changes nothing we could act on. It
+        would be a *modelling* refinement, which is a different thing and
+        should not be smuggled in through a legality field.
+
+        Everything named must be in the moveset. A Pokemon cannot be locked
+        into a move it does not have, and accepting one would disable nothing
+        while reading on screen as though it had.
+        """
+        if target.side == THEM:
+            raise ValueError(
+                "restrictions are only tracked for your side, because they only "
+                "change what you may pick"
+            )
+        known = set(self.own.team[target.index].selectable_moves)
+        wanted = set(moves)
+        unknown = wanted - known
+        if unknown:
+            name = self.species_at(target)
+            raise ValueError(f"{name} does not have {', '.join(sorted(unknown))}")
+        return self._with_own(target.index, disabled_moves=frozenset(wanted))
+
+    def locked_into(self, target: Target, move: str) -> "Position":
+        """Choice lock or Encore: everything *except* this one.
+
+        The two are different rules with the same consequence for what may be
+        picked, so they share a representation rather than each inventing one.
+        """
+        if target.side == THEM:
+            raise ValueError("restrictions are only tracked for your side")
+        known = self.own.team[target.index].selectable_moves
+        if move not in known:
+            raise ValueError(f"{self.species_at(target)} does not have {move}")
+        return self.restrict(target, (m for m in known if m != move))
+
+    def unrestricted(self, target: Target) -> "Position":
+        """The lock ended, the Encore ran out, the Taunt wore off."""
+        if target.side == THEM:
+            raise ValueError("restrictions are only tracked for your side")
+        return self._with_own(target.index, disabled_moves=frozenset())
+
     def with_them_out(self, slot: int, species: str) -> "Position":
         """Put an opposing species into a field slot.
 
@@ -316,7 +362,14 @@ class Position(BaseModel, frozen=True):
         position = self.model_copy(update={"own": side})
         if leaving is not None and leaving != index:
             position = position._with_own(
-                leaving, boosts=Boosts(), volatile_conditions=frozenset(), protect_streak=0
+                leaving,
+                boosts=Boosts(),
+                volatile_conditions=frozenset(),
+                protect_streak=0,
+                # A Choice lock, an Encore, a Taunt and a Disable all end when
+                # the Pokemon leaves the field. Leaving them on the bench is
+                # the same bug shape as the stat stages above.
+                disabled_moves=frozenset(),
             )
         return position
 

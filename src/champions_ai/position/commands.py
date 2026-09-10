@@ -62,6 +62,10 @@ STATS = {"atk": "atk", "attack": "atk", "def": "def", "defense": "def", "defence
          "spe": "spe", "speed": "spe", "acc": "accuracy", "accuracy": "accuracy",
          "eva": "evasion", "evasion": "evasion"}
 CLEAR_STATUS = {"ok", "healthy", "cured", "none", "clear"}
+# Choice lock and Encore restrict a Pokemon to one move. Different rules,
+# identical consequence for what may legally be submitted.
+LOCKING = ("locked", "lock", "encore", "encored", "choiced")
+RESTRICTING = (*LOCKING, "taunt", "disable", "disabled", "free", "unlocked", "released")
 
 OURS = {"my", "our", "we", "us"}
 THEIRS = {"their", "theirs", "them", "they", "opp", "opponent"}
@@ -76,6 +80,13 @@ HELP = """
     char saw earthquake      a move you watched it use
     char item sitrus / char item gone
     char ability intimidate
+
+  Yours only -- what you may legally pick:
+
+    char locked flare blitz  Choice-locked, or Encored, into one move
+    char taunt               every status move off
+    char disable protect     one move off
+    char free                the lock ended, the Taunt wore off
 
     my char 55         say which side when both have one
 
@@ -160,6 +171,29 @@ def _stage(tokens: list[str]) -> tuple[str, int] | None:
     return None
 
 
+def _is_status(dex: Dex, move_id: str) -> bool:
+    """Whether a Taunt would stop this move. Asked of the dex, never guessed --
+    a move miscategorised here is one silently left available or silently
+    removed, and neither shows on screen."""
+    try:
+        return dex.get_move(move_id).category == "Status"
+    except KeyError:
+        return False
+
+
+def _own_move(position: Position, dex: Dex, target: Target, text: str) -> str:
+    """A move id, resolved against *this Pokemon's own four*.
+
+    Narrowed on purpose. A Pokemon cannot be locked into a move it does not
+    have, and resolving against the whole dex would accept one -- disabling
+    nothing while reading on screen as though it had worked.
+    """
+    if target.side == THEM:
+        raise ValueError("restrictions are only tracked for your side")
+    known = position.own.team[target.index].selectable_moves
+    return resolve_move(dex, text, within=known)
+
+
 def _edit(position: Position, dex: Dex, target: Target, rest: list[str]) -> Outcome:
     """Everything that changes one Pokemon."""
     name = position.species_at(target)
@@ -218,6 +252,43 @@ def _edit(position: Position, dex: Dex, target: Target, rest: list[str]) -> Outc
         return Outcome(
             position=position.with_their_ability(target, ability),
             message=f"{name} has {ability}",
+        )
+
+    if head in LOCKING:
+        # Choice lock and Encore are different rules with the same consequence
+        # for what may be picked: one move, and nothing else.
+        if len(rest) < 2:
+            raise ValueError(f"{head} into what? `char {head} flare blitz`")
+        move = _own_move(position, dex, target, " ".join(rest[1:]))
+        return Outcome(
+            position=position.locked_into(target, move),
+            message=f"{name} can only use {dex.get_move(move).name}",
+        )
+
+    if head == "taunt":
+        moves = position.own.team[target.index].selectable_moves
+        status = [m for m in moves if _is_status(dex, m)]
+        if not status:
+            raise ValueError(f"{name} has no status moves, so a Taunt changes nothing")
+        return Outcome(
+            position=position.restrict(target, status),
+            message=f"{name} is taunted: {len(status)} status move(s) off",
+        )
+
+    if head in ("disable", "disabled"):
+        if len(rest) < 2:
+            raise ValueError("disable what? `char disable protect`")
+        move = _own_move(position, dex, target, " ".join(rest[1:]))
+        already = position.own.team[target.index].disabled_moves
+        return Outcome(
+            position=position.restrict(target, already | {move}),
+            message=f"{name} cannot use {dex.get_move(move).name}",
+        )
+
+    if head in ("free", "unlocked", "released"):
+        return Outcome(
+            position=position.unrestricted(target),
+            message=f"{name} can use everything again",
         )
 
     raise ValueError(f"did not understand {' '.join(rest)!r} for {name}. ? for the list.")
@@ -339,6 +410,7 @@ def apply(position: Position, dex: Dex, line: str) -> Outcome:
         # The difference is whether what follows the name is an edit.
         if len(rest) > 1 and (rest[1].isdigit() or rest[1] == "ko" or rest[1] in STATUSES
                               or rest[1] in ("saw", "item", "ability") or rest[1] in CLEAR_STATUS
+                              or rest[1] in RESTRICTING
                               or _stage(rest[1:]) is not None or rest[1] in STATS
                               or rest[1].lstrip("+-").isdigit()):
             return _edit(position, dex, _target(position, dex, rest[0], side), rest[1:])
