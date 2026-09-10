@@ -245,3 +245,57 @@ def test_harvesting_is_reproducible(seed):
     first = harvest_teams([R()], seed=seed, fallback_abilities={})
     second = harvest_teams([R()], seed=seed, fallback_abilities={})
     assert first == second
+
+
+class TestAbilityRevealedAsAnEffectsSource:
+    """An ability that names itself as the *source* of an effect.
+
+    Reg M-C made this expensive. Harvest read only `|-ability|` lines, so every
+    terrain and weather setter fell through to the fallback -- the
+    alphabetically first legal ability. Rillaboom survived that by luck, since
+    Grassy Surge sorts before Overgrow. Indeedee-F did not: Own Tempo sorts
+    before Psychic Surge, so all 102 in the harvested M-C pool ran the wrong
+    ability and never set the terrain they exist to set.
+
+    Indeedee-F also shows why the `[of]` ident has to go through the nickname
+    map: the protocol calls it `Indeedee` while the species is `Indeedee-F`.
+    """
+
+    LOG = _log(
+        "|poke|p1|Indeedee-F, L50, F|",
+        "|poke|p2|Torkoal, L50, F|",
+        "|switch|p1a: Indeedee|Indeedee-F, L50, F|100/100",
+        "|switch|p2a: Turtle|Torkoal, L50, F|100/100",
+        "|-fieldstart|move: Psychic Terrain|[from] ability: Psychic Surge|[of] p1a: Indeedee",
+        "|-weather|SunnyDay|[from] ability: Drought|[of] p2a: Turtle",
+        "|turn|1",
+        "|move|p1a: Indeedee|Expanding Force|p2a: Turtle",
+        "|move|p2a: Turtle|Eruption|p1a: Indeedee",
+    )
+
+    def _evidence(self):
+        class R:
+            log = TestAbilityRevealedAsAnEffectsSource.LOG
+
+        return gather_evidence([R()])
+
+    def test_a_terrain_setter_is_credited_with_its_ability(self):
+        evidence = self._evidence()
+        assert "psychicsurge" in evidence["indeedeef"].abilities
+
+    def test_the_of_ident_resolves_through_the_nickname_map(self):
+        """`[of] p1a: Indeedee` names the *forme's* base name. Attributing it
+        literally would credit the wrong species -- or none at all."""
+        evidence = self._evidence()
+        assert "indeedeef" in evidence
+        assert "psychicsurge" not in evidence.get("indeedee", _Empty()).abilities
+
+    def test_a_weather_setter_is_credited_too(self):
+        """Same protocol shape, different tag: `-weather` rather than
+        `-fieldstart`. The pattern reads the `[from]`/`[of]` pair, not the tag."""
+        evidence = self._evidence()
+        assert "drought" in evidence["torkoal"].abilities
+
+
+class _Empty:
+    abilities: dict = {}

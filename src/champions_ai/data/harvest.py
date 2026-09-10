@@ -54,6 +54,19 @@ _POKE = re.compile(r"^\|poke\|(p[12])\|([^,|]+)")
 # players rename their Pokemon.
 _SWITCH = re.compile(r"^\|(?:switch|drag|replace)\|([^|]+)\|([^,|]+)")
 _ABILITY = re.compile(r"^\|-ability\|([^|]+)\|([^|]+)")
+# The *other* way an ability reveals itself, and the one this missed until
+# 2026-09-10: an effect that names its source rather than announcing itself.
+#
+#   |-fieldstart|move: Psychic Terrain|[from] ability: Psychic Surge|[of] p1b: Indeedee
+#   |-weather|Sunny Day|[from] ability: Drought|[of] p2a: Torkoal
+#
+# Reading only `|-ability|` left every terrain and weather setter to the
+# fallback below, which picks the alphabetically first legal ability. Rillaboom
+# survived that by luck -- Grassy Surge sorts before Overgrow -- and Indeedee-F
+# did not: Own Tempo sorts before Psychic Surge, so all 102 of them in the
+# harvested pool ran the wrong ability and never set the terrain their whole
+# purpose is to set.
+_ABILITY_SOURCE = re.compile(r"\[from\] ability: ([^|]+)\|\[of\] ([^|]+)")
 _ITEM = re.compile(r"^\|-(?:item|enditem)\|([^|]+)\|([^|]+)")
 
 MOVES_PER_POKEMON = 4
@@ -145,6 +158,12 @@ def gather_evidence(replays: list[Replay]) -> dict[str, SpeciesEvidence]:
                 species = names.get((_side_of(ident), _nickname_of(ident)))
                 if species:
                     evidence[species].abilities[to_id(ability.group(2))] += 1
+            sourced = _ABILITY_SOURCE.search(line)
+            if sourced:
+                ident = sourced.group(2).strip()
+                species = names.get((_side_of(ident), _nickname_of(ident)))
+                if species:
+                    evidence[species].abilities[to_id(sourced.group(1))] += 1
             item = _ITEM.match(line)
             if item:
                 ident = item.group(1).strip()
