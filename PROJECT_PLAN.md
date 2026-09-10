@@ -1313,6 +1313,48 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### The instrument was most of the error (2026-09-10)
+
+0046 needed three runs to produce one number, and the third only worked after
+the differential harness was fixed. The fix is the finding.
+
+| run | old arm | new arm | gap | what was wrong |
+| --- | --- | --- | --- | --- |
+| 1 | 94.1% | 84.9% | **−9.2%** | Mega contamination — the exclusion tested the species *name*, and the lookup resolved *by* species |
+| 2 | 80.8% | 83.2% | +2.4% | Mega excluded properly, but slot resolution lost every mid-turn switch |
+| 3 | **95.5%** | **93.7%** | −1.9% | attribution follows the chunk; both arms land on the reference figure |
+
+**The harness took one snapshot of each side per turn** and resolved every
+protocol ident in that turn against it. Within a single turn a Pokemon can
+switch, faint and be replaced, or Mega Evolve — and each of those scores the hit
+against the wrong Pokemon, silently, because the wrong Pokemon still produces a
+plausible number.
+
+`DamageCollector` already corrected its snapshot for exactly one within-turn
+change: stat stages, added because "a hit landing after a Swords Dance was
+scored against stale stages". Occupancy is the same class of problem and now
+works the same way — the collector follows `switch`, `drag`, `replace` and
+`detailschange` through the chunk and resolves each ident by the **species in
+the details field** rather than the nickname in the ident. A nickname can be
+anything; a Mega keeps its ident while its species changes underneath it.
+
+**Fixing it moved both arms by about thirteen points, ~81% to ~95%.** The
+mis-attribution was not a rounding error on the measurement. It was most of it.
+
+Two questions close as a result:
+
+- **The published 93.9% holds on the pinned build** — 95.5%, from a harness
+  whose two failure modes are now covered by tests rather than assumed away.
+- **There is no M-C-specific damage gap** — 95.5% against 93.7%, intervals
+  heavily overlapping. The pre-registered prediction was right; the first two
+  runs were not.
+
+**And a counter that should have existed from the start.** Unresolvable hits
+are now counted in `unresolved` rather than dropped quietly, because run 1
+printed "0 samples dropped for involving a Mega forme" every single time over a
+pool full of Mega Stones, and it was read past four times. A resolver that
+quietly discards half its samples looks exactly like a resolver that works.
+
 ### The ability audit, and the one that was actually costing us (2026-09-10)
 
 Asked what Reg M-C adds that this project does not model. The audit is

@@ -106,6 +106,35 @@ Next, in order:
   assumed.
 - **Emergency Exit** (Golisopod, 95x) forces a switch at half HP. Behavioural
   rather than damage, so it changes opponent prediction, not numbers.
+- ~~Fix the differential harness's attribution~~ — **done, and it was worth
+  thirteen points.** The collector took one snapshot per turn and resolved every
+  ident against it, so a mid-turn switch, faint-and-replace or Mega scored the
+  hit against the wrong Pokemon. It now follows `switch`/`drag`/`replace`/
+  `detailschange` through the chunk and resolves by the **species in the details
+  field**, in the same idiom it already used for stat stages. Unresolvable hits
+  are *counted*, not silently dropped.
+
+  Both arms moved from ~81% to ~95%. So: **the published 93.9% holds on the
+  pinned build** (95.5%), and **there is no M-C-specific damage gap** (95.5% vs
+  93.7%, −1.9%, intervals overlapping). Absolute damage figures can be quoted
+  again.
+- **Implement the five abilities that actually affect damage.** From the
+  2026-09-10 audit, and none is urgent — every one is on a species with
+  near-zero play right now:
+
+  | ability | effect | on |
+  | --- | --- | --- |
+  | Aura Guard | halves contact damage | Lucario-Mega-Z |
+  | Libero | user's type becomes the move's, so free STAB | Cinderace |
+  | Steely Spirit | x1.5 Steel, user and allies | Perrserker |
+  | Stakeout | x2 into a switching-in target | Mabosstiff, Thievul |
+  | Grass Pelt | Defense x1.5 on Grassy Terrain | Gogoat |
+
+  Plus **Normal Gem** (x1.3 one-shot) and **Rocky Helmet** (contact recoil).
+  Do these *after* the harness, so each one can be confirmed rather than
+  assumed.
+- **Emergency Exit** (Golisopod, 95x) forces a switch at half HP. Behavioural
+  rather than damage, so it changes opponent prediction, not numbers.
 - **Fix the differential harness's attribution.** Now the open one, and it
   blocks any absolute damage number. Species matching loses Mega; slot matching
   loses anything that switches or faints mid-turn. Both arms currently read
