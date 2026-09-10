@@ -1313,6 +1313,67 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Two tracks: Frankfurt, then generality (decided 2026-09-11)
+
+The project has a date on it now. Frankfurt is **26-27 September**, with the
+team due on **the 25th** — fourteen days from this entry. The user's framing,
+adopted here: *Frankfurt is the first step; the long-term plan is to make this
+system more general, step by step.*
+
+That splits the work cleanly, and the split is worth writing down because the
+two tracks want opposite things from the same code.
+
+| | short term (to 25 Sep) | long term |
+| --- | --- | --- |
+| goal | one team, one regulation, one tournament | a system that survives the next regulation without being rebuilt |
+| what it values | anything that helps *this* team in *this* metagame | anything that removes a hardcoded assumption |
+| what it must not do | ship a research project | ship a special case that has to be unwound |
+
+**The good news is that the second has mostly been paid for already.** Nothing
+in the domain hardcodes a roster; legality is the engine's; a regulation is a
+`Regulation` instance and a mod; the dex cache is per-mod; `format_rules` reads
+the rule table rather than transcribing it. M-C went from "not installable" to
+"running end to end" in a day, and that was the general work paying out rather
+than luck.
+
+#### What Frankfurt gets, and why RL is not on the list
+
+**RL is deliberately not attempted before the tournament.** 0043 warm-started a
+linear policy as an exact clone of the heuristic and trained it on win/loss:
+**52.6% over 2,400 battles, p = 0.475.** Level. A second attempt with a
+state-dependent baseline did not convert either, after three setup defects were
+found and fixed. The gradient direction was consistent and real; it did not
+turn into wins.
+
+The reading: the heuristic sits near a local optimum for the features it has,
+and a linear policy over the *same* features cannot beat it. The lever is
+**representation**, which is open-ended, and open-ended is the wrong shape for
+a fortnight with a hard date at the end.
+
+So the fortnight goes to:
+
+- **`scout`** — new, this entry. A team against the harvested field, with the
+  losing matchups named. The one thing the project could not do, and the
+  submission deadline needs.
+- **Collect twice.** Unfiltered now for volume, again near the 20th when the
+  ladder is stronger. The M-C median moved 1050 → 1072 in a day; *if* that rate
+  holds, the top reaches 1500+ shortly before submission — an extrapolation to
+  **check** on the day, not to plan around.
+- **Practice with `position`**, so the command language is muscle memory rather
+  than something being learned on a clock.
+
+#### The honest limits, restated where they will be read
+
+`scout` measures a team against **what the ladder currently brings**, played by
+an agent that picks the best of four candidates 57% of the time (0038), from a
+corpus rated 1000-1400. A losing matchup is a real structural problem. A
+winning record is not a reason for confidence at a Regional.
+
+The tool's actual edge at Frankfurt is `position`: a verified damage model
+(95.5% inside the predicted range) and a shortlist that beats chance by ~22
+points at every branching factor (0045). Team building is the weaker half and
+fourteen days does not change that.
+
 ### Four of Reg M-C's damage abilities, and why the fifth waits (2026-09-10)
 
 Done *after* the harness fix, deliberately, so each could be checked rather

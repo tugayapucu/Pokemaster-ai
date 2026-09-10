@@ -52,6 +52,41 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
+### Frankfurt: 26-27 September, team due the 25th
+
+**The short-term track, agreed 2026-09-11.** Fourteen days. Everything here is
+scoped to *this* tournament; the general work is the other track and is mostly
+already paid for -- M-C went from not installable to running end to end in a
+day because nothing hardcodes a roster.
+
+- ~~A team against the field~~ — **done: `champions-ai scout`.** Win rate,
+  interval, and the matchups that beat it. Inverse of `evaluate`: same agent
+  both sides, seats swapped on a shared seed, so the policy cancels and the
+  team is left. The mirror invariant (a team against copies of itself must
+  split every matchup) is asserted against the real engine.
+- **Collect twice.** Unfiltered now (running), again near the 20th when the
+  ladder is stronger, then re-harvest. The M-C median moved 1050 → 1072 in a
+  day; *if* that holds the top reaches 1500+ just before submission — an
+  extrapolation to **check on the day**, not to plan around.
+- **Practise with `position`.** The command language should be muscle memory
+  before it is used on a clock. Free, and the project's most reliable way of
+  finding defects -- five so far came from using it rather than testing it.
+- **Rating filter at load time.** `load_all(..., min_rating=)`. Small, and it
+  makes collecting broadly a reversible choice rather than a commitment.
+
+**RL is deliberately not on this list.** 0043: a linear policy warm-started as
+an exact clone of the heuristic came out **level** -- 52.6%, p = 0.475 over
+2,400 battles -- and a second attempt with a state-dependent baseline did not
+convert either. The lever is representation, which is open-ended, and
+open-ended is the wrong shape for a fortnight with a hard date. It belongs to
+the long-term track.
+
+**What `scout` does not tell you**, restated because it is the number most
+likely to be over-read: the pool is what the *current ladder* brings, rated
+1000-1400, played by an agent that picks the best of four candidates 57% of the
+time. A losing matchup is a real structural problem. A winning record is not
+confidence.
+
 ### Regulation M-C is live. What is left is the corpus's quality
 
 **Done 2026-09-10, merged to `main`.** `pokemon-showdown` is pinned to
