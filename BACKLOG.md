@@ -84,6 +84,48 @@ Next, in order:
   `tests/integration/test_regulation_mods.py` will fail and name it; the fix is
   the `mod` string plus deleting `data/dex-*.json`.
 
+### What agreement cannot see
+
+**Raised by 0045, 2026-09-10.** Two experiments in one day narrowed this to a
+single question and could not answer it.
+
+0044: agreement is identical for 1000-rated and 1800-rated players. 0045: the
+adviser's lift over chance is a flat +21 to +25 points at *every* branching
+factor, so that flatness is not because the decisions are forced — it beats a
+coin flip by 22 points even on positions offering eight or more options.
+
+So weak and strong players pick the same actions, relative to our ranking, at
+the same rate. The reading that would explain that — and every earlier
+agreement result, 0010 and 0013 included — is that **the difference between
+weak and strong play is not in which action is chosen at all.** It would live
+in team building, in planning across turns, and in risk taken when behind.
+
+That is untested and harder to test than anything attempted here. Two things
+that would bear on it, both cheaper than the full question:
+
+- **Does agreement fall late in a game?** If strong play differs in planning
+  rather than in single choices, the gap should open where plans pay off. Turn
+  number is already on every decision.
+- **Do stronger players win more with the same agreement?** If they do, the
+  skill is real and invisible to this instrument, which would settle the
+  interpretation without measuring the cause.
+
+**Not a reason to chase agreement further as a target.** It has been caught
+misleading twice and blind once. This item is about understanding what the
+number means, not about raising it.
+
+### Two smaller things 0045 turned up
+
+- **M-C reconstruction is five times lossier than M-B's** — 3.4% of
+  single-option decisions do not contain the human's move, against 0.7% for
+  M-B. Small enough that it changed no conclusion, and the first sign that the
+  reconstruction stack is not as clean on M-C's 35 new species.
+- **Two agreement figures are only comparable if their branching mixes match.**
+  Raw agreement runs 62.7% on 2–3 option decisions and 32.5% on 8+ ones, so the
+  headline number is a weighted average over the format's difficulty mix. M-B's
+  and M-C's mixes match near-identically, which made 0044's cross-corpus
+  comparison sound — by luck rather than by design. Check it next time.
+
 ### Use it, and fix what using it finds
 
 **Done 2026-09-07: `champions-ai position`.** The one command that helps

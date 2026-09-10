@@ -1313,6 +1313,59 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### The adviser's edge is uniform, and forcedness was the wrong answer (0045)
+
+0044 left a reading on the table: that agreement is flat across ratings because
+the format's decisions are mostly forced. 0045 tested it and **it is wrong.**
+
+The test had to dodge a trap first. Raw agreement *must* fall as options rise —
+one legal action agrees 100% by arithmetic — so the measured quantity is **lift
+over chance**, where chance is the mean of 1/options.
+
+```
+  options   agreed  chance     lift       (M-B / M-C)
+  1          99.3%  100.0%    -0.7%  /  -3.4%      <- instrument check
+  2-3        62.7%   39.1%   +23.6%  / +21.7%
+  4-5        47.5%   22.3%   +25.2%  / +24.5%
+  6-7        38.4%   15.6%   +22.8%  / +23.3%
+  8+         32.5%   11.1%   +21.4%  / +22.0%
+```
+
+**Lift is flat at +21 to +25 points everywhere**, in both regulations, across
+65,000 decisions. The pre-registered prediction was that it would shrink toward
+zero as positions opened up. It does not.
+
+**The single-option row is a check, not a result.** With no choice available
+agreement must be ~100%; anything less is reconstruction loss. M-B loses 0.7%,
+**M-C loses 3.4%** — five times more, which is small enough to leave the table
+standing and worth its own look, since it is the first sign that M-C
+reconstruction is not as clean as M-B's.
+
+Crossed with rating, every gap is inside noise at every branching factor, so
+**0044 was a true null rather than an underpowered one.**
+
+Two consequences.
+
+- **Raw agreement is dominated by the branching mix**: 62.7% on a 2–3 option
+  decision against 32.5% on an 8+ one. The headline 44.7% is therefore a
+  weighted average over how often this format hands you a hard position, and
+  two agreement figures are comparable **only if their branching distributions
+  match**. M-B's and M-C's do, near-identically, which is what made 0044's
+  cross-corpus comparison safe — by luck rather than by design.
+- **A positive result, which is rare here.** The adviser beats a coin flip by
+  about 22 points on open positions, not merely on forced ones. Every earlier
+  agreement finding in this project was a caution: 0010 and 0013 both caught it
+  misleading, 0044 found it blind to skill. This is the first saying the
+  ranking carries real information where it matters.
+
+**The open question is now sharper.** If the edge is uniform and rating carries
+nothing, why do 1000- and 1800-rated players agree with us equally? The reading
+that would explain every agreement result this project has produced is that
+**the difference between weak and strong play is not in which action is chosen**
+— it is in team building, planning across turns, and risk taken when behind,
+none of which agreement can see. Untested, and harder to test than anything
+attempted so far.
+
 ### Agreement does not track how good the players are (2026-09-10, 0044)
 
 Dropping the collection bar to 1000+ raised a question: should a game be
