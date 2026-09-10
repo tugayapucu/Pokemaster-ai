@@ -52,6 +52,49 @@ RATING_BANDS = {
 }
 
 
+# How many options a slot had, banded. Fixed in
+# `experiments/0045-agreement-by-branching/PRE-REGISTRATION.md` before any
+# agreement number was computed. The single-option band is a deliberate
+# instrument check: the human had no choice, so agreement there must be ~100%,
+# and anything lower measures reconstruction loss rather than play.
+OPTION_BANDS = ((1, "1"), (3, "2-3"), (5, "4-5"), (7, "6-7"), (10**6, "8+"))
+
+
+def _median_rating(replays) -> int:
+    """The corpus's own median, so the two-way split is even by construction.
+
+    A fixed threshold would put nearly every M-C replay on one side, since that
+    ladder was a day old and everyone sat near 1000.
+    """
+    rated = sorted(r.metadata.minimum_rating for r in replays
+                   if r.metadata.minimum_rating is not None)
+    return rated[len(rated) // 2] if rated else 0
+
+
+def _option_band(options: int) -> str:
+    for ceiling, label in OPTION_BANDS:
+        if options <= ceiling:
+            return label
+    return OPTION_BANDS[-1][1]
+
+
+def _slot_options(observation, legal, move_data) -> dict[int, int]:
+    """Distinct actions available to each slot.
+
+    Not the joint count. Agreement is measured per slot decision, so the
+    branching that matters is how many different things *that* Pokemon could
+    have done -- a joint count would multiply in the partner's freedom, which
+    the human choosing this slot was not choosing among.
+    """
+    seen: dict[int, set] = {}
+    for action in legal:
+        for slot, slot_action in enumerate(action.slot_actions):
+            seen.setdefault(slot, set()).add(
+                action_signature(slot_action, observation, slot, move_data)
+            )
+    return {slot: len(values) for slot, values in seen.items()}
+
+
 def _band_order(edges: tuple[int, ...]) -> list[str]:
     """Every band label low to high, so the table reads as a trend.
 
@@ -191,6 +234,11 @@ def survey(
     ours: dict[tuple, list[int]] = defaultdict(lambda: [0, 0])
     switch_by_known: dict[int, list[int]] = defaultdict(lambda: [0, 0])
     by_band: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    # [agreed, n, summed chance]. Chance is 1/options per decision, so the
+    # band's baseline is its mean -- what a coin flip would have scored.
+    by_options: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+    by_options_rating: dict[tuple, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+    median_rating = _median_rating(replays)
     band_replays: Counter = Counter()
     edges = RATING_BANDS.get(regulation.format_id, (1500,))
     failed = unscorable = target_only = hidden_target = 0
@@ -225,6 +273,7 @@ def survey(
                     continue
 
                 advice = recommender.recommend(observation, legal)
+                options = _slot_options(observation, legal, move_data)
                 best = advice.best.action
                 for choice in decision.choices:
                     signature = human_signature(choice, move_data)
@@ -246,6 +295,18 @@ def survey(
                     ranks[rank] += 1
                     by_band[band][1] += 1
                     by_band[band][0] += int(agreed)
+                    available = options.get(choice.slot)
+                    if available:
+                        label = _option_band(available)
+                        rating = replay.metadata.minimum_rating
+                        half = (
+                            "unrated" if rating is None
+                            else ("stronger" if rating >= median_rating else "weaker")
+                        )
+                        for bucket in (by_options[label], by_options_rating[(label, half)]):
+                            bucket[0] += int(agreed)
+                            bucket[1] += 1
+                            bucket[2] += 1.0 / available
                     by_kind[signature[0]][1] += 1
                     by_kind[signature[0]][0] += int(agreed)
                     # Grouped by move rather than by move-and-target, because
@@ -313,6 +374,48 @@ def survey(
                 "    The interval is 95% Wilson. Bands were fixed from the corpus's\n"
                 "    own quartiles before any of these numbers existed; see\n"
                 "    experiments/0044-agreement-by-rating/."
+            )
+
+        # How much of agreement is the adviser, and how much is the position
+        # having had no other answer. Raw agreement *must* fall as options rise
+        # -- one legal action agrees 100% by arithmetic -- so the column that
+        # carries meaning is lift over a coin flip (0045).
+        if by_options:
+            print("\n  By how many options that Pokemon had")
+            print(f"    {'options':<10}{'agreed':>8}{'chance':>9}{'lift':>9}   n")
+            for _, label in OPTION_BANDS:
+                if label not in by_options:
+                    continue
+                agreed, count, chance = by_options[label]
+                rate, base = agreed / count, chance / count
+                print(
+                    f"    {label:<10}{rate:>8.1%}{base:>9.1%}"
+                    f"{rate - base:>+9.1%}   n={int(count)}"
+                )
+            print(
+                "    chance is the mean of 1/options: what picking at random would\n"
+                "    have scored. The 1-option row is an instrument check -- the human\n"
+                "    had no choice, so anything below ~100% is reconstruction loss."
+            )
+
+            print("\n  ...and whether that differs by rating")
+            print(f"    {'options':<10}{'weaker':>9}{'stronger':>10}{'gap':>8}")
+            for _, label in OPTION_BANDS:
+                halves = {}
+                for half in ("weaker", "stronger"):
+                    entry = by_options_rating.get((label, half))
+                    if entry and entry[1]:
+                        halves[half] = (entry[0] / entry[1]) - (entry[2] / entry[1])
+                if len(halves) == 2:
+                    gap = halves["stronger"] - halves["weaker"]
+                    print(
+                        f"    {label:<10}{halves['weaker']:>+9.1%}"
+                        f"{halves['stronger']:>+10.1%}{gap:>+8.1%}"
+                    )
+            print(
+                f"    Lift over chance, split at this corpus's median rating\n"
+                f"    ({median_rating}). A gap here would mean rating carries\n"
+                f"    information that 0044's one-dimensional table hid."
             )
 
         if hidden_target:
