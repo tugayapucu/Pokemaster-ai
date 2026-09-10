@@ -1313,6 +1313,65 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Closing the gaps `position` had, and what that turned up (2026-09-10)
+
+Four gaps were named on 2026-09-10. Three are closed; the fourth is blocked on
+something outside this repository.
+
+| gap | state |
+| --- | --- |
+| no way to say Choice-locked / Encored / Taunted / Disabled | **closed** — `char locked <move>`, `char taunt`, `char disable <move>`, `char free` |
+| PP not tracked | **closed** — `char used <move>`, `char pp <move> <n>`, seeded from the engine |
+| turn number manual | **closed** — `n` advances the turn and ticks every timer |
+| M-C not simulatable | **blocked**: no npm build carries `championsregmc`. Nothing here can fix that |
+
+**Champions halves every protection move, and nothing here knew.**
+`mods/champions/moves.ts` gives Protect `pp: 5` against mainline's 10, and does
+the same to King's Shield, Spiky Shield, Baneful Bunker, Obstruct and Beak
+Blast — **eight uses after PP-ups, not sixteen**. Protect is the most-used move
+in the format and a game runs about fifteen turns, so that is a number a player
+reaches. It was found only because the PP test was first written as 16 from
+mainline memory and the engine disagreed.
+
+That has a consequence beyond `position`: PP was judged low-value on the
+assumption that a move cannot run out in a doubles game. For the protection
+moves in this format, it can.
+
+**Seeding our own side now runs the mirror battle once per pair of lead slots.**
+A battle request describes moves, PP and targets only for the Pokemon on the
+field, so one battle left half the team without them — and half a team with
+engine data and half without is one position generating legal actions two
+different ways depending on who happened to lead. Rotating the leads and asking
+again costs one battle start and retires the compromise recorded in 770b46e.
+
+**And the corpus quietly became two corpora.** Collecting M-C put 2,000 of its
+replays into `data/replays` beside 1,769 M-B games, where `review` loads the
+whole directory:
+
+```
+  gen9championsvgc2026regmc    2000     <- cannot even be simulated here
+  gen9championsvgc2026regmb    1769
+```
+
+The survey would have printed one agreement percentage over the mixture, with
+nothing on screen saying it was a mixture, for a regulation whose dex we do not
+have. `load_all` now takes a format id: naming one selects it, omitting one is
+fine for a single-format corpus and *raises* for a mixed one. Verified by the
+number coming back: `review --all` reports 43.9% again, exactly what it read
+before M-C existed.
+
+`load_all`'s own docstring had already predicted this — *"anything stricter
+should be filtered by the caller rather than assumed"* — and the caller did not.
+A warning written into a docstring is not a guard.
+
+**Two test mistakes worth recording**, both the same shape as the bugs:
+
+- The PP assertion was 16, from mainline memory rather than from the engine.
+- The test that Protect stops being offered read `move_id` off a `MoveAction`,
+  which carries a `move_index`. It saw nothing, so it would have passed
+  vacuously. The baseline assertion — *does this check see Protect at all?* —
+  is what caught it, and it stays in.
+
 ### Regulation M-C arrived, three days after the watch was built (2026-09-10)
 
 The watch fired, which supersedes the 2026-09-07 entry below: that recorded no

@@ -178,18 +178,27 @@ that **using the thing found what testing the thing did not**:
 | the Mega derivation asked species-first and got the wrong stone of two | nothing compared it to the engine until something had to |
 | the board spelled the two sides differently | no test read the board as a person would |
 
-**Four named gaps, raised 2026-09-10, deferred deliberately.** In the order of
-how wrong they can make a recommendation, worst first:
+**Four named gaps, raised 2026-09-10. Three closed the same day.**
 
-| gap | what it costs | why it is not urgent yet |
-| --- | --- | --- |
-| **No way to say Choice-locked / Encored / Taunted / Disabled** | the shortlist offers a move that cannot legally be picked — a *wrong* answer, not a missing one | it needs one command writing to `disabled_moves`, which `legal_actions` already reads (ADR 0003) |
-| **PP is not tracked** | a move exhausted late in a long game is still offered | a doubles game runs ~15 turns; PP rarely binds, and nothing on screen reports it anyway |
-| **Turn number is manual** (`turn 7`) | Trick Room, Tailwind and screen timers drift from the real ones | the player can see the real durations; the cost is a keystroke |
-| **M-B only in practice** | `--regulation m-a` works, no later regulation is simulatable | blocked on the mod, not on us — see the M-C item above |
+| gap | state |
+| --- | --- |
+| Choice lock / Encore / Taunt / Disable | **closed** — `char locked <move>`, `char taunt`, `char disable <move>`, `char free` |
+| PP not tracked | **closed** — `char used <move>`, `char pp <move> <n>`, seeded from the engine |
+| turn number manual | **closed** — `n` advances the turn and ticks Tailwind, screens and Trick Room |
+| M-C not simulatable | **blocked** on an npm build carrying `championsregmc`. Nothing in this repository can fix it |
 
-The first is the only one that produces a confident wrong answer rather than a
-gap, and it is the cheapest of the four. It is the next thing to build here.
+Closing them turned up three things worth more than the gaps were:
+
+- **Champions halves every protection move.** Protect has 8 PP here, not 16,
+  and so do King's Shield, Spiky Shield, Baneful Bunker, Obstruct and Beak
+  Blast. PP was judged low-value on the assumption a move cannot run out in a
+  fifteen-turn game. For these, it can.
+- **The corpus had quietly become two corpora** — 2,000 M-C replays against
+  1,769 M-B, loaded together by `review`, for a regulation we cannot simulate.
+  `load_all` now refuses a mixed corpus unless a format is named.
+- **A test that saw nothing would have passed.** It read `move_id` off a
+  `MoveAction`, which carries `move_index`. The baseline assertion caught it.
+
 
 What is left here is the same instruction it has always been: **run it, and
 fix what that turns up.** Nothing on this list is a measurement.
