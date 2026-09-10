@@ -169,6 +169,27 @@ class ShowdownBridge:
                 return event["formats"]
         raise BridgeError(f"no format list returned: {events}")
 
+    def format_rules(self, format_id: str) -> dict:
+        """The engine's own rule table for one format.
+
+        What a `Regulation` states -- level, team sizes, the stat-point budget
+        -- transcribed by hand is a chance to describe a different game than
+        the one being played, and a silent one: a wrong picked team size still
+        validates teams and a wrong level still runs battles. So it is asked
+        for (ADR 0003).
+
+        Raises if the format does not exist in this build, which is itself
+        worth knowing: `gen9championsvgc2026regma` stopped existing upstream
+        between 0.11.11 and 2026-09-10.
+        """
+        events = self.request(cmd="formatrules", format=format_id)
+        for event in events:
+            if event["type"] == "formatrules":
+                if not event.get("found"):
+                    raise BridgeError(f"no such format in this build: {format_id}")
+                return event
+        raise BridgeError(f"no rule table returned for {format_id}: {events}")
+
     def reseed(self, seed: str) -> str:
         """Replace the running battle's RNG, returning the seed now in force.
 
