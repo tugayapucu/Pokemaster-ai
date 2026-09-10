@@ -29,8 +29,21 @@ from champions_ai.env.battle_env import Decision
 from champions_ai.recommendation import Recommender, describe_joint_action
 from champions_ai.simulator import BridgeError, ShowdownBridge
 
-DEFAULT_POOL = Path("data/pool-eval.txt")
+DEFAULT_POOL = Path("data/pool-champions.txt")
 POOL_SEPARATOR = "\n\n===\n\n"
+
+
+def pool_path_for(regulation: Regulation, directory: Path = Path("data")) -> Path:
+    """Where this regulation's harvested team pool lives.
+
+    Per mod, for the same reason the dex cache is (`dex_path` below). A pool is
+    harvested from one regulation's replays, and one shared `pool-eval.txt` is
+    how `play` came to draw **M-B teams and play them under M-C rules** -- M-C
+    is a superset of M-B, so every team validated and nothing complained. A
+    wrong-regulation pool that *errors* is a bad afternoon; one that quietly
+    works is a wrong measurement.
+    """
+    return directory / f"pool-{regulation.mod}.txt"
 
 
 def dex_path(regulation: Regulation, directory: Path = Path("data")) -> Path:
@@ -127,13 +140,15 @@ def play(
     *,
     team_path: Path | None = None,
     opponent_path: Path | None = None,
-    pool_path: Path = DEFAULT_POOL,
+    pool_path: Path | None = None,
     seed: str | None = None,
     auto: bool = False,
     regulation: Regulation = REGULATION_M_B,
 ) -> int:
     """Run one battle against the heuristic agent. Returns a process exit code."""
     rng = random.Random(seed)
+    if pool_path is None:
+        pool_path = pool_path_for(regulation)
 
     with ShowdownBridge() as bridge:
         dex = Dex.cached(bridge, dex_path(regulation), mod=regulation.mod)

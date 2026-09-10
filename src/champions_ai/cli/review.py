@@ -6,8 +6,10 @@ cannot surface a mechanic the agent under-uses -- the opponent *is* our agent,
 so anything it neglects is invisible. A replay contains decisions our agent
 would never make.
 
-**A disagreement is not a verdict.** The corpus is 1500-1850 Elo, and this
-project has twice been misled by treating human agreement as truth: Trick
+**A disagreement is not a verdict.** The corpus is whatever the ladder was
+when it was collected -- 1500-1850 for Reg M-B, 1000-1400 for a Reg M-C one
+gathered days after that ladder opened -- and this project has twice been
+misled by treating human agreement as truth: Trick
 Room's fitted value climbed without bound because a team that brings it nearly
 always uses it (0010), and target selection looked like the largest gap in the
 project when humans themselves are near-random on it (0013). So this shows both
@@ -58,6 +60,20 @@ RATING_BANDS = {
 # instrument check: the human had no choice, so agreement there must be ~100%,
 # and anything lower measures reconstruction loss rather than play.
 OPTION_BANDS = ((1, "1"), (3, "2-3"), (5, "4-5"), (7, "6-7"), (10**6, "8+"))
+
+
+def _rating_range(replays) -> str:
+    """The corpus's actual rating span, for printing beside an agreement number.
+
+    Written out rather than hardcoded because it stopped being true. This said
+    "1500-1850 Elo" in three places, which described the Reg M-B corpus and was
+    printed unchanged over a Reg M-C one rated 1000-1400 -- a false claim
+    standing right beside the number it was cautioning about.
+    """
+    rated = [r.metadata.minimum_rating for r in replays if r.metadata.minimum_rating]
+    if not rated:
+        return "of unknown rating"
+    return f"rated {min(rated)}-{max(rated)}"
 
 
 def _median_rating(replays) -> int:
@@ -480,9 +496,9 @@ def survey(
                 "  were used, so some actions the human had are not reconstructable."
             )
         print(
-            "\n  Agreement is not truth. The corpus is 1500-1850 Elo, and matching it\n"
-            "  has twice been the wrong target (0010, 0013). This is a map of where we\n"
-            "  differ, not a scoreboard."
+            f"\n  Agreement is not truth. This corpus is {_rating_range(replays)}, and\n"
+            "  matching it has twice been the wrong target (0010, 0013). This is a map\n"
+            "  of where we differ, not a scoreboard."
         )
         return 0
 
@@ -631,7 +647,8 @@ def review(
                 "reconstructable."
             )
         print(
-            "\n  A disagreement is not a verdict. The corpus is 1500-1850 Elo, and\n"
-            "  agreement has twice been the wrong target here (0010, 0013)."
+            f"\n  A disagreement is not a verdict. This game is "
+            f"{_rating_range([chosen])},\n"
+            "  and agreement has twice been the wrong target here (0010, 0013)."
         )
         return 0

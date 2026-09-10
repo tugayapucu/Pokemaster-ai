@@ -12,11 +12,10 @@ from pathlib import Path
 
 from champions_ai.cli.collect import DEFAULT_CORPUS as COLLECT_CORPUS
 from champions_ai.cli.collect import DEFAULT_MIN_RATING, collect
-from champions_ai.cli.play import DEFAULT_POOL, play
+from champions_ai.cli.play import play
 from champions_ai.cli.position import position
 from champions_ai.cli.regulations import check as check_regulations
 from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
-from champions_ai.cli.scout import DEFAULT_POOL as SCOUT_POOL
 from champions_ai.cli.scout import scout
 from champions_ai.domain import REGULATION_M_B, REGULATION_M_C
 
@@ -34,7 +33,7 @@ DEFAULT_REGULATION = "m-c"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="champions-ai",
-        description="Battle assistance for Pokemon Champions, Regulation M-B.",
+        description="Battle assistance for Pokemon Champions.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -51,8 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="the opposing team. Defaults to another drawn from the pool.",
     )
     battle.add_argument(
-        "--pool", type=Path, default=DEFAULT_POOL,
-        help=f"a file of teams to draw from, separated by '===' (default: {DEFAULT_POOL}).",
+        "--pool", type=Path, default=None,
+        help="a file of teams to draw from, separated by '==='. Defaults to this "
+             "regulation's own pool, data/pool-<mod>.txt.",
     )
     battle.add_argument(
         "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
@@ -72,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="download a replay corpus for one format, by format id",
     )
     gather.add_argument(
-        "--format", dest="format_id", default=REGULATION_M_B.format_id,
+        "--format", dest="format_id", default=REGULATION_M_C.format_id,
         help="the Showdown format id (default: %(default)s). A raw id rather than "
              "a regulation, so a format this project cannot yet simulate -- a new "
              "one, before its mod is released -- can still be collected for.",
@@ -113,8 +113,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="your team, as a Showdown export file.",
     )
     field.add_argument(
-        "--pool", type=Path, default=SCOUT_POOL,
-        help=f"harvested teams to play against (default: {SCOUT_POOL}).",
+        "--pool", type=Path, default=None,
+        help="harvested teams to play against. Defaults to this regulation's own "
+             "pool, data/pool-<mod>.txt.",
     )
     field.add_argument(
         "--opponents", type=int, default=40,

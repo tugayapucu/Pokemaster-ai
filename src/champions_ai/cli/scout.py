@@ -20,15 +20,13 @@ at; a winning record here is not a reason to be confident at a Regional.
 from pathlib import Path
 
 from champions_ai.agents import HeuristicAgent
-from champions_ai.cli.play import dex_path, load_pool, load_team
+from champions_ai.cli.play import dex_path, load_pool, load_team, pool_path_for
 from champions_ai.cli.preview import species_name
 from champions_ai.dex import Dex
 from champions_ai.domain import REGULATION_M_C, Regulation
 from champions_ai.env import BattleEnv
 from champions_ai.evaluation.team_strength import scout_team
 from champions_ai.simulator import BridgeError, ShowdownBridge
-
-DEFAULT_POOL = Path("data/pool-eval-m-c.txt")
 
 
 def _roster(dex: Dex, species: tuple[str, ...], width: int = 0) -> str:
@@ -47,12 +45,14 @@ def _roster(dex: Dex, species: tuple[str, ...], width: int = 0) -> str:
 def scout(
     *,
     team_path: Path,
-    pool_path: Path = DEFAULT_POOL,
+    pool_path: Path | None = None,
     opponents: int = 40,
     seed: int = 0,
     regulation: Regulation = REGULATION_M_C,
 ) -> int:
     """Play one team against a sample of the field. Returns an exit code."""
+    if pool_path is None:
+        pool_path = pool_path_for(regulation)
     if not team_path.exists():
         print(f"No team at {team_path}. Pass --team with a Showdown export file.")
         return 2
