@@ -35,10 +35,46 @@ from champions_ai.evaluation.agreement import (
     human_signature,
     target_unobservable,
 )
+from champions_ai.evaluation.runner import wilson_interval
 from champions_ai.recommendation import Recommender
 from champions_ai.simulator import ShowdownBridge
 
 DEFAULT_CORPUS = Path("data/replays")
+
+# Rating bands per regulation, taken from each corpus's own quartiles and fixed
+# in `experiments/0044-agreement-by-rating/PRE-REGISTRATION.md` before any
+# agreement number was computed -- bands chosen after seeing the answer are not
+# bands, they are a result. The rating is the *weaker* player's, which is the
+# honest bar for "both were strong".
+RATING_BANDS = {
+    "gen9championsvgc2026regmb": (1540, 1585, 1639),
+    "gen9championsvgc2026regmc": (1050, 1100, 1200),
+}
+
+
+def _band_order(edges: tuple[int, ...]) -> list[str]:
+    """Every band label low to high, so the table reads as a trend.
+
+    Printing in dictionary order would be arrival order, which is whatever the
+    corpus happened to list first -- and a trend table that is not sorted by
+    the thing it is a trend in invites reading a pattern that is not there.
+    """
+    labels = [f"<{edges[0]}"]
+    for low, high in zip(edges, edges[1:]):
+        labels.append(f"{low}-{high - 1}")
+    return [*labels, f">={edges[-1]}", "unrated"]
+
+
+def _band(rating: int | None, edges: tuple[int, ...]) -> str:
+    """Which band a replay falls in. Unrated is its own row, never folded in."""
+    if rating is None:
+        return "unrated"
+    low = None
+    for edge in edges:
+        if rating < edge:
+            return f"<{edge}" if low is None else f"{low}-{edge - 1}"
+        low = edge
+    return f">={edges[-1]}"
 
 
 def _actor(choice, observation) -> str:
@@ -154,6 +190,9 @@ def survey(
     theirs: dict[tuple, list[int]] = defaultdict(lambda: [0, 0])
     ours: dict[tuple, list[int]] = defaultdict(lambda: [0, 0])
     switch_by_known: dict[int, list[int]] = defaultdict(lambda: [0, 0])
+    by_band: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    band_replays: Counter = Counter()
+    edges = RATING_BANDS.get(regulation.format_id, (1500,))
     failed = unscorable = target_only = hidden_target = 0
 
     with ShowdownBridge() as bridge:
@@ -165,6 +204,8 @@ def survey(
         for number, replay in enumerate(replays, 1):
             if number % 400 == 0:
                 print(f"    {number}...", flush=True)
+            band = _band(replay.metadata.minimum_rating, edges)
+            band_replays[band] += 1
             try:
                 decisions = reconstruct_decisions(replay, regulation, dex)
             except Exception:
@@ -203,6 +244,8 @@ def survey(
                     )
                     agreed = rank == 1
                     ranks[rank] += 1
+                    by_band[band][1] += 1
+                    by_band[band][0] += int(agreed)
                     by_kind[signature[0]][1] += 1
                     by_kind[signature[0]][0] += int(agreed)
                     # Grouped by move rather than by move-and-target, because
@@ -251,6 +294,26 @@ def survey(
         for kind in sorted(by_kind):
             agreed, count = by_kind[kind]
             print(f"    {kind:<22} {agreed / count:>6.1%} agreed   n={count}")
+
+        # Whether agreement tracks how good the players were. If it is flat, a
+        # rating weight cannot change any number this project computes, and
+        # that is the finding rather than a disappointment (0044).
+        if len(by_band) > 1:
+            print("\n  By the weaker player's rating")
+            order = [b for b in _band_order(edges) if b in by_band]
+            for band in order:
+                agreed, count = by_band[band]
+                lower, upper = wilson_interval(agreed, count)
+                print(
+                    f"    {band:<22} {agreed / count:>6.1%} agreed   "
+                    f"n={count:<6} [{lower:.1%}, {upper:.1%}]   "
+                    f"{band_replays[band]} replays"
+                )
+            print(
+                "    The interval is 95% Wilson. Bands were fixed from the corpus's\n"
+                "    own quartiles before any of these numbers existed; see\n"
+                "    experiments/0044-agreement-by-rating/."
+            )
 
         if hidden_target:
             print(
