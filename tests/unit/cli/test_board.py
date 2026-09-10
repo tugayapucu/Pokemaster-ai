@@ -193,3 +193,26 @@ def test_without_a_dex_the_board_still_renders():
 def test_a_species_the_dex_does_not_know_falls_back_to_what_it_was_called():
     own = Side(team=(_mine("mysteryformeting", hp=100, max_hp=100),), active_slots=(0,))
     assert "mysteryformeting" in render_board(_observation(own=own), _NamingDex())
+
+
+def test_a_terrain_is_named_once_not_twice():
+    """The tracker keeps `terrain` as a mirror of one of the field conditions
+    rather than as a separate stream, so a board listing both printed
+    "psychicterrain, psychicterrain". Found by walking a real replay."""
+    board = render_board(
+        _observation(terrain="psychicterrain", field_conditions={"psychicterrain": 0})
+    )
+    assert board.count("psychicterrain") == 1
+
+
+def test_a_field_condition_that_is_not_the_terrain_still_shows():
+    """The obvious way to fix the duplicate is to stop printing field
+    conditions, which would lose Trick Room -- the one worth 55 points."""
+    board = render_board(
+        _observation(
+            terrain="psychicterrain",
+            field_conditions={"psychicterrain": 0, "trickroom": 5},
+        )
+    )
+    assert "Trick Room" in board
+    assert board.count("psychicterrain") == 1

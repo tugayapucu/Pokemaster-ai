@@ -78,6 +78,12 @@ def render_board(observation: Observation, dex=None, *, width: int = 62) -> str:
     if observation.terrain:
         field.append(observation.terrain)
     for name in observation.field_conditions:
+        # `terrain` mirrors one of the field conditions rather than being a
+        # separate stream (see `_on_minor_fieldstart`), so listing both printed
+        # "psychicterrain, psychicterrain". Harmless to the scorer, which reads
+        # only Trick Room and Gravity out of this dict, and confusing to read.
+        if name == observation.terrain:
+            continue
         field.append(str(name).replace("trickroom", "Trick Room"))
     header = f"Turn {observation.turn}"
     if field:
