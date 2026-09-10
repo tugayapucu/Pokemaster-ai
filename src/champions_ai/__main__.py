@@ -10,6 +10,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from champions_ai.cli.collect import DEFAULT_CORPUS as COLLECT_CORPUS
+from champions_ai.cli.collect import DEFAULT_MIN_RATING, collect
 from champions_ai.cli.play import DEFAULT_POOL, play
 from champions_ai.cli.position import position
 from champions_ai.cli.regulations import check as check_regulations
@@ -61,6 +63,30 @@ def build_parser() -> argparse.ArgumentParser:
     battle.add_argument(
         "--auto", action="store_true",
         help="take the top recommendation every turn, without asking. Useful for a look.",
+    )
+    gather = commands.add_parser(
+        "collect",
+        help="download a replay corpus for one format, by format id",
+    )
+    gather.add_argument(
+        "--format", dest="format_id", default=REGULATION_M_B.format_id,
+        help="the Showdown format id (default: %(default)s). A raw id rather than "
+             "a regulation, so a format this project cannot yet simulate -- a new "
+             "one, before its mod is released -- can still be collected for.",
+    )
+    gather.add_argument(
+        "--corpus", type=Path, default=COLLECT_CORPUS,
+        help=f"where to write replays and the run manifest (default: {COLLECT_CORPUS}).",
+    )
+    gather.add_argument(
+        "--target", type=int, default=500,
+        help="how many usable replays to keep (default: %(default)s).",
+    )
+    gather.add_argument(
+        "--min-rating", type=int, default=DEFAULT_MIN_RATING,
+        help="both players must be at least this rated (default: %(default)s). "
+             "0 keeps every rating, which is what a ladder in its first days needs "
+             "-- and makes the corpus unusable as an agreement signal.",
     )
     advise = commands.add_parser(
         "position",
@@ -142,6 +168,13 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             auto=args.auto,
             regulation=REGULATIONS[args.regulation],
+        )
+    if args.command == "collect":
+        return collect(
+            format_id=args.format_id,
+            corpus_path=args.corpus,
+            target=args.target,
+            min_rating=args.min_rating or None,
         )
     if args.command == "position":
         return position(
