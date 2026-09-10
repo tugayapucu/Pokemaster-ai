@@ -64,6 +64,17 @@ day because nothing hardcodes a roster.
   both sides, seats swapped on a shared seed, so the policy cancels and the
   team is left. The mirror invariant (a team against copies of itself must
   split every matchup) is asserted against the real engine.
+- ~~Rating filter at load time~~ — **done.** `load_all(..., min_rating=)`. The
+  bar is chosen at *use*, because ratings are not in the listing so a bar costs
+  the same download either way, and filtering at collection cannot be undone.
+  The returned manifest reports the bar actually applied, not the collection's.
+- ~~Re-read the repository for what the M-C migration left behind~~ — **done
+  2026-09-11, four found.** One was a real trap: **`play` with no arguments
+  drew M-B teams and played them under M-C rules**, silently, because the pool
+  was one shared file and M-C is a superset so nothing failed validation. Pools
+  are now per-mod like the dex cache. The others were claims that had stopped
+  being true — `review` printing "1500-1850 Elo" over a 1000-1400 corpus, the
+  parser describing itself as M-B, and `collect` defaulting to M-B's format id.
 - **Collect twice.** Unfiltered now (running), again near the 20th when the
   ladder is stronger, then re-harvest. The M-C median moved 1050 → 1072 in a
   day; *if* that holds the top reaches 1500+ just before submission — an
