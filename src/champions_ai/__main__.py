@@ -16,16 +16,17 @@ from champions_ai.cli.play import DEFAULT_POOL, play
 from champions_ai.cli.position import position
 from champions_ai.cli.regulations import check as check_regulations
 from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
-from champions_ai.domain import REGULATION_M_A, REGULATION_M_B
+from champions_ai.domain import REGULATION_M_B, REGULATION_M_C
 
 # Keyed by the short name a person would type. Built from the instances rather
 # than a parallel list, so a regulation added to the domain is offered here
 # without anyone remembering to update a second place.
 REGULATIONS = {
-    "m-a": REGULATION_M_A,
     "m-b": REGULATION_M_B,
+    "m-c": REGULATION_M_C,
 }
-DEFAULT_REGULATION = "m-b"
+# Frankfurt is Reg M-C, and it is what the live ladder plays.
+DEFAULT_REGULATION = "m-c"
 
 
 def build_parser() -> argparse.ArgumentParser:

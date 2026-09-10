@@ -10,21 +10,21 @@ from pathlib import Path
 
 import champions_ai.cli.play as module
 from champions_ai.cli.play import dex_path
-from champions_ai.domain import REGULATION_M_A, REGULATION_M_B
+from champions_ai.domain import REGULATION_M_B, REGULATION_M_C
 from champions_ai.simulator import BridgeError
 
 
 def test_each_mod_caches_its_own_dex():
     """The bug this shape prevents: one file, two dexes, last writer wins."""
-    assert dex_path(REGULATION_M_A) != dex_path(REGULATION_M_B)
+    assert dex_path(REGULATION_M_C) != dex_path(REGULATION_M_B)
 
 
 def test_the_path_is_named_for_the_mod_not_the_regulation():
     """Two regulations sharing a mod share a dex, and should share the cache
     rather than re-dumping the same data under two names."""
-    assert dex_path(REGULATION_M_B) == Path("data/dex-champions.json")
-    assert dex_path(REGULATION_M_A, Path("elsewhere")) == Path(
-        "elsewhere/dex-championsregma.json"
+    assert dex_path(REGULATION_M_B) == Path("data/dex-championsregmb.json")
+    assert dex_path(REGULATION_M_C, Path("elsewhere")) == Path(
+        "elsewhere/dex-champions.json"
     )
 
 
@@ -57,11 +57,11 @@ def test_a_pool_from_another_regulation_is_explained_not_raised(monkeypatch, cap
     pool = tmp_path / "pool-eval.txt"
     pool.write_text("Staraptor-Mega @ Staraptorite\n", encoding="utf-8")
 
-    assert module.play(pool_path=pool, regulation=REGULATION_M_A) == 2
+    assert module.play(pool_path=pool, regulation=REGULATION_M_C) == 2
 
     out = capsys.readouterr().out
     assert "pool-eval.txt" in out
-    assert REGULATION_M_A.name in out
+    assert REGULATION_M_C.name in out
     assert "--team" in out
     # The engine's own words, not a paraphrase: the species it objected to is
     # the one piece of information that says which team to drop.
