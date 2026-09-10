@@ -1313,6 +1313,74 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### When M-C becomes installable, measured rather than hoped (2026-09-10)
+
+The plan for M-C was "watch npm". Checking what npm has actually done says that
+is not a plan.
+
+**Showdown publishes to npm very rarely.** Every release and the gap before it:
+
+```
+  0.11.7    2021-06-10      4 days after 0.11.6
+  0.11.8    2023-04-13    671 days
+  0.11.9    2023-04-14      0 days
+  0.11.10   2025-02-27    684 days
+  0.11.11   2026-07-28    516 days      <- the version installed here
+```
+
+Three of the last four gaps are over a year. There is no announced schedule, no
+release branch and no milestone in the repository pointing at the next one.
+
+**And the timing is already against us.** M-C was added to master in
+`812501ede` on **2026-09-09** -- one day before this was written. 0.11.11 was
+cut from `739a5e1fe` on **2026-07-28**, six weeks earlier. M-C therefore missed
+the current release by six weeks, and on the historical cadence the next npm
+build is a year or more away.
+
+**So waiting for npm is not a route to M-C support.** The realistic options,
+none of them taken yet:
+
+| option | cost |
+| --- | --- |
+| wait for an npm release | on the evidence, a year or more. Misses any near-term event |
+| install from a git ref | M-C immediately, but unpins `package-lock.json` -- every measurement in this project was made against 0.11.11, and a git install also brings 6 weeks of unrelated changes |
+| stay on 0.11.11, collect M-C replays | what is happening now: the corpus grows, nothing can be simulated |
+
+The middle option is a real choice rather than a mistake, but it is the user's
+to make: it trades reproducibility of everything already measured for the
+ability to measure anything about M-C at all. **Pinning to a specific commit
+rather than a branch would keep it reproducible going forward**, which is the
+version of that trade worth putting to them.
+
+### The base mod rotates, which makes an upgrade unsafe in a quiet way
+
+Found while checking the above, and it is the more important half.
+
+```
+  mod name          installed 0.11.11      smogon master
+  champions         Reg M-B                Reg M-C
+  championsregma    Reg M-A                deleted
+  championsregmb    -                      Reg M-B
+```
+
+**`champions` is not a fixed dex; it is whichever regulation is current.** When
+one ships it takes over the base mod and its predecessor is frozen into
+`championsreg<x>`. That is why M-A rotated out of `formats.ts` and why our
+`REGULATION_M_A.mod = "championsregma"` points at something master no longer
+has.
+
+The dangerous half is M-B. `REGULATION_M_B.mod = "champions"` is correct for
+the pinned build and wrong for any build after the rotation -- **and wrong
+silently**, because the mod *name* is unchanged and only the dex behind it
+moves. `Dex.cached` compares names, so after an upgrade a freshly dumped M-C
+roster would be served to a battle calling itself M-B, and every damage number
+would describe a different game while looking perfectly healthy.
+
+`tests/integration/test_regulation_mods.py` now asks the engine which mod each
+format really uses. It passes today and fails the day the dependency moves,
+naming the regulation to fix. Verified to discriminate: pointing M-B at
+`championsregmb`, the name master already uses, fires it.
+
 ### Closing the gaps `position` had, and what that turned up (2026-09-10)
 
 Four gaps were named on 2026-09-10. Three are closed; the fourth is blocked on
