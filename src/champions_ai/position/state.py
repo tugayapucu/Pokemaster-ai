@@ -222,17 +222,27 @@ class Position(BaseModel, frozen=True):
             return self._with_own(target.index, status=status)
         return self._with_theirs(target.index, status=status)
 
-    def with_revealed_move(self, target: Target, move: str) -> "Position":
+    def with_revealed_move(
+        self, target: Target, move: str, *, stalling: bool = False
+    ) -> "Position":
         """Record a move we have watched an opposing Pokemon use.
 
         Only meaningful for them -- we know our own moveset from the team
         sheet, and `revealed_moves` on our side is what *they* have seen.
+
+        `stalling` is passed in rather than looked up, because this module has
+        no dex. A second Protect in a row succeeds about a third as often as
+        the first, so the streak is worth keeping and worth *resetting*: using
+        anything else breaks it.
         """
         if target.side == US:
             raise ValueError("our own moves come from the team sheet, not from watching")
         mon = self.their_seen[target.index]
         return self._with_theirs(
-            target.index, revealed_moves=mon.revealed_moves | {move}, last_move=move
+            target.index,
+            revealed_moves=mon.revealed_moves | {move},
+            last_move=move,
+            protect_streak=mon.protect_streak + 1 if stalling else 0,
         )
 
     def with_their_item(self, target: Target, item: str | None) -> "Position":
@@ -321,7 +331,7 @@ class Position(BaseModel, frozen=True):
         updated[moves.index(move)] = remaining
         return self._with_own(target.index, move_pp=tuple(updated))
 
-    def move_used(self, target: Target, move: str) -> "Position":
+    def move_used(self, target: Target, move: str, *, stalling: bool = False) -> "Position":
         """One use spent, and it becomes the last move this Pokemon made."""
         if target.side == THEM:
             # Watching them use a move is `with_revealed_move`, which records
@@ -335,7 +345,11 @@ class Position(BaseModel, frozen=True):
         if mon.move_pp is not None:
             left = mon.move_pp[moves.index(move)]
             position = self.with_pp(target, move, max(0, left - 1))
-        return position._with_own(target.index, last_move=move)
+        return position._with_own(
+            target.index,
+            last_move=move,
+            protect_streak=mon.protect_streak + 1 if stalling else 0,
+        )
 
     def remaining_pp(self, target: Target, move: str) -> int | None:
         mon = self.own.team[target.index]
@@ -458,6 +472,31 @@ class Position(BaseModel, frozen=True):
         )
         return self.model_copy(
             update={"own": self.own.model_copy(update={"team": team, "mega_used": True})}
+        )
+
+    def next_turn(self) -> "Position":
+        """Advance one turn and tick every timer down.
+
+        The turn number itself changes almost nothing; the timers are the
+        point. Tailwind, the screens and Trick Room all expire on a count, and
+        a count that only moves when someone remembers to retype it is a count
+        that will be wrong by the turn it matters.
+
+        Nothing else is touched. What happened during the turn is what the
+        player types; this only moves the clock.
+        """
+        def ticked(conditions: dict[str, int]) -> dict[str, int]:
+            return {name: turns - 1 for name, turns in conditions.items() if turns - 1 > 0}
+
+        return self.model_copy(
+            update={
+                "turn": self.turn + 1,
+                "own": self.own.model_copy(
+                    update={"side_conditions": ticked(self.own.side_conditions)}
+                ),
+                "their_side_conditions": ticked(self.their_side_conditions),
+                "field_conditions": ticked(self.field_conditions),
+            }
         )
 
     def with_turn(self, turn: int) -> "Position":

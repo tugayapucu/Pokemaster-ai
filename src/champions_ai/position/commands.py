@@ -103,7 +103,8 @@ HELP = """
     room               trick room on; room none to clear
     tailwind them      also reflect lightscreen auroraveil; add turns to override
     mega us            record a Mega Evolution as spent
-    turn 7
+    turn 7             set it directly
+    n                  next turn: Tailwind, screens and Trick Room tick down
 
   Several at once:  char 55; gambit ko; +1 atk blaziken
 
@@ -185,6 +186,19 @@ def _is_status(dex: Dex, move_id: str) -> bool:
         return False
 
 
+def _is_stalling(dex: Dex, move_id: str) -> bool:
+    """Whether this move drives the engine's shared stall counter.
+
+    Wider than "blocks damage": Endure shares the counter while letting the hit
+    land, which is why the dex carries the flag instead of anyone listing the
+    protection moves by hand.
+    """
+    try:
+        return dex.get_move(move_id).stalling
+    except (KeyError, AttributeError):
+        return False
+
+
 def _own_move(position: Position, dex: Dex, target: Target, text: str) -> str:
     """A move id, resolved against *this Pokemon's own four*.
 
@@ -231,7 +245,7 @@ def _edit(position: Position, dex: Dex, target: Target, rest: list[str]) -> Outc
             raise ValueError("saw what? `char saw heat wave`")
         move = resolve_move(dex, " ".join(rest[1:]))
         return Outcome(
-            position=position.with_revealed_move(target, move),
+            position=position.with_revealed_move(target, move, stalling=_is_stalling(dex, move)),
             message=f"{name} has {dex.get_move(move).name}",
         )
 
@@ -266,7 +280,7 @@ def _edit(position: Position, dex: Dex, target: Target, rest: list[str]) -> Outc
         if len(rest) < 2:
             raise ValueError("used what? `char used protect`")
         move = _own_move(position, dex, target, " ".join(rest[1:]))
-        updated = position.move_used(target, move)
+        updated = position.move_used(target, move, stalling=_is_stalling(dex, move))
         left = updated.remaining_pp(target, move)
         tail = f", {left} left" if left is not None else ""
         return Outcome(
@@ -370,6 +384,12 @@ def apply(position: Position, dex: Dex, line: str) -> Outcome:
         return Outcome(position=position, control="undo")
     if head in ("go", "board", "b"):
         return Outcome(position=position, control="show")
+
+    if head in ("n", "next"):
+        return Outcome(
+            position=position.next_turn(),
+            message=f"turn {position.turn + 1}, timers ticked",
+        )
 
     if head == "turn":
         if not rest or not rest[0].isdigit():

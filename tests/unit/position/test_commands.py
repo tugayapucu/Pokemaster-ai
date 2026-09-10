@@ -446,3 +446,72 @@ def test_an_opponents_pp_is_not_something_we_can_claim(counted, rdex):
 def test_a_move_it_does_not_have_cannot_be_spent(counted, rdex):
     with pytest.raises(ValueError, match="no move matches"):
         _apply(counted, rdex, "blaziken used earthquake")
+
+
+# -- advancing a turn, which is really about the timers ------------------------
+
+
+class _StallDex(_RestrictionDex):
+    """Knows which moves drive the engine's stall counter."""
+
+    def get_move(self, move_id):
+        move = super().get_move(move_id)
+        move.stalling = move_id in ("protect", "banefulbunker")
+        return move
+
+
+@pytest.fixture
+def sdex():
+    return _StallDex()
+
+
+def test_next_advances_the_turn(position, dex):
+    assert _apply(position, dex, "n").turn == 2
+
+
+def test_next_ticks_every_timer_down(position, dex):
+    """The actual point. A count that only moves when someone remembers to
+    retype it is a count that will be wrong by the turn it matters."""
+    set_up = _apply(position, dex, "tailwind them; reflect us; room")
+    after = _apply(set_up, dex, "n")
+    assert after.their_side_conditions == {"tailwind": 3}
+    assert after.own.side_conditions == {"reflect": 4}
+    assert after.field_conditions == {"trickroom": 4}
+
+
+def test_a_timer_that_runs_out_is_removed_not_left_at_zero(position, dex):
+    """Zero would read as present-but-expired everywhere downstream."""
+    set_up = _apply(position, dex, "tailwind them 1")
+    assert _apply(set_up, dex, "n").their_side_conditions == {}
+
+
+def test_next_changes_nothing_else(position, dex):
+    """What happened during the turn is what the player types; this only moves
+    the clock."""
+    before = _apply(position, dex, "gambit 40; gambit +2 atk")
+    after = _apply(before, dex, "n")
+    assert after.their_seen[0].hp_percent == 40
+    assert after.their_seen[0].boosts.attack == 2
+    assert after.their_active == before.their_active
+
+
+def test_a_repeated_protect_builds_a_streak(counted, sdex):
+    """A second Protect in a row succeeds about a third as often, so the
+    streak is worth keeping."""
+    once = _apply(counted, sdex, "blaziken used protect")
+    twice = _apply(once, sdex, "blaziken used protect")
+    assert once.own.team[0].protect_streak == 1
+    assert twice.own.team[0].protect_streak == 2
+
+
+def test_using_anything_else_breaks_the_streak(counted, sdex):
+    once = _apply(counted, sdex, "blaziken used protect")
+    assert _apply(once, sdex, "blaziken used flare blitz").own.team[0].protect_streak == 0
+
+
+def test_a_watched_protect_builds_their_streak_too(position, sdex):
+    """`saw` is how we learn anything about them, and the streak is the part
+    that changes what Protect is worth to them next turn."""
+    once = _apply(position, sdex, "gambit saw protect")
+    assert once.their_seen[0].protect_streak == 1
+    assert _apply(once, sdex, "gambit saw earthquake").their_seen[0].protect_streak == 0
