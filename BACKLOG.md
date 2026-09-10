@@ -64,11 +64,12 @@ Mega stones to 75, nothing removed, identical rule table.
 
 Next, in order:
 
-- **Compare agreement at matched ratings before believing any of it.** M-C
-  reads 45.0% against M-B's 43.9%, but the M-C corpus is 1000–1182 and the M-B
-  one is 1500+. Agreeing *more* with much weaker players is not a good sign, and
-  it is the same shape 0010 and 0013 were caught by. This is the first real use
-  for the rating-banding item below, and it is one run of an existing command.
+- ~~Compare agreement at matched ratings~~ — **done, 0044.** Flat everywhere:
+  44.7% for M-B at 1500–1827 and 44.6% for M-C at 1000–1341. The 45.0% vs 43.9%
+  that prompted this was a 300-replay sample; over the full corpora the two are
+  a tenth of a point apart. **The unfiltered M-C corpus is therefore not the
+  liability it looked like** — which says how little agreement varies, not that
+  the corpus is good.
 - **Re-collect M-C at `--min-rating 1500` once the ladder settles.** The bar
   everything else in this project was measured against. Same command; the
   replays persist.
@@ -82,49 +83,6 @@ Next, in order:
   and M-C freezes into `championsregmc`.
   `tests/integration/test_regulation_mods.py` will fail and name it; the fix is
   the `mod` string plus deleting `data/dex-*.json`.
-
-### Value a game by how strong its players were, instead of a cutoff
-
-Agreed 2026-09-10. Collection now keeps everything at 1000+ rather than
-1500+ on both players, because a one-day-old M-C ladder has nobody above
-1182. That is the right call for *getting* the data and the wrong one for
-*using* it unchanged: a 1000-rated game and an 1800-rated game are currently
-worth exactly the same to every number this project computes.
-
-**The corpus is now two populations, which is the part that bites.** M-B was
-collected at 1500+ and M-C at 1000+. Pooled without a weight or a band, any
-difference measured between the regulations is confounded with a difference in
-player strength, and the confound points the same way as the interesting
-result -- so it would be easy to read "M-C plays differently" off what is
-really "M-C's ladder is younger".
-
-**Do the instrument check before building the weight.** `review --all` already
-computes agreement across the corpus; band it by the weaker player's rating and
-look:
-
-| if agreement is | then |
-| --- | --- |
-| flat across bands | weighting changes nothing, and *that* is the finding — close the item |
-| rising with rating | the weight is justified, and the shape of the rise says what it should be |
-| falling with rating | far more interesting, and a reason to distrust agreement further |
-
-This is the same discipline as 0026, which found the instrument blind rather
-than the pool empty, and it costs one run of a command that already exists.
-
-Only then, the weight itself. Sketch, not a decision:
-
-- `ReplayMetadata.minimum_rating` is already recorded per replay and already
-  the honest bar -- the *weaker* player, not the average.
-- A weight belongs wherever the corpus is aggregated: agreement reporting, any
-  fitting, any sampling. One function, applied in each, rather than a filter
-  duplicated in three places.
-- Whatever the shape, it must be reported alongside every number derived with
-  it. A weighted percentage that does not say it is weighted is the same class
-  of problem as an unlabelled rating cutoff.
-
-**Not a reason to raise the bar again.** The replays persist; a second
-`--min-rating 1500` collection is available whenever the M-C ladder settles,
-and having both is strictly better than having only the strong half.
 
 ### Use it, and fix what using it finds
 
@@ -208,6 +166,74 @@ corpus was wrong, and the point here is coverage of the *action space*, not
 copying anyone's judgement.
 
 ## Done, most recent first
+
+### ~~Value a game by how strong its players were~~ — closed 2026-09-10 (0044)
+
+Measured before building: agreement is **flat across 800 Elo**. Bands fixed
+from each corpus's quartiles in a pre-registration, then run once per
+regulation over the whole corpus.
+
+```
+  Reg M-B, 1500-1827:  45.1  44.6  44.4  44.5
+  Reg M-C, 1000-1341:  44.4  45.2  45.3  45.7
+```
+
+Every interval overlaps every other and the two drifts point opposite ways.
+A weight would have added a parameter, a sweep and a caveat to every
+reported number in exchange for moving nothing.
+
+Third time agreement has failed to behave like a quality measure, after
+0010 and 0013. The live reading -- that it measures how *forced* the
+format's decisions are rather than how well they are played -- is untested;
+banding by the number of legal actions would test it, and is one more
+banding of a survey that already runs.
+
+The superseded item, kept because ruled-out items move here rather than
+disappearing:
+
+### Value a game by how strong its players were, instead of a cutoff
+
+Agreed 2026-09-10. Collection now keeps everything at 1000+ rather than
+1500+ on both players, because a one-day-old M-C ladder has nobody above
+1182. That is the right call for *getting* the data and the wrong one for
+*using* it unchanged: a 1000-rated game and an 1800-rated game are currently
+worth exactly the same to every number this project computes.
+
+**The corpus is now two populations, which is the part that bites.** M-B was
+collected at 1500+ and M-C at 1000+. Pooled without a weight or a band, any
+difference measured between the regulations is confounded with a difference in
+player strength, and the confound points the same way as the interesting
+result -- so it would be easy to read "M-C plays differently" off what is
+really "M-C's ladder is younger".
+
+**Do the instrument check before building the weight.** `review --all` already
+computes agreement across the corpus; band it by the weaker player's rating and
+look:
+
+| if agreement is | then |
+| --- | --- |
+| flat across bands | weighting changes nothing, and *that* is the finding — close the item |
+| rising with rating | the weight is justified, and the shape of the rise says what it should be |
+| falling with rating | far more interesting, and a reason to distrust agreement further |
+
+This is the same discipline as 0026, which found the instrument blind rather
+than the pool empty, and it costs one run of a command that already exists.
+
+Only then, the weight itself. Sketch, not a decision:
+
+- `ReplayMetadata.minimum_rating` is already recorded per replay and already
+  the honest bar -- the *weaker* player, not the average.
+- A weight belongs wherever the corpus is aggregated: agreement reporting, any
+  fitting, any sampling. One function, applied in each, rather than a filter
+  duplicated in three places.
+- Whatever the shape, it must be reported alongside every number derived with
+  it. A weighted percentage that does not say it is weighted is the same class
+  of problem as an unlabelled rating cutoff.
+
+**Not a reason to raise the bar again.** The replays persist; a second
+`--min-rating 1500` collection is available whenever the M-C ladder settles,
+and having both is strictly better than having only the strong half.
+
 
 ### ~~Milestone 8, the cheap version~~ — closed 2026-09-05, level with the heuristic (0043)
 

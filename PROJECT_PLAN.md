@@ -1313,6 +1313,60 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Agreement does not track how good the players are (2026-09-10, 0044)
+
+Dropping the collection bar to 1000+ raised a question: should a game be
+weighted by how strong its players were? Measured before building the weight,
+which is the 0026 discipline. Bands were fixed from each corpus's own quartiles
+in a pre-registration, before any agreement number existed.
+
+```
+  Reg M-B   1500-1827 Elo     45.1   44.6   44.4   44.5      (drifts down)
+  Reg M-C   1000-1341 Elo     44.4   45.2   45.3   45.7      (drifts up)
+```
+
+Every 95% interval overlaps every other, and the two drifts point opposite
+ways. The blunter version is the corpora against each other, which stretches
+the rating axis much further than either alone:
+
+| corpus | rating range | agreement |
+| --- | --- | --- |
+| Reg M-C | 1000-1341 | **44.6%** |
+| Reg M-B | 1500-1827 | **44.7%** |
+
+**Eight hundred Elo apart; one tenth of a point.** Beginners on a one-day-old
+ladder match our top recommendation as often as established ladder players do.
+
+So the weighting item closes. A weight would have added a parameter, a sweep
+and a caveat to every reported number in exchange for moving nothing.
+
+Two things follow.
+
+- **The unfiltered M-C corpus is not the liability it looked like.** It was
+  collected without a rating bar out of necessity and written down as "unusable
+  as an agreement signal". It is exactly as usable as the 1500+ one -- which is
+  a statement about how little agreement varies, not a promotion of the corpus.
+  It also retires a scare of my own: an earlier 300-replay sample read 45.0%
+  against M-B's 43.9% and prompted a warning that we agree *more* with weaker
+  players. Over the full corpora that gap is a tenth of a point. It was
+  sampling noise, and reporting it as a finding was premature.
+- **This is the third time agreement has failed to behave like a quality
+  measure**, after 0010 (Trick Room's value fitted without bound) and 0013
+  (humans near-random on targeting).
+
+The natural reading is that agreement mostly measures **how forced the format's
+decisions are**, not how well anyone plays them: a Pokemon with one good attack
+into one good target has one good move whoever is holding the controller, and
+that floor sits at the same height at every rating.
+
+**That reading is untested.** Banding agreement by the *number of legal actions
+the position offered* would test it -- if flatness is forcedness, agreement
+should fall as the branching factor rises, and fall equally at every rating.
+One more banding of a survey that already runs.
+
+A flat result means weighting is pointless. It does **not** mean agreement is a
+sound target, and nothing here changes what 0010 and 0013 established.
+
 ### M-C, end to end on the first day (2026-09-10)
 
 Merged to `main` and then actually used, which is where the remaining findings
