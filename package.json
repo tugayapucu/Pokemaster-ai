@@ -5,5 +5,8 @@
   "description": "Node-side Showdown simulator bridge for champions_ai",
   "dependencies": {
     "pokemon-showdown": "github:smogon/pokemon-showdown#d849b220082e113d8a17303509fb44d420c543d5"
+  },
+  "scripts": {
+    "build:sim": "node node_modules/pokemon-showdown/build"
   }
 }
