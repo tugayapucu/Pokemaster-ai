@@ -114,6 +114,49 @@ What happens next, in order:
 - **Not yet, and deliberately:** anything that assumes M-C's dex, rules or
   metagame. The mod is the only thing that will settle those.
 
+### Value a game by how strong its players were, instead of a cutoff
+
+Agreed 2026-09-10. Collection now keeps everything at 1000+ rather than
+1500+ on both players, because a one-day-old M-C ladder has nobody above
+1182. That is the right call for *getting* the data and the wrong one for
+*using* it unchanged: a 1000-rated game and an 1800-rated game are currently
+worth exactly the same to every number this project computes.
+
+**The corpus is now two populations, which is the part that bites.** M-B was
+collected at 1500+ and M-C at 1000+. Pooled without a weight or a band, any
+difference measured between the regulations is confounded with a difference in
+player strength, and the confound points the same way as the interesting
+result -- so it would be easy to read "M-C plays differently" off what is
+really "M-C's ladder is younger".
+
+**Do the instrument check before building the weight.** `review --all` already
+computes agreement across the corpus; band it by the weaker player's rating and
+look:
+
+| if agreement is | then |
+| --- | --- |
+| flat across bands | weighting changes nothing, and *that* is the finding — close the item |
+| rising with rating | the weight is justified, and the shape of the rise says what it should be |
+| falling with rating | far more interesting, and a reason to distrust agreement further |
+
+This is the same discipline as 0026, which found the instrument blind rather
+than the pool empty, and it costs one run of a command that already exists.
+
+Only then, the weight itself. Sketch, not a decision:
+
+- `ReplayMetadata.minimum_rating` is already recorded per replay and already
+  the honest bar -- the *weaker* player, not the average.
+- A weight belongs wherever the corpus is aggregated: agreement reporting, any
+  fitting, any sampling. One function, applied in each, rather than a filter
+  duplicated in three places.
+- Whatever the shape, it must be reported alongside every number derived with
+  it. A weighted percentage that does not say it is weighted is the same class
+  of problem as an unlabelled rating cutoff.
+
+**Not a reason to raise the bar again.** The replays persist; a second
+`--min-rating 1500` collection is available whenever the M-C ladder settles,
+and having both is strictly better than having only the strong half.
+
 ### Use it, and fix what using it finds
 
 **Done 2026-09-07: `champions-ai position`.** The one command that helps
