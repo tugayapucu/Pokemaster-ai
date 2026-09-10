@@ -75,24 +75,24 @@ Next, in order:
   replays persist.
 - **Re-harvest the pool from that better corpus.** `data/pool-eval-m-c.txt` is
   built from 1000-rated games, so it is a record of what beginners bring.
-- ~~Find the harness behind the published 93.9% figure~~ — **answered by
-  0046.** Self-play with **Mega excluded** reads 94.1% on the pinned build,
-  against 93.9% on npm 0.11.11. The engine pin did not move damage accuracy.
-  The ad-hoc 73.0% left Mega in and attributed a whole turn's hits to a
-  pre-turn snapshot.
-- **Close the ~10-point damage gap on M-C's new species.** *This is the live
-  one, and it is the last thing between `position` and being trustworthy at a
-  Regional.* 0046: 94.1% when neither side is new against 84.9% when either is,
-  intervals not overlapping. Really four species — Rillaboom, Baxcalibur,
-  Golisopod, Salamence — and Rillaboom alone fills 156 of 2,400 slots in the
-  harvested pool.
-
-  Grassy Terrain's missing halving of Earthquake was found and fixed on the way
-  and **did not close it**. The mismatches point at a stat rather than a move
-  rule: Golisopod attacking under-predicted ~2.2× across different moves and
-  targets, Baxcalibur defending ~2× across different attackers. Two guesses
-  have been wrong, so the next step is the direct check — compare our
-  `computed_stats` for those two against the engine's for the same packed team.
+- ~~Close the damage gap on M-C's new species~~ — **there is no gap.** 0046,
+  after correction: 83.2% when a new species is involved against 80.8% when
+  none is, intervals heavily overlapping. The first run reported a −9.2 point
+  gap and was wrong: Mega formes were meant to be excluded, the exclusion tested
+  the species *name*, and the lookup resolved by species — which is exactly what
+  a Mega changes. It printed "0 samples dropped" over a pool full of Mega Stones
+  on every run. **A filter that reports dropping nothing is a filter that is not
+  running.**
+- **Fix the differential harness's attribution.** Now the open one, and it
+  blocks any absolute damage number. Species matching loses Mega; slot matching
+  loses anything that switches or faints mid-turn. Both arms currently read
+  ~81–83% against a published 93.9%, and the surviving mismatches show errors in
+  *both directions on the same move* — mis-attribution, not a wrong multiplier.
+  The harness needs state as of each protocol **line**, which the tracker
+  already maintains, instead of one snapshot per turn.
+  **Until this is fixed, no absolute damage-accuracy figure should be quoted** —
+  including the earlier claim here that 93.9% was confirmed on the pinned build,
+  which came from the contaminated run and is withdrawn.
 - **Watch for the mod rotating again.** When M-D ships, `champions` becomes M-D
   and M-C freezes into `championsregmc`.
   `tests/integration/test_regulation_mods.py` will fail and name it; the fix is

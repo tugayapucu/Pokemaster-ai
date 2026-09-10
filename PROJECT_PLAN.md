@@ -1313,63 +1313,69 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
-### The damage model is ten points worse on M-C's new species (0046)
-
-The last thing between this project and trusting `position` at a Regional, and
-the answer is **no, not yet**.
+### No damage gap on M-C's new species -- and how the first answer was wrong (0046)
 
 | arm | inside the predicted range | n | 95% Wilson |
 | --- | --- | --- | --- |
-| neither side new | **94.1%** | 254 | [90.5%, 96.4%] |
-| attacker or defender new | **84.9%** | 126 | [77.6%, 90.1%] |
+| neither side new | 80.8% | 265 | [75.6%, 85.0%] |
+| attacker or defender new | 83.2% | 101 | [74.7%, 89.2%] |
 
-Intervals do not overlap. Paired by construction — both arms come from the same
-battles and seeds — so any harness bias cancels. Mega formes are excluded from
-both arms, since Mega already costs seven points on its own and twelve of M-C's
-35 additions are formes.
+**+2.4% in favour of the new species, intervals heavily overlapping.** The
+damage model handles M-C's 35 additions as well as it handles anything else.
+Nothing about Rillaboom, Baxcalibur, Golisopod or Salamence needs fixing before
+Frankfurt.
 
-**This settles the 93.9% question for free.** The old arm reads 94.1% against
-the 93.9% recorded on npm 0.11.11, so **the engine pin did not move damage
-accuracy**, and the ad-hoc 73.0% from earlier is explained: it left Mega in, and
-it attributed a whole turn's hits to a snapshot taken before the turn.
+**The first version of this entry said the opposite** -- a -9.2 point gap, with
+94.1% against 84.9% -- and it was wrong. Retracted here rather than quietly
+edited, because how it was wrong is the more useful part.
 
-**It is really four species.** 124 of 130 new-arm samples involve Rillaboom,
-then Baxcalibur, Golisopod and Salamence. The honest headline is the narrow one.
+#### Mega contamination, announced on screen and ignored
 
-#### A real bug, fixed, and not the cause
+The pre-registration excluded Mega formes. The code excluded them by testing
+for `"mega"` in the species name, and **printed "0 samples dropped for
+involving a Mega forme" on every run, over a pool full of Mega Stones.** That
+line was the tell, it was on screen the whole time, and I did not question it.
 
-Grassy Terrain has two rules and this project modelled one. The 1.3× on Grass
-moves was handled. The **halving of Earthquake, Bulldoze and Magnitude against
-a grounded target** was not — and Rillaboom has Grassy Surge, so the terrain is
-up the moment it appears and Earthquake is a staple. Every one was predicted at
-double its real damage.
+Two mistakes compounded:
 
-Transcribed from `data/moves.ts`, verified directly (base power 100 → 50), three
-unit tests including the one that reads the *defender's* footing rather than the
-attacker's.
+- **The lookup resolved by species.** `active_by_ident` warns in its own
+  docstring that a Pokemon which Mega Evolves keeps its protocol ident while
+  its set becomes the Mega forme. Species matching was chosen deliberately, on
+  the reasoning that its Mega blind spot was safe *because Mega was excluded* --
+  and Mega was not excluded, because the exclusion depended on the very name
+  the lookup got wrong.
+- **The arms were not symmetric in Mega exposure.** Three of M-C's additions
+  are new Megas, so the "new" arm carried more contaminated samples, and the
+  contamination looked exactly like a deficiency in the new species.
 
-**Re-running 0046 with the fix left the gap at −10.6%.** A genuine bug, and not
-this one. Recorded that way: a fix that does not move the number it was aimed at
-should be reported as not moving it.
+Excluding on the held **stone** instead drops 202 samples per 60 battles where
+0 were dropped before, and the gap inverts.
 
-#### Where it actually points
+#### What is withdrawn with it
 
-```
-  Golisopod ironhead -> Baxcalibur:    predicted 78-92,  engine dealt 192
-  Gholdengo shadowball -> Baxcalibur:  predicted 64-76,  engine dealt 134
-  Incineroar flareblitz -> Baxcalibur: predicted 54-64,  engine dealt 126
-  Golisopod ironhead -> Incineroar:    predicted 13-16,  engine dealt 35
-```
+The first version also claimed the published **93.9% was confirmed on the
+pinned build** -- 94.1% on the old arm. That came from the same contaminated
+run and is withdrawn. Both arms now read ~81-83%, and the reason is the
+opposite failure: `Side` resolves by slot, and `active_slots` is read before
+the turn is submitted, so it is stale the moment anything switches or faints
+mid-turn. The surviving mismatches show errors in **both directions on the same
+move**, which is mis-attribution rather than a wrong multiplier.
 
-Two clusters, both near a clean factor of two: **Golisopod attacking**
-under-predicted ~2.2× across different moves and targets, and **Baxcalibur
-defending** ~2× across different attackers. A multiplier following the *species*
-rather than the move points at a stat line, not a move rule, and neither carries
-a damage-modifying ability.
+**Neither lookup is correct.** Species matching loses Mega; slot matching loses
+mid-turn movement. The harness needs state as of each protocol *line* -- which
+the tracker already maintains -- rather than one snapshot per turn. That is the
+real fix, and it is separate work.
 
-Two hypotheses have now been wrong. The next step is not a third guess: compare
-our `computed_stats` for those two against the engine's for the same packed
-team, which settles it in five lines.
+#### What survives
+
+- The comparative answer, which is what the experiment was for.
+- **The Grassy Terrain fix**, independent of all of this: the terrain halves
+  Earthquake, Bulldoze and Magnitude against a grounded target, that rule was
+  missing, and it is transcribed from `data/moves.ts` and unit-tested. Rillaboom
+  has Grassy Surge, so every Earthquake under it was predicted at double its
+  real damage.
+- A rule worth keeping: **a filter that reports dropping nothing is a filter
+  that is not running.**
 
 ### The adviser's edge is uniform, and forcedness was the wrong answer (0045)
 

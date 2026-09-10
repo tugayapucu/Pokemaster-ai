@@ -44,6 +44,31 @@ def new_species(bridge) -> set[str]:
     }
 
 
+def _mega_capable(dex, mon) -> bool:
+    """Is this Pokemon a Mega, or holding the stone that makes it one?
+
+    Checked by **item**, not by species name. The first run of this experiment
+    excluded Megas by looking for "mega" in the species, which never fired --
+    it printed "0 samples dropped" over a pool full of Mega Stones and that
+    should have been the tell. A Pokemon mid-Mega can still be named for its
+    base forme, so the stone is the reliable signal.
+    """
+    species_id = to_id(mon.pokemon_set.species)
+    if "mega" in species_id:
+        return True
+    held = mon.current_item or mon.pokemon_set.item
+    if not held:
+        return False
+    try:
+        species = dex.get_species(mon.pokemon_set.species)
+        item = dex.get_item(held)
+    except KeyError:
+        return False
+    return item.mega_stone is not None and item.mega_stone in (
+        species.name, species.base_species
+    )
+
+
 def main() -> None:
     with ShowdownBridge() as bridge:
         added = new_species(bridge)
@@ -79,14 +104,17 @@ def main() -> None:
                         choices[player] = agents[player].select_action(
                             env.observation(player), env.legal_actions(player)
                         )
-                # Whole teams rather than a pre-turn `Side` snapshot. A Side
-                # resolves by slot, which is stale the moment anything switches
-                # mid-turn; whole teams resolve by species, whose only blind
-                # spot is a Mega changing its own name -- and Mega is excluded
-                # from this measurement anyway.
+                # `Side`, so the lookup resolves by **slot**. Whole-team
+                # lists resolve by species, and a Pokemon that Mega Evolves
+                # keeps its protocol ident while its set becomes the Mega
+                # forme -- so species matching silently returns the *base*
+                # forme's stats and compares them against the Mega's damage.
+                # That is a ~2x error, it is what the first run of this
+                # experiment measured, and `active_by_ident` warns about it in
+                # its own docstring.
                 lookup = active_by_ident({
-                    "p1": list(env.observation(0).own_side.team),
-                    "p2": list(env.observation(1).own_side.team),
+                    "p1": env.observation(0).own_side,
+                    "p2": env.observation(1).own_side,
                 })
                 result = env.step(choices)
                 chunk = result.protocol[seen:]
@@ -94,7 +122,9 @@ def main() -> None:
                 for sample in collector.feed(chunk, lookup):
                     attacker = to_id(sample.attacker.pokemon_set.species)
                     defender = to_id(sample.defender.pokemon_set.species)
-                    if "mega" in attacker or "mega" in defender:
+                    if _mega_capable(dex, sample.attacker) or _mega_capable(
+                        dex, sample.defender
+                    ):
                         skipped_mega += 1
                         continue
                     involved = [s for s in (attacker, defender) if s in added]

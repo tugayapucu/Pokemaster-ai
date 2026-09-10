@@ -1,90 +1,88 @@
-# 0046 — The damage model is ~10 points worse on M-C's new species
+# 0046 — There is no damage gap on M-C's new species. The first answer was wrong.
 
-Run 2026-09-10 against the pre-registration in this directory, at the
-registered 60 battles. **The prediction was wrong**, which is the point of
-writing it down first.
+Run 2026-09-10. **This file has been rewritten**: the first version reported a
+−9.2 point gap and that result was an artifact of the harness, not a property
+of the model. The retraction is the finding worth keeping.
 
-## Result
+## The answer
 
 | arm | inside the predicted range | n | 95% Wilson |
 | --- | --- | --- | --- |
-| **old** (neither side new) | **94.1%** | 254 | [90.5%, 96.4%] |
-| **new** (attacker or defender new) | **84.9%** | 126 | [77.6%, 90.1%] |
+| **old** (neither side new) | 80.8% | 265 | [75.6%, 85.0%] |
+| **new** (attacker or defender new) | 83.2% | 101 | [74.7%, 89.2%] |
 
-**Gap: −9.2 points.** The intervals do not overlap.
+**Gap: +2.4% in favour of the new species, intervals heavily overlapping.**
 
-## Two things this settles for free
+The damage model handles Reg M-C's 35 new species as well as it handles
+anything else. The pre-registered prediction — "no meaningful difference" — was
+right after all. Nothing about Rillaboom, Baxcalibur, Golisopod or Salamence
+needs fixing before Frankfurt.
 
-**The harness is sound, and the published 93.9% still holds.** The old arm
-reads **94.1%** against the 93.9% recorded on npm 0.11.11. So the engine pin
-did not move damage accuracy, and the backlog item asking where 93.9% came from
-is answered: it is self-play with **Mega excluded**, and the earlier ad-hoc
-attempt read 73.0% for two reasons — it left Mega in (already known to cost
-seven points) and it snapshotted each side *before* a turn, then attributed
-that whole turn's hits to the snapshot.
+## What went wrong the first time
 
-**The gap is really about a handful of species.** 124 of the 130 new-arm
-samples involve Rillaboom, with Baxcalibur (34), Golisopod (28) and Salamence
-(16) behind it. This is not "new species are worse" so much as "these four are
-worse", and the honest headline is the narrower one.
+The first run reported old 94.1% against new 84.9% and I believed it, wrote it
+up, and pushed it. It was **Mega contamination**.
 
-## A real bug found, fixed, and *not* the cause
+The pre-registration said to exclude Mega formes, and the code did this:
 
-Grassy Terrain has two rules and this project modelled one. It boosts Grass
-moves by 1.3×, which was handled; it also **halves Earthquake, Bulldoze and
-Magnitude against a grounded target**, which was not:
-
-```js
-const weakenedMoves = ['earthquake', 'bulldoze', 'magnitude'];
-if (weakenedMoves.includes(move.id) && defender.isGrounded() && ...) {
-    return this.chainModify(0.5);
+```python
+if "mega" in attacker or "mega" in defender:   # species name
 ```
 
-That is not a small omission in this format: Rillaboom has Grassy Surge, so the
-terrain is up the moment it is sent out, and Earthquake is a staple. Every one
-was predicted at double its real damage while Rillaboom was on the field.
+That never fired. **It printed "0 samples dropped for involving a Mega forme"
+on every run, over a pool full of Mega Stones, and I did not question it.**
+That line was the tell and it was on screen the whole time.
 
-Fixed in `mechanics/base_power.py`, transcribed from the engine, verified
-directly (Earthquake 100 → 50 base power under Grassy Terrain) and covered by
-three unit tests including the case that reads the *defender's* footing rather
-than the attacker's.
+Two mistakes compounded:
 
-**And re-running 0046 with the fix in place left the gap at −10.6%.** It was a
-genuine bug and it was not this one. Recorded that way because a fix that does
-not move the number it was aimed at should be reported as not moving it.
+1. **The lookup resolved by species.** `active_by_ident` warns in its own
+   docstring that a Pokemon which Mega Evolves keeps its protocol ident while
+   its set becomes the Mega forme, so species matching returns the *base*
+   forme. I chose species matching deliberately, reasoning that its Mega blind
+   spot was safe *because Mega was excluded* — and Mega was not excluded,
+   because the exclusion depended on the very name the lookup got wrong.
+2. **The arms were not symmetric in Mega exposure.** Three of M-C's additions
+   are new Megas — Golisopod, Baxcalibur and Salamence all have stones. So the
+   "new" arm carried more contaminated samples than the "old" one, and the
+   contamination looked exactly like a deficiency in the new species.
 
-## What the mismatches actually say
+Fixed by excluding on the **item** — a held stone that matches its holder —
+and by resolving through `Side`, which goes by slot.
 
-Two clusters, both close to a clean factor of two:
+With that, 202 samples are dropped per 60 battles where 0 were before, and the
+gap inverts from −9.2 to +2.4.
+
+## What is still open, and is now a different question
+
+Both arms now read ~81–83%, against the 93.9% this project publishes. **So the
+"93.9% confirmed on the pinned build" claim from the first version is also
+withdrawn** — it was the same contaminated run.
+
+Slot resolution has the opposite failure to species resolution: `active_slots`
+is read before the turn is submitted and is stale the moment anything switches
+or faints mid-turn. The surviving mismatches look like exactly that —
 
 ```
-  Golisopod ironhead -> Incineroar:   predicted 13-16,  engine dealt 35
-  Golisopod ironhead -> Baxcalibur:   predicted 78-92,  engine dealt 192
-  Golisopod ironhead -> Basculegion:  predicted 25-29,  engine dealt 63
-  Gholdengo shadowball -> Baxcalibur: predicted 64-76,  engine dealt 134
-  Incineroar flareblitz -> Baxcalibur: predicted 54-64, engine dealt 126
-  Tyranitar knockoff -> Baxcalibur:   predicted 75-88,  engine dealt 152
+  Rillaboom woodhammer -> Kingambit:  predicted 45-54,  engine dealt 147
+  Rillaboom woodhammer -> Primarina:  predicted 116-140, engine dealt 48
 ```
 
-- **Golisopod attacking** is under-predicted ~2.2×, across different moves and
-  different targets.
-- **Baxcalibur defending** is under-predicted ~2×, across different *attackers*.
+— errors in both directions on the same move, which is what mis-attributing
+the defender looks like rather than what a wrong multiplier looks like.
 
-A multiplier that big, following the *species* rather than the move, points at
-a stat rather than a move rule — we appear to think Golisopod hits far softer
-and Baxcalibur is far bulkier than the engine does. Neither carries a
-damage-modifying ability (Emergency Exit, Thermal Exchange/Ice Body), so the
-next place to look is the stat line each side is being given.
+**Neither lookup is right.** Species matching loses Mega; slot matching loses
+mid-turn movement. The harness needs the state as of each protocol *line*,
+which is what the tracker already maintains, rather than a snapshot taken once
+per turn. That is the real fix and it is a separate piece of work.
 
-**That is where this stops.** Two hypotheses were tried and neither was right;
-the third is not going to be a guess. The next step is to compare our
-`computed_stats` for Golisopod and Baxcalibur directly against the engine's for
-the same packed team, which is a five-line check and settles it.
+## What survives
 
-## Why it matters before Frankfurt
-
-Rillaboom, Golisopod, Salamence and Baxcalibur are among the most-played new
-species — Rillaboom alone fills 156 of 2,400 slots in the harvested pool. A
-damage model that is ten points less accurate against them is ten points less
-accurate on the advice `position` gives about them, at a Regional, in the
-format being played.
+- **The comparative answer**, which is what the experiment was for: no
+  M-C-specific damage problem. The two arms differ by less than their noise.
+- **The Grassy Terrain fix**, which is independent of all of this: Grassy
+  Terrain halves Earthquake, Bulldoze and Magnitude against a grounded target,
+  that rule was missing, it is transcribed from the engine and unit-tested, and
+  it is correct whatever the harness does.
+- **A rule worth remembering.** A filter that reports dropping nothing is a
+  filter that is not running. The count was printed, it said zero, and zero was
+  impossible.
