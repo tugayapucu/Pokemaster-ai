@@ -298,6 +298,51 @@ class Position(BaseModel, frozen=True):
             raise ValueError("restrictions are only tracked for your side")
         return self._with_own(target.index, disabled_moves=frozenset())
 
+    def with_pp(self, target: Target, move: str, remaining: int) -> "Position":
+        """Set how many uses of a move are left.
+
+        Ours only, and only because we can count them: nothing on screen
+        reports an opponent's PP, so a field for it would be a place to invent
+        one. `legal_actions` drops a move at zero (ADR 0003), which is the
+        whole reason this is worth tracking -- Champions cuts every protection
+        move to eight uses, and a fifteen-turn game can reach that.
+        """
+        if target.side == THEM:
+            raise ValueError("an opponent's PP is not something the screen reports")
+        mon = self.own.team[target.index]
+        if mon.move_pp is None:
+            raise ValueError(f"PP is not known for {self.species_at(target)}")
+        moves = mon.selectable_moves
+        if move not in moves:
+            raise ValueError(f"{self.species_at(target)} does not have {move}")
+        if remaining < 0:
+            raise ValueError(f"PP cannot go below zero, got {remaining}")
+        updated = list(mon.move_pp)
+        updated[moves.index(move)] = remaining
+        return self._with_own(target.index, move_pp=tuple(updated))
+
+    def move_used(self, target: Target, move: str) -> "Position":
+        """One use spent, and it becomes the last move this Pokemon made."""
+        if target.side == THEM:
+            # Watching them use a move is `with_revealed_move`, which records
+            # what we saw. Spending PP is a claim about a count we cannot see.
+            raise ValueError("for one of theirs, say `saw <move>` instead")
+        mon = self.own.team[target.index]
+        moves = mon.selectable_moves
+        if move not in moves:
+            raise ValueError(f"{self.species_at(target)} does not have {move}")
+        position = self
+        if mon.move_pp is not None:
+            left = mon.move_pp[moves.index(move)]
+            position = self.with_pp(target, move, max(0, left - 1))
+        return position._with_own(target.index, last_move=move)
+
+    def remaining_pp(self, target: Target, move: str) -> int | None:
+        mon = self.own.team[target.index]
+        if target.side == THEM or mon.move_pp is None or move not in mon.selectable_moves:
+            return None
+        return mon.move_pp[mon.selectable_moves.index(move)]
+
     def with_them_out(self, slot: int, species: str) -> "Position":
         """Put an opposing species into a field slot.
 

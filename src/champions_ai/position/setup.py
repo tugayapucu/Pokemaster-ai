@@ -59,6 +59,20 @@ def _mega_capable(dex: Dex, mon) -> frozenset[str]:
     return frozenset({"mega"})
 
 
+def _mirror(
+    bridge: ShowdownBridge,
+    regulation: Regulation,
+    team: BattleTeam,
+    order: tuple[int, ...],
+) -> Side:
+    """One throwaway mirror battle, and the side the engine assembled for it."""
+    env = BattleEnv(regulation, bridge=bridge)
+    env.reset((team, team), seed=SETUP_SEED)
+    action = TeamPreviewAction(picks=order)
+    env.step({0: action, 1: action})
+    return env.observation(0).own_side
+
+
 def own_side(
     bridge: ShowdownBridge,
     regulation: Regulation,
@@ -70,26 +84,46 @@ def own_side(
 
     `picks` is in lead order: the first two start on the field, matching Team
     Preview everywhere else in this project.
+
+    **Run once per pair of lead slots, not once.** A battle request describes
+    moves, PP and targets only for the Pokemon actually on the field, so a
+    single battle leaves half the team without them -- and half a team with
+    engine data and half without is one position generating legal actions two
+    different ways depending on who happened to lead. Rotating the leads and
+    asking again costs one more battle start and gets the engine's own numbers
+    for all four.
     """
     if len(picks) != regulation.picked_team_size:
         raise ValueError(
             f"{regulation.name} brings {regulation.picked_team_size}, got {len(picks)}"
         )
 
-    env = BattleEnv(regulation, bridge=bridge)
-    env.reset((team, team), seed=SETUP_SEED)
-    action = TeamPreviewAction(picks=picks)
-    env.step({0: action, 1: action})
-    side = env.observation(0).own_side
+    slots = regulation.active_slots_per_side
+    described: dict[int, object] = {}
+    order = picks
+    while len(described) < len(picks):
+        side = _mirror(bridge, regulation, team, order)
+        for slot, pick in enumerate(order[:slots]):
+            described.setdefault(pick, side.team[slot])
+        rotated = (*order[slots:], *order[:slots])
+        if rotated == order:
+            # Cannot reach the rest by rotating -- one lead slot, or a team
+            # smaller than the rotation. Take what the last run gave for them
+            # rather than looping.
+            for slot, pick in enumerate(order):
+                described.setdefault(pick, side.team[slot])
+            break
+        order = rotated
 
-    # Everything that happened in the mirror battle is discarded. Abilities
+    # Everything that happened in the mirror battles is discarded. Abilities
     # fire on the way in -- an Intimidate in the team would leave our own lead
     # at -1 Attack, and Drought would have put the sun up -- and none of that
-    # belongs to the position the player is actually in.
+    # belongs to the position the player is actually in. What is kept is what
+    # cannot be recomputed here: stats, max HP, PP and the engine's targets.
     cleaned = tuple(
-        mon.model_copy(
+        described[pick].model_copy(
             update={
-                "current_hp": mon.max_hp,
+                "current_hp": described[pick].max_hp,
                 "status": None,
                 "boosts": Boosts(),
                 "volatile_conditions": frozenset(),
@@ -98,28 +132,18 @@ def own_side(
                 "turns_on_field": 0,
                 "last_move": None,
                 "has_been_active": False,
-                # The engine describes moves only for the Pokemon it has on
-                # the field, so keeping its lists would leave two of the four
-                # with engine targets and PP and two without -- the same
-                # position generating legal actions two different ways
-                # depending on who happened to lead. `None` falls back to the
-                # declared moveset and the Dex's targets uniformly, which is
-                # what `review` already does for a whole replay.
-                "choosable_moves": None,
-                "choosable_move_targets": None,
-                "move_pp": None,
                 # From the team sheet, not from the mirror: an ability that
                 # copied itself onto something (Trace, Imposter) copied it from
                 # an opponent that does not exist.
-                "current_ability": mon.pokemon_set.ability or None,
-                "available_specials": _mega_capable(dex, mon),
+                "current_ability": described[pick].pokemon_set.ability or None,
+                "available_specials": _mega_capable(dex, described[pick]),
             }
         )
-        for mon in side.team
+        for pick in picks
     )
     return Side(
         team=cleaned,
-        active_slots=side.active_slots,
+        active_slots=tuple(range(slots)),
         side_conditions={},
         mega_used=False,
     )

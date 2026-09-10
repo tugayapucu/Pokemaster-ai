@@ -102,14 +102,43 @@ def test_a_mega_stone_holder_on_the_bench_is_still_offered_its_mega(bridge, dex,
     assert benched.team[0].available_specials == frozenset()
 
 
-def test_moves_are_described_the_same_way_for_all_four(side):
-    """Two of the four having engine move lists and two not would mean the same
-    position generated legal actions differently depending on who led."""
+def test_all_four_are_described_by_the_engine_not_two(side):
+    """A battle request describes only the Pokemon on the field, so one battle
+    leaves half the team without moves, PP or targets -- and half a team with
+    engine data and half without is one position generating legal actions two
+    different ways depending on who happened to lead. Rotating the leads and
+    asking again is what closes that."""
     for mon in side.team:
-        assert mon.choosable_moves is None
-        assert mon.choosable_move_targets is None
-        assert mon.move_pp is None
-        assert mon.selectable_moves == mon.pokemon_set.moves
+        assert mon.choosable_moves == mon.pokemon_set.moves
+        assert mon.choosable_move_targets is not None
+        assert mon.move_pp is not None
+        assert len(mon.move_pp) == len(mon.selectable_moves)
+
+
+def test_pp_is_the_engines_number_and_not_the_mainline_one(side):
+    """**Champions halves the protection moves.** `mods/champions/moves.ts`
+    gives Protect `pp: 5` against mainline's 10, and does the same to King's
+    Shield, Spiky Shield, Baneful Bunker, Obstruct and Beak Blast -- all of
+    them 8 uses after PP-ups rather than 16.
+
+    That is not a detail. Protect is the most-used move in the format, a game
+    runs about fifteen turns, and eight uses is a number a player can actually
+    reach. Deriving PP from mainline knowledge would have doubled it and never
+    looked wrong.
+    """
+    charizard = side.team[0]
+    index = charizard.selectable_moves.index("protect")
+    assert charizard.move_pp[index] == 8
+    assert all(pp > 0 for pp in charizard.move_pp)
+
+
+def test_our_pp_is_the_same_pp_the_engine_reported(side, engine_side):
+    """The cross-check, in the same shape as the Mega one: for the Pokemon a
+    single battle *did* describe, what we kept must be what it said."""
+    described = [i for i, mon in enumerate(engine_side.team) if mon.move_pp is not None]
+    assert described, "the engine reported no PP; the test proves nothing"
+    for index in described:
+        assert side.team[index].move_pp == engine_side.team[index].move_pp
 
 
 def test_bringing_the_wrong_number_is_refused(bridge, dex, mega_team):

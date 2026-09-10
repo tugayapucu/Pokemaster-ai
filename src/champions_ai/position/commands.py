@@ -66,6 +66,8 @@ CLEAR_STATUS = {"ok", "healthy", "cured", "none", "clear"}
 # identical consequence for what may legally be submitted.
 LOCKING = ("locked", "lock", "encore", "encored", "choiced")
 RESTRICTING = (*LOCKING, "taunt", "disable", "disabled", "free", "unlocked", "released")
+# Spending and setting PP. Ours only: nothing on screen reports theirs.
+COUNTING = ("used", "use", "pp")
 
 OURS = {"my", "our", "we", "us"}
 THEIRS = {"their", "theirs", "them", "they", "opp", "opponent"}
@@ -87,6 +89,8 @@ HELP = """
     char taunt               every status move off
     char disable protect     one move off
     char free                the lock ended, the Taunt wore off
+    char used protect        one PP off -- Champions gives Protect only 8
+    char pp protect 3        set what is left directly
 
     my char 55         say which side when both have one
 
@@ -254,6 +258,32 @@ def _edit(position: Position, dex: Dex, target: Target, rest: list[str]) -> Outc
             message=f"{name} has {ability}",
         )
 
+    if head in ("used", "use"):
+        if target.side == THEM:
+            # Checked here rather than in the shared helper: for the opponent
+            # there is a right answer, and naming it is more use than a refusal.
+            raise ValueError("for one of theirs, say `saw <move>` instead")
+        if len(rest) < 2:
+            raise ValueError("used what? `char used protect`")
+        move = _own_move(position, dex, target, " ".join(rest[1:]))
+        updated = position.move_used(target, move)
+        left = updated.remaining_pp(target, move)
+        tail = f", {left} left" if left is not None else ""
+        return Outcome(
+            position=updated,
+            message=f"{name} used {dex.get_move(move).name}{tail}",
+        )
+
+    if head == "pp":
+        if len(rest) < 3 or not rest[-1].isdigit():
+            raise ValueError("how much PP? `char pp protect 3`")
+        move = _own_move(position, dex, target, " ".join(rest[1:-1]))
+        left = int(rest[-1])
+        return Outcome(
+            position=position.with_pp(target, move, left),
+            message=f"{name} has {left} {dex.get_move(move).name} left",
+        )
+
     if head in LOCKING:
         # Choice lock and Encore are different rules with the same consequence
         # for what may be picked: one move, and nothing else.
@@ -411,6 +441,7 @@ def apply(position: Position, dex: Dex, line: str) -> Outcome:
         if len(rest) > 1 and (rest[1].isdigit() or rest[1] == "ko" or rest[1] in STATUSES
                               or rest[1] in ("saw", "item", "ability") or rest[1] in CLEAR_STATUS
                               or rest[1] in RESTRICTING
+                              or rest[1] in COUNTING
                               or _stage(rest[1:]) is not None or rest[1] in STATS
                               or rest[1].lstrip("+-").isdigit()):
             return _edit(position, dex, _target(position, dex, rest[0], side), rest[1:])

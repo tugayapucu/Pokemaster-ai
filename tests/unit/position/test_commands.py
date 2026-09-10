@@ -366,3 +366,83 @@ def test_a_restriction_ends_when_the_pokemon_leaves_the_field(restricted, rdex):
     locked = _apply(restricted, rdex, "blaziken locked flare blitz")
     switched = _apply(locked, rdex, "we torkoal")
     assert switched.own.team[0].disabled_moves == frozenset()
+
+
+# -- PP, which matters more here than it does in most formats -----------------
+
+
+@pytest.fixture
+def counted(restricted):
+    """Our lead with the engine's PP on it. Protect gets 8 in Champions."""
+    mon = restricted.own.team[0].model_copy(update={"move_pp": (24, 8, 16, 32)})
+    return restricted.model_copy(
+        update={"own": restricted.own.with_pokemon_at(0, mon)}
+    )
+
+
+def test_using_a_move_spends_one(counted, rdex):
+    after = _apply(counted, rdex, "blaziken used protect")
+    assert after.own.team[0].move_pp == (24, 7, 16, 32)
+    assert after.own.team[0].last_move == "protect"
+
+
+def test_pp_can_be_set_directly(counted, rdex):
+    after = _apply(counted, rdex, "blaziken pp protect 2")
+    assert after.own.team[0].move_pp == (24, 2, 16, 32)
+
+
+def test_pp_never_goes_below_zero(counted, rdex):
+    spent = _apply(counted, rdex, "blaziken pp protect 0")
+    assert _apply(spent, rdex, "blaziken used protect").own.team[0].move_pp[1] == 0
+
+
+def test_an_exhausted_move_really_stops_being_offered(counted, rdex):
+    """The reason this is tracked at all, checked against the real generator
+    rather than against the field it happens to write.
+
+    Champions cuts every protection move to eight uses and a fifteen-turn
+    doubles game can reach that, so Protect at zero has to leave the shortlist.
+    """
+    from champions_ai.domain import legal_joint_actions
+    from champions_ai.domain.move_data import MoveData
+
+    move_data = {
+        "flareblitz": MoveData(move_id="flareblitz", target="normal"),
+        "protect": MoveData(move_id="protect", target="self"),
+        "fakeout": MoveData(move_id="fakeout", target="normal"),
+        "partingshot": MoveData(move_id="partingshot", target="normal"),
+        "tackle": MoveData(move_id="tackle", target="normal"),
+    }
+
+    def offers_protect(position):
+        """A `MoveAction` carries a `move_index`, not a move id -- the index is
+        into the acting Pokemon's own list, so it has to be resolved through
+        that. Getting this wrong reads as 'never offered', which would let the
+        second assertion below pass without the first one being true."""
+        observation = position.observation()
+        actions = legal_joint_actions(observation, move_data)
+        for action in actions:
+            for slot, choice in enumerate(action.slot_actions):
+                index = observation.own_side.active_slots[slot]
+                if index is None or choice.kind != "move":
+                    continue
+                if observation.own_side.team[index].selectable_moves[
+                    choice.move_index
+                ] == "protect":
+                    return True
+        return False
+
+    assert offers_protect(counted), "the check cannot see Protect at all; it proves nothing"
+    assert not offers_protect(_apply(counted, rdex, "blaziken pp protect 0"))
+
+
+def test_an_opponents_pp_is_not_something_we_can_claim(counted, rdex):
+    """Nothing on screen reports it, so a field for it is a place to invent
+    one. Watching a move is `saw`, which records what was seen."""
+    with pytest.raises(ValueError, match="saw <move>"):
+        _apply(counted, rdex, "their gambit used sucker punch")
+
+
+def test_a_move_it_does_not_have_cannot_be_spent(counted, rdex):
+    with pytest.raises(ValueError, match="no move matches"):
+        _apply(counted, rdex, "blaziken used earthquake")
