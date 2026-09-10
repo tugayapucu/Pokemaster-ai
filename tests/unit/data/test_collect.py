@@ -535,3 +535,41 @@ def test_a_bar_combines_with_a_format(tmp_path):
     _rated_corpus(tmp_path, [("a", 1600), ("b", 1000)])
     assert len(load_all(tmp_path, "regmc", 1500).replays) == 1
     assert load_all(tmp_path, "regmb", 1500).replays == []
+
+
+def test_a_cloudflare_origin_timeout_is_retried(monkeypatch):
+    """A 522 ended a fifty-minute, 1,750-replay run on 2026-09-11.
+
+    `replay.pokemonshowdown.com` is behind Cloudflare, so its 52x codes are the
+    transient failures actually seen -- and they are not IANA-registered, which
+    is the only reason they were missing from a list that already had 503.
+    """
+    attempts = []
+
+    def flaky(url):
+        attempts.append(url)
+        if len(attempts) < 3:
+            raise urllib.error.HTTPError(url, 522, "origin timeout", {}, None)
+        return {"ok": True}
+
+    fetcher = ThrottledFetcher(min_interval=0, backoff=0)
+    monkeypatch.setattr(fetcher, "_fetch_once", flaky)
+    assert fetcher("http://x") == {"ok": True}
+    assert len(attempts) == 3
+    assert fetcher.retried == 2
+
+
+def test_a_404_is_still_never_retried():
+    """A replay that is not there will not appear on the second ask, and the
+    politeness budget is not spent finding that out five times."""
+    attempts = []
+
+    def missing(url):
+        attempts.append(url)
+        raise urllib.error.HTTPError(url, 404, "not found", {}, None)
+
+    fetcher = ThrottledFetcher(min_interval=0, backoff=0)
+    fetcher._fetch_once = missing
+    with pytest.raises(urllib.error.HTTPError):
+        fetcher("http://x")
+    assert len(attempts) == 1

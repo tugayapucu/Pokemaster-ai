@@ -48,7 +48,20 @@ Fetcher = Callable[[str], object]
 
 # HTTP statuses worth trying again. A 404 means the replay is not there and
 # never will be; a 500 or 503 means the server had a moment.
-RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+# Transient by definition: the registered ones, plus Cloudflare's 52x family.
+#
+# The 52x codes are not IANA-registered, which is exactly why they were missing
+# -- and `replay.pokemonshowdown.com` sits behind Cloudflare, so they are the
+# ones actually seen. A **522** ("connection timed out to origin") ended a
+# 1,750-replay run on 2026-09-11 after fifty minutes: as transient as the 503
+# beside it, and not retried only because of how it is numbered.
+#
+# 520 unknown error, 521 origin down, 522 origin timeout, 523 origin
+# unreachable, 524 origin took too long. Every one is the edge failing to reach
+# the server, which is precisely what a retry is for.
+RETRYABLE_STATUS = frozenset(
+    {408, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524}
+)
 
 
 class ThrottledFetcher:
