@@ -1313,6 +1313,72 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Reg M-C, installed from a pinned commit (2026-09-10)
+
+Frankfurt is M-C, so "wait for npm" stopped being an option. `pokemon-showdown`
+is now pinned to **`d849b22`** (2026-09-10) instead of `^0.11.11`.
+
+**The rotation happened exactly as predicted the day before.**
+
+```
+  mod name          npm 0.11.11      pinned d849b22
+  champions         Reg M-B          Reg M-C
+  championsregma    Reg M-A          deleted upstream
+  championsregmb    -                Reg M-B
+```
+
+`tests/integration/test_regulation_mods.py`, written the previous day against
+this exact hazard, failed on the upgrade and named every regulation that needed
+changing. **Eight failures, all of them the rotation, 1,415 tests still
+passing.** A guard written for a hypothetical caught the real thing 24 hours
+later, which is the strongest evidence yet for writing them.
+
+**What M-C actually is**, measured through the new `bridge.format_rules` and a
+dex dump, never transcribed:
+
+| | M-B | M-C |
+| --- | --- | --- |
+| species | 357 | **392** (+35, none removed) |
+| items | 148 | **166** |
+| moves | 514 | 514 |
+| Mega stones | 75 | **81** |
+| rule table | level 50, bring 6 pick 4, 66 points | **identical** |
+| Terastallization | off | off |
+
+So M-C is a strict **superset** of M-B's roster, and the rule tables match
+exactly. The pattern holds for a third regulation: **a regulation is a dex, not
+a rule change.** An M-B-legal team is therefore legal in M-C, which is why
+`position --regulation m-c` runs on the existing team files.
+
+`REGULATION_M_A` is gone with its format. This build has no
+`gen9championsvgc2026regma`, we hold no M-A replays, and a constant for it
+could only produce battles the engine refuses.
+
+**Does the new engine change anything already measured?** Two checks:
+
+- `tests/integration/test_calibration_drift.py` passes. It pins the scorer's
+  score-gap distribution measured on 2026-09-04 (median 25.4, mean 38.8), so
+  the scale the cost bands rest on survived the upgrade.
+- Damage accuracy run over 12 self-play battles on the shared evaluation pool
+  gives **81/111 for M-B and 81/111 for M-C -- identical, sample for sample**.
+  Same teams and seeds produce the same battles under both, which is what
+  matters here: M-C is not anomalous.
+
+**An unresolved discrepancy, recorded rather than buried.** That ad-hoc harness
+reads 73.0%, against the 93.9% this project has published. The two regulations
+agreeing exactly says the gap is a property of *the harness*, not of the engine
+or of M-C -- most likely because the published figure was measured against
+reconstructed human replays rather than self-play, which is a different sample.
+It is not evidence of a regression, and it is not evidence there was none. It
+needs the original setup, which has not been located.
+
+**Cost of the pin.** Upstream has no `prepare` script, so a git install ships
+no `dist/` and `require('pokemon-showdown')` fails until `npm run build:sim`
+runs. Node >= 22.18 is now required (upstream raised it on 2026-09-06). Moving
+the pin again means deleting every `data/dex-*.json`, because the base
+`champions` mod is whichever regulation is current and one filename can hold a
+different game's roster.
+
 ### When M-C becomes installable, measured rather than hoped (2026-09-10)
 
 The plan for M-C was "watch npm". Checking what npm has actually done says that

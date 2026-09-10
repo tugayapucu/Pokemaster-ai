@@ -26,8 +26,8 @@ from champions_ai.domain.move_data import (
 from champions_ai.domain.observation import Observation, ObservedPokemon, ObservedSide
 from champions_ai.domain.pokemon_set import PokemonSet
 from champions_ai.domain.regulation import (
-    REGULATION_M_A,
     REGULATION_M_B,
+    REGULATION_M_C,
     GameType,
     Regulation,
     SpecialMechanic,
@@ -54,8 +54,8 @@ __all__ = [
     "ObservedSide",
     "PassAction",
     "PokemonSet",
-    "REGULATION_M_A",
     "REGULATION_M_B",
+    "REGULATION_M_C",
     "GameType",
     "Regulation",
     "RevealedPokemon",

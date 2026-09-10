@@ -3,15 +3,15 @@
 **`champions` is not a fixed dex. It is whichever regulation is current.**
 Observed on 2026-09-10:
 
-    mod name          installed 0.11.11      smogon master
-    champions         Reg M-B                Reg M-C
-    championsregma    Reg M-A                deleted
-    championsregmb    -                      Reg M-B
+    mod name          npm 0.11.11        pinned d849b22 (in use)
+    champions         Reg M-B            Reg M-C
+    championsregma    Reg M-A            deleted upstream
+    championsregmb    -                  Reg M-B
 
 So the base mod is rotated: when a regulation ships, it takes over `champions`
-and its predecessor is frozen into `championsreg<x>`. `REGULATION_M_B.mod` is
-`"champions"`, which is right for the build in `package-lock.json` and wrong
-for any build after the rotation -- and wrong *silently*, because the mod name
+and its predecessor is frozen into `championsreg<x>`. `REGULATION_M_B.mod` was
+`"champions"`, which was right for 0.11.11 and wrong the moment the rotation
+happened -- and wrong *silently*, because the mod name
 does not change, only the dex behind it. `Dex.cached` compares mod names, so it
 would happily serve a freshly dumped M-C roster to a battle calling itself M-B.
 
@@ -24,11 +24,11 @@ different game.
 
 import pytest
 
-from champions_ai.domain import REGULATION_M_A, REGULATION_M_B
+from champions_ai.domain import REGULATION_M_B, REGULATION_M_C
 
 pytestmark = pytest.mark.integration
 
-REGULATIONS = (REGULATION_M_A, REGULATION_M_B)
+REGULATIONS = (REGULATION_M_B, REGULATION_M_C)
 
 
 @pytest.fixture(scope="module")
@@ -40,8 +40,8 @@ def installed(bridge):
 @pytest.mark.parametrize("regulation", REGULATIONS, ids=lambda r: r.format_id)
 def test_the_format_exists_in_this_build(regulation, installed):
     """A regulation naming a format the engine does not have cannot be played,
-    and `championsregma` is already gone from master -- so this is not
-    hypothetical."""
+    and `championsregma` did in fact disappear in this
+    very upgrade -- so this is not hypothetical."""
     assert regulation.format_id in installed, (
         f"{regulation.name} is not in this build. Champions formats present: "
         f"{', '.join(sorted(installed))}"

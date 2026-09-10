@@ -330,6 +330,44 @@ const HANDLERS = {
 			.map((f) => ({ id: f.id, name: f.name, mod: f.mod, gameType: f.gameType }));
 		send({ type: 'formats', formats: found });
 	},
+	// The rule table behind one format. Adding a regulation means stating its
+	// level, team sizes and point limits, and every one of those transcribed by
+	// hand from `formats.ts` is a chance to describe a different game than the
+	// one being played -- silently, because a wrong team size still validates
+	// teams and a wrong level still runs battles.
+	//
+	// The per-stat cap of 32 is deliberately not here: it is hardcoded in the
+	// core team validator for any mod whose name starts with "champions", so it
+	// belongs to the format family rather than to a rule table.
+	formatrules: (msg) => {
+		const format = Dex.formats.get(msg.format);
+		if (!format.exists) {
+			send({ type: 'formatrules', found: false, format: msg.format });
+			return;
+		}
+		const table = Dex.formats.getRuleTable(format);
+		send({
+			type: 'formatrules',
+			found: true,
+			id: format.id,
+			name: format.name,
+			mod: format.mod,
+			gameType: format.gameType,
+			minTeamSize: table.minTeamSize,
+			maxTeamSize: table.maxTeamSize,
+			pickedTeamSize: table.pickedTeamSize,
+			minLevel: table.minLevel,
+			maxLevel: table.maxLevel,
+			defaultLevel: table.defaultLevel,
+			adjustLevel: table.adjustLevel,
+			evLimit: table.evLimit,
+			// Special mechanics are deliberately absent. Whether a Pokemon may
+			// Mega Evolve or Terastallize is reported per-Pokemon in a battle
+			// request, which `tracker.py` already reads into
+			// `available_specials`, so asking a real battle answers it without
+			// anything here having to interpret a mod's scripts.
+		});
+	},
 	seed: () => send({ type: 'seed', seed: battleStream.battle.prngSeed }),
 	// Replace the random number generator mid-battle. This is what makes a
 	// fork branch: replaying the same seed and the same choices reproduces a
