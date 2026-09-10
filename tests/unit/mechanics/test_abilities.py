@@ -403,3 +403,85 @@ def test_mega_sol_stops_solar_beam_being_halved():
     )
     assert halved == 60
     assert sunny == 120
+
+
+# ------------------------------------------- Reg M-C's damage-affecting abilities
+
+
+class TestStakeout:
+    """x2 on the turn the target arrives -- `!defender.activeTurns`."""
+
+    def test_it_doubles_against_a_pokemon_that_just_came_in(self):
+        assert attack_multiplier(
+            "stakeout", _move(), defender_turns_on_field=0
+        ) == 2.0
+
+    def test_it_does_nothing_against_one_already_out(self):
+        assert attack_multiplier(
+            "stakeout", _move(), defender_turns_on_field=3
+        ) == 1.0
+
+    def test_the_default_is_no_boost(self):
+        """A caller that does not track tenure must not be handed the boost:
+        over-predicting damage is how a recommendation talks someone into an
+        attack that does not knock out."""
+        assert attack_multiplier("stakeout", _move()) == 1.0
+
+    def test_it_applies_to_special_moves_too(self):
+        """The engine hooks both `onModifyAtk` and `onModifySpA`."""
+        assert attack_multiplier(
+            "stakeout", _move(category="Special"), defender_turns_on_field=0
+        ) == 2.0
+
+
+class TestGrassPelt:
+    """Defense x1.5, but only while Grassy Terrain is up."""
+
+    def test_it_boosts_defence_on_grassy_terrain(self):
+        assert defence_multiplier(
+            "grasspelt", _move(), terrain="grassyterrain"
+        ) == 1.5
+
+    def test_it_does_nothing_on_bare_ground(self):
+        assert defence_multiplier("grasspelt", _move()) == 1.0
+        assert defence_multiplier(
+            "grasspelt", _move(), terrain="psychicterrain"
+        ) == 1.0
+
+    def test_it_is_the_physical_defence_only(self):
+        """`onModifyDef`, not SpD -- a special attacker is unaffected."""
+        assert defence_multiplier(
+            "grasspelt", _move(category="Special"), terrain="grassyterrain"
+        ) == 1.0
+
+
+class TestSteelySpirit:
+    def test_it_raises_steel_moves(self):
+        assert base_power_multiplier(
+            "steelyspirit", _move(move_type="Steel"), base_power=80
+        ) == 1.5
+
+    def test_it_leaves_everything_else_alone(self):
+        assert base_power_multiplier(
+            "steelyspirit", _move(move_type="Fire"), base_power=80
+        ) == 1.0
+
+
+class TestAuraGuard:
+    """Halves contact damage. Champions-specific, on Lucario-Mega-Z."""
+
+    def test_it_halves_a_contact_move(self):
+        assert taken_multiplier(
+            "auraguard", _move(flags=("contact",)), effectiveness=1.0
+        ) == 0.5
+
+    def test_a_move_that_does_not_touch_is_unaffected(self):
+        """The flag is the whole condition -- an Earthquake is not softened."""
+        assert taken_multiplier(
+            "auraguard", _move(), effectiveness=1.0
+        ) == 1.0
+
+    def test_it_stacks_with_effectiveness_rather_than_replacing_it(self):
+        assert taken_multiplier(
+            "auraguard", _move(flags=("contact",)), effectiveness=2.0
+        ) == 0.5

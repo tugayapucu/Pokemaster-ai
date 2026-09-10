@@ -57,6 +57,23 @@ PINCH_ABILITIES: dict[str, str] = {
 TYPE_ATTACK_ABILITIES: dict[str, tuple[str, float]] = {
     "firemane": ("Fire", 1.5),
 }
+# Reg M-C additions, transcribed from `data/abilities.ts` rather than recalled.
+#
+#   stakeout      onModifyAtk / onModifySpA: if (!defender.activeTurns) x2
+#   steelyspirit  onAllyBasePower: if (move.type === 'Steel') x1.5
+#   grasspelt     onModifyDef: if (isTerrain('grassyterrain')) x1.5
+#   auraguard     onSourceModifyDamage: if (move.flags['contact']) x0.5
+STAKEOUT = "stakeout"
+STAKEOUT_MULTIPLIER = 2.0
+STEELY_SPIRIT = "steelyspirit"
+STEELY_SPIRIT_TYPE = "Steel"
+STEELY_SPIRIT_MULTIPLIER = 1.5
+GRASS_PELT = "grasspelt"
+GRASS_PELT_TERRAIN = "grassyterrain"
+GRASS_PELT_MULTIPLIER = 1.5
+AURA_GUARD = "auraguard"
+AURA_GUARD_MULTIPLIER = 0.5
+
 PINCH_FRACTION = 1 / 3
 PINCH_MULTIPLIER = 1.5
 
@@ -186,11 +203,19 @@ def attack_multiplier(
     hp_fraction: float = 1.0,
     status: str | None = None,
     weather: str | None = None,
+    # Stakeout reads the *target's* tenure: `!defender.activeTurns` is true on
+    # the turn it arrives, which is exactly the turn a switch is punished.
+    # Zero also means "not known" for an opponent we have never seen out, and
+    # that is the right default -- a Pokemon we have no tenure for is one that
+    # just appeared.
+    defender_turns_on_field: int = 1,
 ) -> float:
     """What the attacker's ability does to its attacking stat."""
     if not ability:
         return 1.0
     multiplier = ATTACK_MULTIPLIERS.get(ability, 1.0)
+    if ability == STAKEOUT and defender_turns_on_field <= 0:
+        multiplier *= STAKEOUT_MULTIPLIER
     if PINCH_ABILITIES.get(ability) == move.type and hp_fraction <= PINCH_FRACTION:
         multiplier *= PINCH_MULTIPLIER
     typed = TYPE_ATTACK_ABILITIES.get(ability)
@@ -206,12 +231,22 @@ def attack_multiplier(
 
 
 def defence_multiplier(
-    ability: str | None, move: MoveInfo, *, status: str | None = None
+    ability: str | None,
+    move: MoveInfo,
+    *,
+    status: str | None = None,
+    terrain: str | None = None,
 ) -> float:
     """What the defender's ability does to its defending stat."""
     if not ability:
         return 1.0
     multiplier = 1.0
+    if (
+        ability == GRASS_PELT
+        and terrain == GRASS_PELT_TERRAIN
+        and move.category == "Physical"
+    ):
+        multiplier *= GRASS_PELT_MULTIPLIER
     if ability in DEFENCE_MULTIPLIERS and move.category == "Physical":
         multiplier *= DEFENCE_MULTIPLIERS[ability]
     if ability == MARVEL_SCALE and status and move.category == "Physical":
@@ -232,6 +267,13 @@ def base_power_multiplier(
     flagged = FLAG_ABILITIES.get(ability)
     if flagged and flagged[0] in move.flags:
         return flagged[1]
+    if ability == STEELY_SPIRIT and move.type == STEELY_SPIRIT_TYPE:
+        # The engine's hook is `onAllyBasePower`, which covers the holder *and*
+        # its partner. Only the holder is modelled: nothing here is told who
+        # the attacker's ally is, so a Perrserker boosting its partner's Steel
+        # move is a known omission rather than an oversight. It under-predicts
+        # when it is wrong, which is the safer direction for advice.
+        return STEELY_SPIRIT_MULTIPLIER
     if ability == TECHNICIAN and base_power <= TECHNICIAN_THRESHOLD:
         return TECHNICIAN_MULTIPLIER
     if ability == SHEER_FORCE and move.secondaries:
@@ -277,6 +319,8 @@ def taken_multiplier(
             multiplier *= 2.0
         if "contact" in move.flags:
             multiplier *= 0.5
+    if ability == AURA_GUARD and "contact" in move.flags:
+        multiplier *= AURA_GUARD_MULTIPLIER
     if ability == THICK_FAT and move.type in ("Fire", "Ice"):
         multiplier *= 0.5
     if ability == HEATPROOF and move.type == "Fire":

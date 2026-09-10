@@ -185,6 +185,7 @@ class DamageSample:
             ),
             opponents=self.targets_reached,
             defender_at_full_hp=self.defender_hp_before >= self.defender.max_hp,
+            defender_turns_on_field=self.defender.turns_on_field,
             defender_ability=self.defender.current_ability,
             attacker_volatiles=tuple(self.attacker.volatile_conditions),
             defender_volatiles=tuple(self.defender.volatile_conditions),

@@ -414,6 +414,10 @@ class ResolvedTarget(NamedTuple):
     # Where this Pokemon sits in the opponent's revealed list, so two slots
     # aiming at the same one can be recognised as doing so.
     index: int | None = None
+    # How long it has been out. Stakeout doubles against a Pokemon on the
+    # turn it arrives. Defaults to 1 -- 'has been out a while' -- so a
+    # target built without it is never handed the boost.
+    turns_on_field: int = 1
 
 
 class HeuristicAgent(Agent):
@@ -851,6 +855,7 @@ class HeuristicAgent(Agent):
             # A Focus Sash only works from full health, and we can see that
             # even when we cannot see the item.
             defender_at_full_hp=target.at_full_hp,
+            defender_turns_on_field=target.turns_on_field,
             defender_ability=target.ability,
             # A Roost strips the Flying type for the turn, on either side.
             attacker_volatiles=tuple(attacker.volatile_conditions),
@@ -1534,6 +1539,7 @@ class HeuristicAgent(Agent):
                 attacker_status=attacker.status,
                 defender_status=observed.status,
                 defender_at_full_hp=observed.hp_percent >= 100,
+                defender_turns_on_field=observed.turns_on_field,
             )
             best = max(best, estimate.average_fraction * candidate.hit_chance)
         return min(best, 1.0)
@@ -2809,6 +2815,7 @@ class HeuristicAgent(Agent):
                 ability=ally.current_ability,
                 may_hold_item=ally.current_item is not None,
                 at_full_hp=ally.current_hp >= ally.max_hp,
+                turns_on_field=ally.turns_on_field,
                 volatiles=tuple(ally.volatile_conditions),
                 attacking_stat=None
                 if attacking_key is None
@@ -2848,6 +2855,7 @@ class HeuristicAgent(Agent):
                 item=self._known_item(observed),
                 ability=self._known_ability(observed),
                 may_hold_item=observed.may_hold_item,
+                turns_on_field=observed.turns_on_field,
                 at_full_hp=observed.hp_percent >= 100,
                 volatiles=tuple(observed.volatile_conditions),
                 # Uniform rather than credited: the calibrated attacking

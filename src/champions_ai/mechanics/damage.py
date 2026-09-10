@@ -344,6 +344,11 @@ def estimate_damage(
     attacker_ability: str | None = None,
     attacker_hp_fraction: float = 1.0,
     attacker_status: str | None = None,
+    # How long the target has been out. Stakeout doubles against a Pokemon
+    # on the turn it arrives, so this is the difference between punishing a
+    # switch and not. Defaults to 1 -- 'has been out a while' -- because a
+    # caller that does not track tenure should not be handed the boost.
+    defender_turns_on_field: int = 1,
     defender_status: str | None = None,
     defender_types: tuple[str, ...] | None = None,
     # Gravity drags everything down, so footing cannot be decided from a
@@ -470,9 +475,10 @@ def estimate_damage(
     attack_stat = modify(attack_stat, ability_rules.attack_multiplier(
         attacker_ability, move, hp_fraction=attacker_hp_fraction,
         status=attacker_status, weather=weather,
+        defender_turns_on_field=defender_turns_on_field,
     ))
     defense_stat = modify(defense_stat, ability_rules.defence_multiplier(
-        defender_ability, move, status=defender_status
+        defender_ability, move, status=defender_status, terrain=terrain
     ))
     base = (2 * level // 5 + 2) * power * attack_stat // max(1, defense_stat) // 50 + 2
 
