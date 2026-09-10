@@ -605,3 +605,43 @@ def test_a_benched_pokemon_of_ours_carries_no_stat_stages():
     side = tracker.own_side()
     assert side.team[0].pokemon_set.species == "Charizard"
     assert side.team[0].boosts.attack == 0, "our own benched Pokemon kept its stat stages"
+
+
+def test_revival_blessing_brings_an_opponent_back_from_fainted():
+    """Reg M-C made this reachable: Pawmot is one of its 35 new species, and it
+    is the only thing in the format that learns Revival Blessing.
+
+    A Pokemon that faints and is then revived must stop being fainted. Left
+    fainted, it is a Pokemon the agent believes is dead and will neither plan
+    around nor expect to see again.
+
+    **The tracker already got this right**; the test was written expecting a
+    bug and did not find one. It stays because nothing covered the mechanic
+    before, and because 0045's M-C reconstruction loss traced to Revival
+    Blessing by a different route -- a revive creates a mid-turn replacement
+    whose pre-turn observation still shows the Pokemon dead, which is
+    attribution rather than tracking. If this ever regresses, that loss goes
+    from 3% to something much worse.
+
+    Note the revived Pokemon's ident carries no slot letter: it is on the bench,
+    so the line reads `p2: Raichu` rather than `p2a: Raichu`.
+    """
+    tracker = _tracker()
+    _sideline(
+        tracker,
+        "|switch|p2a: Raichu|Raichu, L50, F|100/100",
+        "|switch|p2b: Pawmot|Pawmot, L50, M|100/100",
+        "|-damage|p2a: Raichu|0 fnt",
+        "|faint|p2a: Raichu",
+    )
+    revealed = {mon.species: mon for mon in tracker.opponent_side().revealed}
+    assert revealed["Raichu"].fainted
+
+    _sideline(
+        tracker,
+        "|move|p2b: Pawmot|Revival Blessing|p2b: Pawmot",
+        "|-heal|p2: Raichu|49/100|[from] move: Revival Blessing",
+    )
+    revived = {mon.species: mon for mon in tracker.opponent_side().revealed}
+    assert not revived["Raichu"].fainted, "a revived Pokemon is still modelled as dead"
+    assert revived["Raichu"].hp_percent == 49

@@ -116,10 +116,18 @@ number means, not about raising it.
 
 ### Two smaller things 0045 turned up
 
-- **M-C reconstruction is five times lossier than M-B's** — 3.4% of
-  single-option decisions do not contain the human's move, against 0.7% for
-  M-B. Small enough that it changed no conclusion, and the first sign that the
-  reconstruction stack is not as clean on M-C's 35 new species.
+- ~~M-C reconstruction is five times lossier than M-B's~~ — **diagnosed
+  2026-09-10, and it is benign.** Traced to **Revival Blessing**, which only
+  Pawmot learns and which M-C reaches because Pawmot is one of its 35 new
+  species: 8 of 600 M-C replays contain it against 0 of 600 M-B replays, which
+  matches the 9 failures exactly. The tracker revives correctly — a test
+  written expecting a bug found none, and stays as a guard. What actually
+  happens is *attribution*: a revive creates a mid-turn replacement whose
+  pre-turn observation still shows the Pokemon dead, so the recorded choice is
+  one the legal-action set cannot contain. **It does not affect `position`**,
+  where the state is typed rather than inferred, so nothing about live play at
+  a tournament is touched. Left unfixed: 1.3% of replays, and the fix is in
+  decision attribution rather than anywhere cheap.
 - **Two agreement figures are only comparable if their branching mixes match.**
   Raw agreement runs 62.7% on 2–3 option decisions and 32.5% on 8+ ones, so the
   headline number is a weighted average over the format's difficulty mix. M-B's
