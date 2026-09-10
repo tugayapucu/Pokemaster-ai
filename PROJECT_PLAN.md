@@ -1313,6 +1313,62 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### The ability audit, and the one that was actually costing us (2026-09-10)
+
+Asked what Reg M-C adds that this project does not model. The audit is
+worth keeping for the shape of the answer as much as the answer.
+
+**M-C adds 35 species, 18 items, 0 moves, and 15 newly reachable abilities.**
+Most of what looks like a gap is not one:
+
+| looks unmodelled | why it is fine |
+| --- | --- |
+| Grassy / Psychic / Electric / Misty Seed (262x, 168x, 18x) | the +1 arrives as a `-boost` line and the tracker records it generically |
+| Grassy Surge, Psychic Surge | terrain arrives as `-fieldstart`; the model reads terrain, not the ability |
+| six new Mega stones | data-driven through `item.mega_stone`, no table entry needed |
+| Thermal Exchange | its Attack boost is a `-boost` |
+
+Genuinely unmodelled, all with a direct damage effect and all on species
+nobody currently plays: **Aura Guard** (halves contact damage, Lucario-Mega-Z),
+**Libero** (Cinderace), **Steely Spirit** (Perrserker), **Stakeout**
+(Mabosstiff, Thievul), **Grass Pelt** (Gogoat), plus **Normal Gem** and **Rocky
+Helmet**. Behavioural rather than damage: **Emergency Exit** (95x),
+**Eject Button**, **Red Card**.
+
+**And one that was costing us the whole time.** Indeedee-F is the second
+most-played new species in M-C — 102 of 2,400 slots in the harvested pool — and
+every one of them was running **Own Tempo**.
+
+Harvest reads an ability from `|-ability|` lines. It does not read the other
+form:
+
+```
+  |-fieldstart|move: Psychic Terrain|[from] ability: Psychic Surge|[of] p1b: Indeedee
+```
+
+so every terrain and weather setter fell through to the fallback, which takes
+the **alphabetically first** legal ability. Rillaboom survived by luck — Grassy
+Surge sorts before Overgrow. Indeedee-F did not: Own Tempo sorts before Psychic
+Surge.
+
+The cost was precise and invisible. Expanding Force is priced at 1.5x, with
+Psychic Terrain a further 1.3x on top — 80 base power becomes 156 — **all
+conditional on a terrain that was never up.** Every evaluation run on that pool
+priced a top-five species' signature move at half strength, and 1.0x looks like
+a perfectly ordinary number.
+
+Fixed by matching the `[from] ability: X|[of] IDENT` pair, with the ident
+resolved through the nickname map — the protocol calls it `Indeedee` while the
+species is `Indeedee-F`, so reading it literally credits the wrong forme.
+Re-harvested: all 117 Indeedee now carry Psychic Surge, everything else is
+unchanged, and a battle from the new pool has `observation.terrain ==
+'psychicterrain'` on turn one.
+
+**The pattern worth carrying.** The audit's own usage counts were built from
+harvested sets, so Psychic Surge read as "0 uses" — which is exactly the
+symptom of the bug being audited for. A count derived from the thing you are
+testing cannot be evidence about it.
+
 ### No damage gap on M-C's new species -- and how the first answer was wrong (0046)
 
 | arm | inside the predicted range | n | 95% Wilson |

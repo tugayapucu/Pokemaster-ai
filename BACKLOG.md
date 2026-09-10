@@ -83,6 +83,29 @@ Next, in order:
   a Mega changes. It printed "0 samples dropped" over a pool full of Mega Stones
   on every run. **A filter that reports dropping nothing is a filter that is not
   running.**
+- ~~Check Psychic Terrain reaches the model~~ — **done, and it did not.** Not
+  the plumbing: harvest was giving all 102 Indeedee-F **Own Tempo**, because it
+  read abilities only from `|-ability|` lines and fell back to the
+  alphabetically first legal one. Fixed; re-harvested; terrain now up on turn
+  one. Expanding Force had been priced at 80 base power instead of 156 in every
+  evaluation on that pool.
+- **Implement the five abilities that actually affect damage.** From the
+  2026-09-10 audit, and none is urgent — every one is on a species with
+  near-zero play right now:
+
+  | ability | effect | on |
+  | --- | --- | --- |
+  | Aura Guard | halves contact damage | Lucario-Mega-Z |
+  | Libero | user's type becomes the move's, so free STAB | Cinderace |
+  | Steely Spirit | x1.5 Steel, user and allies | Perrserker |
+  | Stakeout | x2 into a switching-in target | Mabosstiff, Thievul |
+  | Grass Pelt | Defense x1.5 on Grassy Terrain | Gogoat |
+
+  Plus **Normal Gem** (x1.3 one-shot) and **Rocky Helmet** (contact recoil).
+  Do these *after* the harness, so each one can be confirmed rather than
+  assumed.
+- **Emergency Exit** (Golisopod, 95x) forces a switch at half HP. Behavioural
+  rather than damage, so it changes opponent prediction, not numbers.
 - **Fix the differential harness's attribution.** Now the open one, and it
   blocks any absolute damage number. Species matching loses Mega; slot matching
   loses anything that switches or faints mid-turn. Both arms currently read
