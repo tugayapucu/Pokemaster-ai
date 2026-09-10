@@ -100,9 +100,20 @@ What happens next, in order:
 
 - **Collecting M-C replays** (running, target 2000, unfiltered). Needs no
   engine, so it is the one thing possible today.
-- **Watch npm for a build carrying `championsregmc`.** Until then there is no
-  M-C dex, no team validation, no reconstruction, and no `position` seeding —
-  every one of those asks the engine.
+- **Decide how to get M-C, because waiting for npm is not a route to it.**
+  Measured 2026-09-10: the last npm gaps were 671, 0, 684 and 516 days, and
+  M-C landed in master on 2026-09-09 — six weeks *after* 0.11.11 was cut. On
+  that cadence the next release is a year or more away. The real choice is
+  between staying pinned (no M-C at all) and installing from a specific commit
+  (M-C now, at the cost of every measurement's reproducibility against
+  0.11.11). **That is the user's call and it has not been made.**
+- **Before any bump: the base mod rotates.** `champions` means M-B in the
+  installed build and **M-C** in master; `championsregma` is gone and
+  `championsregmb` is new. So M-C's mod is *not* `championsregmc` — an earlier
+  note here guessed that and was wrong. An upgrade silently redefines what
+  `REGULATION_M_B.mod` points at; `tests/integration/test_regulation_mods.py`
+  now fails the moment it happens, and every `data/dex-*.json` must be deleted
+  on a bump because the filename is the only thing that would still match.
 - **A second, quality-filtered collection once the ladder settles.** Same
   command, `--min-rating 1500`. The replays persist, so nothing is lost by
   waiting for the players to sort themselves out.
