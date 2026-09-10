@@ -141,7 +141,7 @@ def survey(
         print(f"No replay corpus at {corpus_path}. Collect one with data/collect.py.")
         return 2
 
-    corpus = load_all(corpus_path)
+    corpus = load_all(corpus_path, regulation.format_id)
     replays = list(corpus.replays)
     if replay_limit:
         replays = replays[:replay_limit]
@@ -340,7 +340,7 @@ def review(
         )
         return 2
 
-    corpus = load_all(corpus_path)
+    corpus = load_all(corpus_path, regulation.format_id)
     replays = list(corpus.replays)
     if not replays:
         print(f"No replays found under {corpus_path}.")

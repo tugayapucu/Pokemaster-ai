@@ -12,6 +12,7 @@ import urllib.error
 import pytest
 
 from champions_ai.data.collect import (
+    SCHEMA_VERSION,
     USAGE_NOTE,
     CollectionManifest,
     ThrottledFetcher,
@@ -390,3 +391,80 @@ def test_the_checkpoint_path_does_not_move_mid_run(tmp_path, api):
     collect_replays(FORMAT, tmp_path, target=10, fetcher=api,
                     min_rating=None, checkpoint_every=1)
     assert len(manifest_paths(tmp_path)) == 1
+
+
+# -- a corpus holding more than one regulation --------------------------------
+
+
+def _write_corpus(directory, entries):
+    """`entries` is (replay_id, format_id). Writes replays and one manifest.
+
+    Written in Showdown's own payload shape -- `id`, `formatid`, `log` as one
+    string -- because that is what is actually on disk, and a fixture that
+    invents its own shape tests the fixture.
+    """
+    for replay_id, format_id in entries:
+        (directory / f"{replay_id}.json").write_text(
+            json.dumps(
+                {
+                    "id": replay_id,
+                    "formatid": format_id,
+                    "players": ["alice", "bob"],
+                    "uploadtime": 1,
+                    "log": "\n".join(
+                        ["|player|p1|alice||1500", "|player|p2|bob||1500", "|turn|1"]
+                    ),
+                }
+            ),
+            encoding="utf-8",
+        )
+    manifest = CollectionManifest(
+        schema_version=SCHEMA_VERSION,
+        format_id=entries[0][1],
+        source="test",
+        collected_at="2026-09-10T00-00-00+00-00",
+        git_commit=None,
+        min_rating=None,
+        exclude_bots=True,
+        usage_note="test",
+        replay_ids=tuple(replay_id for replay_id, _ in entries),
+    )
+    manifest.save(manifest.default_path(directory))
+
+
+def test_one_format_needs_no_argument(tmp_path):
+    """Every caller written before there was a second format expects this."""
+    _write_corpus(tmp_path, [("a-1", "regmb"), ("a-2", "regmb")])
+    assert len(load_all(tmp_path).replays) == 2
+
+
+def test_a_mixed_corpus_refuses_to_be_loaded_unasked(tmp_path):
+    """The failure this exists for.
+
+    Collecting Reg M-C on 2026-09-10 put 2,000 of them beside 1,769 Reg M-B
+    games in one directory. A regulation is a different dex, so the survey
+    would have folded both into a single agreement number that described
+    neither -- and nothing on screen would have said it was a mixture.
+    """
+    _write_corpus(tmp_path, [("a-1", "regmb"), ("b-1", "regmc")])
+    with pytest.raises(ValueError, match="more than one format"):
+        load_all(tmp_path)
+
+
+def test_the_error_names_what_is_actually_there(tmp_path):
+    """So the fix is visible from the message rather than needing a dig."""
+    _write_corpus(tmp_path, [("a-1", "regmb"), ("b-1", "regmc")])
+    with pytest.raises(ValueError, match="regmb.*regmc"):
+        load_all(tmp_path)
+
+
+def test_naming_a_format_takes_only_that_one(tmp_path):
+    _write_corpus(tmp_path, [("a-1", "regmb"), ("b-1", "regmc"), ("b-2", "regmc")])
+    kept = load_all(tmp_path, "regmc").replays
+    assert [r.metadata.replay_id for r in kept] == ["b-1", "b-2"]
+    assert len(load_all(tmp_path, "regmb").replays) == 1
+
+
+def test_naming_a_format_that_is_not_there_gives_nothing_rather_than_everything(tmp_path):
+    _write_corpus(tmp_path, [("a-1", "regmb")])
+    assert load_all(tmp_path, "regmz").replays == []

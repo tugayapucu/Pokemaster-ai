@@ -370,13 +370,24 @@ def manifest_paths(cache_dir: Path) -> list[Path]:
     return sorted(cache_dir.glob("manifest*.json"))
 
 
-def load_all(cache_dir: Path) -> Collection:
+def load_all(cache_dir: Path, format_id: str | None = None) -> Collection:
     """Every replay collected across every run, deduplicated by id.
 
     The manifest returned is a union: its counts are summed and its filters
     describe the *loosest* run, because a set assembled from several passes is
-    only as selective as its least selective part. Anything stricter should be
-    filtered by the caller rather than assumed.
+    only as selective as its least selective part.
+
+    **A mixed corpus must be asked for by format.** One directory can hold
+    several regulations -- collecting Reg M-C on 2026-09-10 put 2,000 of them
+    beside 1,769 Reg M-B games -- and a regulation is a different dex, so
+    reconstructing one against the other's is meaningless where it is not
+    simply wrong. Returning the mixture silently would fold both into a single
+    number nobody could see was a mixture, which is the exact failure this
+    project keeps catching in itself. So: name the format, or get an error
+    naming what is there.
+
+    A single-format corpus needs no argument, which is what every caller
+    written before there was a second format expects.
     """
     seen: dict[str, Replay] = {}
     manifests = [CollectionManifest.load(path) for path in manifest_paths(cache_dir)]
@@ -390,6 +401,22 @@ def load_all(cache_dir: Path) -> Collection:
             path = cache_dir / f"{replay_id}.json"
             if path.exists():
                 seen[replay_id] = Replay.load(path)
+
+    present = {replay.metadata.format_id for replay in seen.values()}
+    if format_id is None:
+        if len(present) > 1:
+            raise ValueError(
+                f"{cache_dir} holds more than one format "
+                f"({', '.join(sorted(present))}). Pass format_id to say which is "
+                "wanted -- a regulation is a different dex, so mixing them "
+                "produces a number that describes neither."
+            )
+    else:
+        seen = {
+            replay_id: replay
+            for replay_id, replay in seen.items()
+            if replay.metadata.format_id == format_id
+        }
 
     ratings = [m.min_rating for m in manifests]
     combined = CollectionManifest(
