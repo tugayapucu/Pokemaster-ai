@@ -1313,6 +1313,42 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### M-C, end to end on the first day (2026-09-10)
+
+Merged to `main` and then actually used, which is where the remaining findings
+came from.
+
+| step | result |
+| --- | --- |
+| `review --regulation m-c` on one replay | reconstructs. Indeedee-F, Mega Alakazam, Psychic Terrain, Trick Room all tracked |
+| `review --regulation m-c --all --replays 300` | 5,264 slot decisions, **45.0% agreement** |
+| harvest an M-C pool from the train split | **3,123 real teams** from 1,605 replays |
+| `play --regulation m-c` on that pool | a full battle, start to `|win|` |
+
+**Agreement on M-C is 45.0% against M-B's 43.9% -- and that is not a
+compliment.** The M-C corpus is rated 1000-1182 and the M-B corpus is 1500+, so
+the comparison is not like for like: we agree slightly *more* with much weaker
+players. That is exactly what the rating-weighting item was raised for, and it
+is consistent with what this project already believes about agreement -- 0010
+and 0013 are both cases where following the corpus was the error. **Nothing
+should be read into 45.0% > 43.9% until the bands are compared at matched
+ratings.**
+
+**A display bug found by running it, not by testing it.** The board printed
+`psychicterrain, psychicterrain`: the tracker keeps `terrain` as a mirror of one
+of the field conditions rather than as a separate stream -- deliberately, and
+its comment says so -- and the renderer listed both. Display only, since the
+scorer reads only Trick Room and Gravity out of that dict. Not an M-C bug
+either; it was there for M-B and no test read the header the way a person does.
+That is now five defects found by looking at output rather than by a test.
+
+**What the M-C pool changes.** `data/pool-eval.txt` is M-B teams. They are legal
+in M-C, because M-C is a superset, so every evaluation up to now would have run
+*M-B teams under M-C rules* and looked perfectly healthy doing it.
+`data/pool-eval-m-c.txt` is built from the **train** split, keeping the leak
+0014 caught out of it, and is gitignored like every other derivative of the
+replay corpus.
+
 ### Reg M-C, installed from a pinned commit (2026-09-10)
 
 Frankfurt is M-C, so "wait for npm" stopped being an option. `pokemon-showdown`

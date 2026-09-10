@@ -52,37 +52,36 @@ not: benched Pokemon carried stale stat stages, invisible until something
 displayed the bench, and the test suite was failing two runs in five. Both had
 tests that *looked* like they covered the case.
 
-### Regulation M-C is installed. What is left is the corpus
+### Regulation M-C is live. What is left is the corpus's quality
 
-**Done 2026-09-10.** `pokemon-showdown` is pinned to `d849b22` instead of
-`^0.11.11`, because Frankfurt is M-C and npm had no route to it. `play`,
-`review` and `position` all take `--regulation m-c`, which is now the default.
+**Done 2026-09-10, merged to `main`.** `pokemon-showdown` is pinned to
+`d849b22`; `play`, `review` and `position` all take `--regulation m-c`, now the
+default. Verified end to end on the day: reconstruction, a 300-replay survey, a
+3,123-team harvest, and a full battle.
 
-Measured, not assumed: M-C is a strict **superset** of M-B — 392 species to
-357, 166 items to 148, 81 Mega stones to 75, nothing removed — with an
-identical rule table. So an M-B-legal team is legal in M-C.
+M-C is a strict **superset** of M-B — 392 species to 357, 166 items to 148, 81
+Mega stones to 75, nothing removed, identical rule table.
 
-The mod-rotation guard written the day before caught the upgrade exactly as
-designed: eight failures, all of them the rotation, naming every regulation
-that needed changing.
+Next, in order:
 
-What is left, in order:
-
-- **The M-C corpus is 1000-1182 rated.** 2,000 replays collected, unfiltered,
-  because the ladder was one day old. Fine for what the format *contains*;
-  useless as an agreement signal. Re-collect at `--min-rating 1500` once the
-  ladder settles — same command, and the replays persist.
-- **Nothing is harvested for M-C yet.** `data/pool-eval.txt` is M-B teams. They
-  are legal in M-C, but they are not an M-C metagame, so any evaluation using
-  that pool measures M-B teams playing under M-C rules.
-- **Re-run the engine-checked measurements on the pinned build.** Damage, turn
-  order and the knockout claim were all measured on 0.11.11. Self-play damage
-  accuracy is *identical* between M-B and M-C on the new build, so nothing is
-  anomalous — but the absolute figure from an ad-hoc harness (73.0%) does not
-  match the published 93.9%, and the original setup has not been located. Find
-  it before quoting either number again.
-- **`review --regulation m-c` has never been run.** The corpus exists and the
-  reconstruction stack has never seen an M-C replay.
+- **Compare agreement at matched ratings before believing any of it.** M-C
+  reads 45.0% against M-B's 43.9%, but the M-C corpus is 1000–1182 and the M-B
+  one is 1500+. Agreeing *more* with much weaker players is not a good sign, and
+  it is the same shape 0010 and 0013 were caught by. This is the first real use
+  for the rating-banding item below, and it is one run of an existing command.
+- **Re-collect M-C at `--min-rating 1500` once the ladder settles.** The bar
+  everything else in this project was measured against. Same command; the
+  replays persist.
+- **Re-harvest the pool from that better corpus.** `data/pool-eval-m-c.txt` is
+  built from 1000-rated games, so it is a record of what beginners bring.
+- **Find the harness behind the published 93.9% damage figure.** An ad-hoc
+  self-play harness reads 73.0% on the pinned build for *both* regulations
+  identically, so nothing is anomalous — but until the original setup is found,
+  neither number should be quoted.
+- **Watch for the mod rotating again.** When M-D ships, `champions` becomes M-D
+  and M-C freezes into `championsregmc`.
+  `tests/integration/test_regulation_mods.py` will fail and name it; the fix is
+  the `mod` string plus deleting `data/dex-*.json`.
 
 ### Value a game by how strong its players were, instead of a cutoff
 
