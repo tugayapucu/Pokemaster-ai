@@ -299,3 +299,52 @@ class TestAbilityRevealedAsAnEffectsSource:
 
 class _Empty:
     abilities: dict = {}
+
+
+class TestACopiedAbilityIsNotAnInnateOne:
+    """Trace announces a *copy*, and the ident roles invert.
+
+        |-ability|p2a: Cheshire|Grassy Surge|Trace|[from] ability: Trace|[of] p1a: Rilla
+
+    Cheshire is a Gardevoir showing Grassy Surge because it Traced Rillaboom.
+    Two things are true and both were recorded backwards: Gardevoir's own
+    ability is **Trace**, not Grassy Surge, and `[of]` names who was copied
+    *from*, so Rillaboom is the one with Grassy Surge.
+
+    Reading `[of]` the same way as on a `-fieldstart` line -- where it *is* the
+    owner -- put Trace on Rillaboom 30 times, Incineroar 19 and Salamence 10
+    across the Reg M-C corpus.
+    """
+
+    LOG = _log(
+        "|poke|p1|Rillaboom, L50, M|",
+        "|poke|p2|Gardevoir, L50, F|",
+        "|switch|p1a: Rilla|Rillaboom, L50, M|100/100",
+        "|switch|p2a: Cheshire|Gardevoir, L50, F|100/100",
+        "|-fieldstart|move: Grassy Terrain|[from] ability: Grassy Surge|[of] p1a: Rilla",
+        "|-ability|p2a: Cheshire|Grassy Surge|Trace|[from] ability: Trace|[of] p1a: Rilla",
+        "|turn|1",
+        "|move|p1a: Rilla|Grassy Glide|p2a: Cheshire",
+        "|move|p2a: Cheshire|Psychic|p1a: Rilla",
+    )
+
+    def _evidence(self):
+        class R:
+            log = TestACopiedAbilityIsNotAnInnateOne.LOG
+
+        return gather_evidence([R()])
+
+    def test_the_tracer_is_credited_with_trace_not_with_what_it_copied(self):
+        abilities = self._evidence()["gardevoir"].abilities
+        assert "trace" in abilities
+        assert "grassysurge" not in abilities
+
+    def test_the_copied_from_pokemon_keeps_its_own_ability(self):
+        abilities = self._evidence()["rillaboom"].abilities
+        assert "grassysurge" in abilities
+        assert "trace" not in abilities, "a Traced Pokemon was credited with Trace"
+
+    def test_an_effect_naming_its_cause_still_credits_the_of_target(self):
+        """The `-fieldstart` line in the same log: there `[of]` *is* the owner,
+        and the two cases must not be collapsed into one rule."""
+        assert self._evidence()["rillaboom"].abilities["grassysurge"] >= 1

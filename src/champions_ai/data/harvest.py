@@ -153,13 +153,36 @@ def gather_evidence(replays: list[Replay]) -> dict[str, SpeciesEvidence]:
 
         for line in replay.log:
             ability = _ABILITY.match(line)
+            sourced = _ABILITY_SOURCE.search(line)
             if ability:
                 ident = ability.group(1).strip()
                 species = names.get((_side_of(ident), _nickname_of(ident)))
                 if species:
-                    evidence[species].abilities[to_id(ability.group(2))] += 1
-            sourced = _ABILITY_SOURCE.search(line)
-            if sourced:
+                    # A copied ability announces the *copy*, not an innate one:
+                    #
+                    #   |-ability|p2b: Cheshire|Grassy Surge|Trace|
+                    #             [from] ability: Trace|[of] p1b: Rillaboom
+                    #
+                    # Cheshire is a Gardevoir showing Grassy Surge because it
+                    # Traced Rillaboom. Reading the announced ability would
+                    # credit Gardevoir with Grassy Surge; the ability it
+                    # actually has is the one in `[from]`.
+                    own = to_id(sourced.group(1)) if sourced else to_id(ability.group(2))
+                    evidence[species].abilities[own] += 1
+                if sourced:
+                    # ...and on such a line `[of]` names who was copied *from*,
+                    # so that Pokemon is the one with the announced ability.
+                    # This is the opposite mapping to the non-`-ability` case
+                    # below, and crediting it the same way put Trace on
+                    # Rillaboom 30 times, Incineroar 19 and Salamence 10.
+                    source = sourced.group(2).strip()
+                    copied = names.get((_side_of(source), _nickname_of(source)))
+                    if copied:
+                        evidence[copied].abilities[to_id(ability.group(2))] += 1
+            elif sourced:
+                # An effect naming its cause: `|-fieldstart|move: Grassy
+                # Terrain|[from] ability: Grassy Surge|[of] p1b: Rillaboom`.
+                # Here `[of]` *is* the owner.
                 ident = sourced.group(2).strip()
                 species = names.get((_side_of(ident), _nickname_of(ident)))
                 if species:
