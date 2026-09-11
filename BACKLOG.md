@@ -54,49 +54,47 @@ tests that *looked* like they covered the case.
 
 ### Frankfurt: 26-27 September, team due the 25th
 
-**The short-term track, agreed 2026-09-11.** Fourteen days. Everything here is
-scoped to *this* tournament; the general work is the other track and is mostly
-already paid for -- M-C went from not installable to running end to end in a
-day because nothing hardcodes a roster.
+**Status on 2026-09-11 — fourteen days to submission.**
 
-- ~~A team against the field~~ — **done: `champions-ai scout`.** Win rate,
-  interval, and the matchups that beat it. Inverse of `evaluate`: same agent
-  both sides, seats swapped on a shared seed, so the policy cancels and the
-  team is left. The mirror invariant (a team against copies of itself must
-  split every matchup) is asserted against the real engine.
-- ~~Rating filter at load time~~ — **done.** `load_all(..., min_rating=)`. The
-  bar is chosen at *use*, because ratings are not in the listing so a bar costs
-  the same download either way, and filtering at collection cannot be undone.
-  The returned manifest reports the bar actually applied, not the collection's.
-- ~~Re-read the repository for what the M-C migration left behind~~ — **done
-  2026-09-11, four found.** One was a real trap: **`play` with no arguments
-  drew M-B teams and played them under M-C rules**, silently, because the pool
-  was one shared file and M-C is a superset so nothing failed validation. Pools
-  are now per-mod like the dex cache. The others were claims that had stopped
-  being true — `review` printing "1500-1850 Elo" over a 1000-1400 corpus, the
-  parser describing itself as M-B, and `collect` defaulting to M-B's format id.
-- **Collect twice.** Unfiltered now (running), again near the 20th when the
-  ladder is stronger, then re-harvest. The M-C median moved 1050 → 1072 in a
-  day; *if* that holds the top reaches 1500+ just before submission — an
-  extrapolation to **check on the day**, not to plan around.
-- **Practise with `position`.** The command language should be muscle memory
-  before it is used on a clock. Free, and the project's most reliable way of
-  finding defects -- five so far came from using it rather than testing it.
-- **Rating filter at load time.** `load_all(..., min_rating=)`. Small, and it
-  makes collecting broadly a reversible choice rather than a commitment.
+| | |
+| --- | --- |
+| M-C corpus | **3,750 replays**, rated 1000-1437, median 1059 |
+| M-C team pool | **5,858 teams**, re-harvested today from 2,990 train replays |
+| M-B corpus | 1,769 replays, rated 1500-1827 (kept for comparison) |
+| damage model | **95.5%** inside the predicted range on the pinned build (0046) |
+| tools that work | `play` `position` `review` `scout` `collect` `regulations` |
 
-**RL is deliberately not on this list.** 0043: a linear policy warm-started as
-an exact clone of the heuristic came out **level** -- 52.6%, p = 0.475 over
-2,400 battles -- and a second attempt with a state-dependent baseline did not
-convert either. The lever is representation, which is open-ended, and
-open-ended is the wrong shape for a fortnight with a hard date. It belongs to
-the long-term track.
+Everything on the critical path runs. What is left is not capability, it is
+**the metagame**, and the corpus is two days of a ladder that opened on the 9th.
 
-**What `scout` does not tell you**, restated because it is the number most
-likely to be over-read: the pool is what the *current ladder* brings, rated
-1000-1400, played by an agent that picks the best of four candidates 57% of the
-time. A losing matchup is a real structural problem. A winning record is not
-confidence.
+#### The plan, in order
+
+1. **Something to search a team *with*.** The user is looking for a team now and
+   has nothing to look at but 5,858 raw exports. A usage report off the pool —
+   what the field brings, what it leads, what it pairs — is the missing half of
+   `scout`: `scout` grades a team, this one suggests where to start. Cheap, and
+   it is the only item here that helps today.
+2. **`scout` the candidates** as they appear. Already built. Read the *losing*
+   matchups, not the win rate.
+3. **~20 September: collect again, re-harvest, re-scout.** The ladder max moved
+   1341 → 1437 in one day while the median barely moved, so the top is forming
+   first. Check the distribution on the day rather than assuming it reached
+   1500. The Cloudflare retry fix means a long run survives a blip now.
+4. **Practise with `position`** until the command language is muscle memory. It
+   is also the project's most productive bug-finder — five defects so far came
+   from using it rather than testing it.
+5. **Freeze on the 24th.** No engine changes, no pin changes, no refactors in
+   the last day before submission. Whatever is wrong on the 24th is less
+   dangerous than something newly broken on the 25th.
+
+#### Explicitly not before Frankfurt
+
+- **RL.** 0043 came out level (52.6%, p = 0.475) and a second attempt did not
+  convert. The lever is representation, which is open-ended.
+- **Libero.** Needs a volatile carrying a payload — typing, grounding and STAB
+  at once — for a species filling 2 of 2,400 slots.
+- **Anything that changes the engine pin.** The damage model is verified
+  against `d849b22`. Moving it re-opens every number.
 
 ### Regulation M-C is live. What is left is the corpus's quality
 

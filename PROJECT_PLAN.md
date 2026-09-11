@@ -1313,6 +1313,66 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Status and plan at fourteen days out (2026-09-11)
+
+| | |
+| --- | --- |
+| M-C corpus | 3,750 replays, rated 1000-1437, median 1059 |
+| M-C team pool | 5,858 teams, re-harvested from 2,990 train replays |
+| damage model | 95.5% inside the predicted range on the pinned build (0046) |
+| agreement | 44.6% on M-C, +21-25 points of lift over chance at every branching factor (0044, 0045) |
+| tests | 1,467 |
+| tools | `play` `position` `review` `scout` `collect` `regulations` |
+
+**Everything on the critical path runs.** Reg M-C is installed from a pinned
+commit, the corpus is collected and harvested, the damage model is verified
+against that build, and `position` gives live advice on a real game.
+
+**What is left is not capability. It is the metagame** -- and the corpus is two
+days of a ladder that opened on 9 September. That is the honest limit on
+everything the tool can say about *what to bring*, as opposed to *what to do*.
+
+#### The shape of the remaining fortnight
+
+The one gap that matters is that the user is choosing a team now and has
+nothing to choose *from* but 5,858 raw exports. `scout` grades a team that
+already exists; nothing suggests where to start. That is the next thing to
+build, and it is the only remaining item that helps today rather than on the
+20th.
+
+After that the plan is mostly waiting well: collect again around the 20th when
+the ladder has formed, re-harvest, re-scout, and **freeze on the 24th**.
+Whatever is wrong on the 24th is less dangerous than something newly broken on
+the 25th.
+
+#### What is deliberately not attempted, and why it is recorded here
+
+Three things are excluded on evidence rather than for lack of time, so that the
+exclusion survives the tournament and does not have to be re-argued:
+
+- **RL.** 0043 warm-started a linear policy as an exact clone of the heuristic
+  and it came out level -- 52.6%, p = 0.475 -- with a second attempt failing to
+  convert. The lever is representation, which is open-ended work.
+- **Libero.** It needs a volatile carrying a payload, which touches typing,
+  grounding and STAB together, for a species filling 2 of 2,400 pool slots.
+- **Moving the engine pin.** Every measured number is against `d849b22`.
+
+#### After Frankfurt: the general track
+
+The long-term aim the user set is to make this system general step by step, and
+the M-C migration is the evidence that the approach works — **not installable to
+running end to end in a day**, because nothing hardcodes a roster, legality is
+the engine's, and a regulation is a `Regulation` plus a mod. The next
+regulation should be cheaper still now that `format_rules` reads the rule table
+and `test_regulation_mods` fails loudly when the base mod rotates.
+
+What the general track actually owes, in rough order: the volatile payload
+(Libero, and any future type change), opponent modelling beyond assumed stat
+points, and the open question from 0045 — if weak and strong players choose the
+same actions at the same rate, the difference between them is somewhere
+agreement cannot see it, and finding where is the most interesting problem this
+project has.
+
 ### Two tracks: Frankfurt, then generality (decided 2026-09-11)
 
 The project has a date on it now. Frankfurt is **26-27 September**, with the
