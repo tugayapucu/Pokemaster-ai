@@ -12,6 +12,8 @@ from pathlib import Path
 
 from champions_ai.cli.collect import DEFAULT_CORPUS as COLLECT_CORPUS
 from champions_ai.cli.collect import DEFAULT_MIN_RATING, collect
+from champions_ai.cli.meta import DEFAULT_CORPUS as META_CORPUS
+from champions_ai.cli.meta import meta
 from champions_ai.cli.play import play
 from champions_ai.cli.position import position
 from champions_ai.cli.regulations import check as check_regulations
@@ -103,6 +105,36 @@ def build_parser() -> argparse.ArgumentParser:
         "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
         help=f"which regulation to use (default: {DEFAULT_REGULATION}). Each has its "
              "own dex, so this changes which Pokemon and items exist.",
+    )
+    survey_field = commands.add_parser(
+        "meta",
+        help="what is the field bringing? usage, win rates and pairings",
+    )
+    survey_field.add_argument(
+        "--corpus", type=Path, default=META_CORPUS,
+        help=f"directory of collected replays (default: {META_CORPUS}).",
+    )
+    survey_field.add_argument(
+        "--species", default=None,
+        help="one species in detail: how often, how well, and what it is brought with.",
+    )
+    survey_field.add_argument(
+        "--count", type=int, default=20,
+        help="how many species to list (default: %(default)s).",
+    )
+    survey_field.add_argument(
+        "--minimum", type=int, default=60,
+        help="decided games a species needs before its win rate is listed "
+             "(default: %(default)s).",
+    )
+    survey_field.add_argument(
+        "--min-rating", type=int, default=0,
+        help="only count games where both players were at least this rated. 0 "
+             "uses everything, which is what a young ladder has.",
+    )
+    survey_field.add_argument(
+        "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
+        help=f"which regulation to use (default: {DEFAULT_REGULATION}).",
     )
     field = commands.add_parser(
         "scout",
@@ -209,6 +241,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "position":
         return position(
             team_path=args.team,
+            regulation=REGULATIONS[args.regulation],
+        )
+    if args.command == "meta":
+        return meta(
+            corpus_path=args.corpus,
+            species=args.species,
+            count=args.count,
+            minimum=args.minimum,
+            min_rating=args.min_rating or None,
             regulation=REGULATIONS[args.regulation],
         )
     if args.command == "scout":
