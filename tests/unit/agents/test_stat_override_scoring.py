@@ -209,3 +209,4 @@ def test_foul_play_reads_the_targets_attack_boost(agent):
         agent, FOUL_PLAY, their_boosts=Boosts(attack=2), moves=FOUL_MOVES
     )
     assert boosted > plain
+

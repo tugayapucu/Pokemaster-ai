@@ -28,3 +28,11 @@ data/pool-*.txt
 # constraint (unlicensed logs, never redistributed), and the first is the
 # user's own competitive work, which is not this repository's to publish.
 data/*team*.txt
+
+# Ability priors derived from the corpus. Aggregate statistics rather than
+# logs -- `data/collect.py` notes those are a different question -- but kept
+# out of the repository anyway, because it is a *measurement of a corpus that
+# is not published* and should be rebuilt from whatever corpus is to hand
+# rather than inherited. `data.priors.build_ability_priors` over
+# `harvest.gather_evidence` regenerates it.
+data/priors-*.json

@@ -441,6 +441,15 @@ class HeuristicAgent(Agent):
         # put the whole ceiling at +4.3 points, so this is a modest effect that
         # has to be measured rather than assumed.
         infer_spreads: bool = False,
+        # Species id -> the ability the corpus says it almost always runs, from
+        # `data.priors`. Empty means "behave exactly as before", and it is
+        # opt-in for the same reason `infer_spreads` is: it changes what the
+        # agent believes about an opponent, and this project does not ship
+        # unproven changes to the shipped agent.
+        #
+        # A *revealed* ability always wins over it -- see `_known_ability`.
+        # The prior only fills the gap where there was nothing.
+        ability_priors: dict[str, str] | None = None,
         # Off by default: measured at +0.9 points over 1,600 battles, 95% CI
         # 48.4%-53.3%, p = 0.48. That is neutral, not an improvement, and this
         # project does not ship unproven changes to the shipped agent. The code
@@ -484,6 +493,7 @@ class HeuristicAgent(Agent):
         self.name = name
         self.assumed_opponent_points = assumed_opponent_points
         self.infer_spreads = infer_spreads
+        self.ability_priors = ability_priors or {}
         self.tenure_boosts = tenure_boosts
         self.matchup_switching = matchup_switching
         self.redirect_weight = (
@@ -2299,6 +2309,16 @@ class HeuristicAgent(Agent):
             return None
         if len(species.abilities) == 1:
             return to_id(species.abilities[0])
+        # Nothing revealed and more than one candidate. A corpus-derived prior
+        # can still be better than silence: Rillaboom is in 39% of teams and
+        # the corpus holds 2,292 Grassy Surge activations against no Overgrow.
+        #
+        # Guarded by the species' own legal list rather than trusted outright:
+        # a prior built against one regulation must not name an ability this
+        # forme cannot have.
+        guess = self.ability_priors.get(to_id(observed.species))
+        if guess and guess in {to_id(a) for a in species.abilities}:
+            return guess
         return None
 
     def _observed_types(self, observed) -> tuple[str, ...]:
