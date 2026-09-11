@@ -1313,6 +1313,45 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### `meta`: what the field brings, and two ways a count misleads (2026-09-11)
+
+The half of team building before `scout`. `scout` grades a team that exists;
+nothing suggested where to start, and a player choosing one had 5,858 raw
+exports to read.
+
+Counted from **replays** rather than the harvested pool. The `|poke|` lines
+carry both sides' declared six, no player can hide them, and the replay records
+who won — so usage is what was *brought to Team Preview* rather than what
+happened to be revealed in play, and it comes with a record attached.
+
+On the M-C corpus today: Rillaboom in **39.2%** of teams, Sneasler 36.4%,
+Incineroar 28.7%, Salamence 25.6%. Rillaboom's strongest partners by lift are
+Floette-Eternal (519 together, 1.73x) and Salamence (1,152, 1.53x).
+
+**Both rankings were wrong on the first run, in the same way twice.**
+
+| ranking | what it did | fix |
+| --- | --- | --- |
+| win rate by point estimate | put Empoleon (62 games), Oranguru (65) and Vanilluxe (62) above Camerupt (219) | rank by the **lower bound** of the Wilson interval |
+| pair lift at a floor of 8 | put Florges (18 co-occurrences) above Incineroar (1,200) among Rillaboom's partners | floor of 40 |
+
+The shared mistake is **reading a number computed from too little data**, and
+the first form of it is the more insidious: with several hundred species, the
+top of a point-estimate ranking is not a list of the best species, it is a list
+of the smallest samples. The lower bound asks a better question — *how good is
+this at worst, given how often it was seen* — so a species needs a good rate
+**and** enough games to clear it.
+
+This is the same family as 0046's "a filter that reports dropping nothing is a
+filter that is not running": a statistic that looks reasonable while being
+computed from the wrong thing. It was caught here only because the top of the
+table was visibly implausible.
+
+**What the columns are worth**, printed in the output rather than left to be
+assumed. Usage is a fact about the sample. Win rate is confounded with who
+plays what, carries wide intervals, and describes a ladder four days old rated
+1000-1437. It is a hint about where to look, not a verdict.
+
 ### Status and plan at fourteen days out (2026-09-11)
 
 | | |

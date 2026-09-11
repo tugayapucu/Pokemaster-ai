@@ -69,11 +69,15 @@ Everything on the critical path runs. What is left is not capability, it is
 
 #### The plan, in order
 
-1. **Something to search a team *with*.** The user is looking for a team now and
-   has nothing to look at but 5,858 raw exports. A usage report off the pool —
-   what the field brings, what it leads, what it pairs — is the missing half of
-   `scout`: `scout` grades a team, this one suggests where to start. Cheap, and
-   it is the only item here that helps today.
+1. ~~Something to search a team *with*~~ — **done: `champions-ai meta`.**
+   Usage, win rate with intervals, and pairings by lift, counted from the
+   `|poke|` lines of 3,750 replays. `meta --species <name>` for one in detail.
+
+   Both rankings had to be fixed after the first run, and both were the same
+   mistake: **a number computed from too little data.** Win rate ranked by
+   point estimate put three 62-game species above a 219-game one, and now ranks
+   by the interval's **lower bound**; pair lift at a floor of 8 put Florges (18
+   co-occurrences) above Incineroar (1,200), and the floor is 40.
 2. **`scout` the candidates** as they appear. Already built. Read the *losing*
    matchups, not the win rate.
 3. **~20 September: collect again, re-harvest, re-scout.** The ladder max moved
