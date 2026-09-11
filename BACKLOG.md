@@ -78,6 +78,15 @@ Everything on the critical path runs. What is left is not capability, it is
    point estimate put three 62-game species above a 219-game one, and now ranks
    by the interval's **lower bound**; pair lift at a floor of 8 put Florges (18
    co-occurrences) above Incineroar (1,200), and the floor is 40.
+1b. ~~Sets: what those species actually run~~ — **done.** `meta --species
+   <name>` now lists moves, items and abilities with **each block's own
+   denominator**. Moves divide by appearances and are exact; items divide by
+   how often an item was *revealed* and the rate is printed, because it ranges
+   from 70% (Sneasler) through 17% (Rillaboom, all berries and seeds — the
+   items that announce themselves) to **4 of 770** (Salamence, where the table
+   means nothing); abilities divide by activations, which exceed appearances
+   whenever the ability fires on switch-in.
+
 2. **`scout` the candidates** as they appear. Already built. Read the *losing*
    matchups, not the win rate.
 3. **~20 September: collect again, re-harvest, re-scout.** The ladder max moved
@@ -155,8 +164,21 @@ Next, in order:
   `effective_types` handles Roost and nothing else. That touches typing,
   grounding and STAB together. It is worth doing when something needs the
   machinery — Cinderace fills 2 of 2,400 slots — and not before.
-- **Emergency Exit** (Golisopod, 95x) forces a switch at half HP. Behavioural
-  rather than damage, so it changes opponent prediction, not numbers.
+- **Emergency Exit** — **re-scoped 2026-09-12; it was mis-filed.** Recorded as
+  "behavioural, not damage", which underrated it twice over.
+
+  Golisopod is in **1,660 teams, 22.1% of the field** — roughly one opponent in
+  five. And there is a concrete interaction with a term the scorer already
+  applies: `_combined_targets` (0011's focus-fire correction) rewards both
+  slots hitting the same target, and against Golisopod the first hit drops it
+  below half, it switches out automatically, and the second slot's attack lands
+  on a Pokemon that is no longer there. The correction is actively wrong there.
+
+  It is a **judgement** change rather than an engine fact, and this project's
+  record on those is poor — 0010 and 0013 were both intuitions that measured
+  wrong. So it is measured with the A/B harness (`evaluate`, same agent bar the
+  one change, over the pool) rather than assumed. **The one remaining item with
+  plausible Frankfurt value.**
 - ~~Fix the differential harness's attribution~~ — **done, and it was worth
   thirteen points.** The collector took one snapshot per turn and resolved every
   ident against it, so a mid-turn switch, faint-and-replace or Mega scored the
@@ -169,33 +191,6 @@ Next, in order:
   pinned build** (95.5%), and **there is no M-C-specific damage gap** (95.5% vs
   93.7%, −1.9%, intervals overlapping). Absolute damage figures can be quoted
   again.
-- **Implement the five abilities that actually affect damage.** From the
-  2026-09-10 audit, and none is urgent — every one is on a species with
-  near-zero play right now:
-
-  | ability | effect | on |
-  | --- | --- | --- |
-  | Aura Guard | halves contact damage | Lucario-Mega-Z |
-  | Libero | user's type becomes the move's, so free STAB | Cinderace |
-  | Steely Spirit | x1.5 Steel, user and allies | Perrserker |
-  | Stakeout | x2 into a switching-in target | Mabosstiff, Thievul |
-  | Grass Pelt | Defense x1.5 on Grassy Terrain | Gogoat |
-
-  Plus **Normal Gem** (x1.3 one-shot) and **Rocky Helmet** (contact recoil).
-  Do these *after* the harness, so each one can be confirmed rather than
-  assumed.
-- **Emergency Exit** (Golisopod, 95x) forces a switch at half HP. Behavioural
-  rather than damage, so it changes opponent prediction, not numbers.
-- **Fix the differential harness's attribution.** Now the open one, and it
-  blocks any absolute damage number. Species matching loses Mega; slot matching
-  loses anything that switches or faints mid-turn. Both arms currently read
-  ~81–83% against a published 93.9%, and the surviving mismatches show errors in
-  *both directions on the same move* — mis-attribution, not a wrong multiplier.
-  The harness needs state as of each protocol **line**, which the tracker
-  already maintains, instead of one snapshot per turn.
-  **Until this is fixed, no absolute damage-accuracy figure should be quoted** —
-  including the earlier claim here that 93.9% was confirmed on the pinned build,
-  which came from the contaminated run and is withdrawn.
 - **Watch for the mod rotating again.** When M-D ships, `champions` becomes M-D
   and M-C freezes into `championsregmc`.
   `tests/integration/test_regulation_mods.py` will fail and name it; the fix is
