@@ -164,6 +164,23 @@ Next, in order:
   `effective_types` handles Roost and nothing else. That touches typing,
   grounding and STAB together. It is worth doing when something needs the
   machinery — Cinderace fills 2 of 2,400 slots — and not before.
+- **Predict the field at Team Preview.** *The item 0047 turned into.* An
+  ability prior was derived from the corpus and measured as a **no-op**: 0 of
+  221 decisions differed, because a species only becomes an `ObservedPokemon`
+  once it has been on the field, by which point its loud ability has already
+  announced. The gate that makes the prior trustworthy is what makes it useless
+  there.
+
+  Team Preview is where it pays, and it is the one place we see their six with
+  none on the field. `matchup_table` passes no weather because "none is set
+  yet" — true, and beside the point: a team with **Pelipper** (16.3%) is going
+  to be in rain, **Torkoal** in sun, **Rillaboom** (39.2%) on Grassy Terrain.
+  `matchup()` already takes `weather`. The prior covers every setter in the
+  format, and it is already built, tested and off by default.
+
+  Same discipline: pre-register, and **check the two arms differ before reading
+  the result.**
+
 - **Emergency Exit** — **re-scoped 2026-09-12; it was mis-filed.** Recorded as
   "behavioural, not damage", which underrated it twice over.
 

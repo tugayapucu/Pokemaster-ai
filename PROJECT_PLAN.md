@@ -1313,6 +1313,47 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### An ability prior, and a no-op that was nearly read as a null (0047, 2026-09-12)
+
+Prompted by a good question: if the opponent brings Rillaboom, assume Grassy
+Surge and revise if contradicted. The corpus agrees emphatically — **2,292
+Grassy Surge activations and no Overgrow at all** — so the prior was derived
+from the corpus rather than from anyone's recollection of what is standard.
+
+Three gates, and the third carries the design. An ability is only counted when
+it **announces itself**, so share alone would hand a confident prior to every
+quiet species in the dex off a handful of sightings. The *rate* rescues it:
+Intimidate fires on every switch-in and Incineroar shows 1.96 activations per
+appearance, so a Blaze Incineroar would drag that down. 27 species of the 239
+with a real choice clear all three — every weather and terrain setter in the
+format, plus Intimidate.
+
+**Then it measured as a no-op, and the distinction matters.** 400 battles came
+back 200/200, which is exactly what `evaluate` returns for two identical
+agents. The direct check: **0 of 221 decisions differed, and 0 positions ever
+had an unrevealed prior-covered species on the opponent's side.**
+
+The cause is structural. `_known_ability` is asked about an `ObservedPokemon`,
+and a species only enters `revealed` once it has been on the field — where its
+loud ability announced on the very switch-in that put it there. **The gate that
+makes the prior trustworthy is the same property that makes it useless in that
+position.** The pre-registration half-saw it and still got the magnitude wrong:
+it expected the prior to buy "the turns before the first switch-in", and there
+are none.
+
+**Where the information is worth something is Team Preview**, the one place we
+see their six with none on the field. `matchup_table` passes no weather because
+"the battle has not started, so none is set yet" — true, and beside the point.
+A team with Pelipper is going to be in rain; `matchup()` already accepts the
+argument. That is a different change with a much better argument, and it is now
+the item.
+
+**The recurring lesson, for the third time.** An A/B is only readable once the
+two arms are known to differ. This project has now been caught by a number
+computed from nothing three times: `0 samples dropped` in 0046, an
+eleven-observation lift table in `meta`, and 200/200 here. The check is cheap
+every time and was skipped every time until the output looked strange.
+
 ### `meta`: what the field brings, and two ways a count misleads (2026-09-11)
 
 The half of team building before `scout`. `scout` grades a team that exists;
