@@ -21,7 +21,7 @@ from champions_ai.cli.preview import species_name
 from champions_ai.data import load_all
 from champions_ai.dex import Dex
 from champions_ai.domain import REGULATION_M_C, Regulation
-from champions_ai.evaluation.metagame import survey
+from champions_ai.evaluation.metagame import sets_for, survey
 from champions_ai.simulator import ShowdownBridge
 
 DEFAULT_CORPUS = Path("data/replays")
@@ -62,7 +62,11 @@ def meta(
     print(f"  {report.replays} replays, {report.teams} declared teams, {span}\n")
 
     if species is not None:
-        return _detail(report, species, name)
+        # Evidence is only gathered for the detail view: it re-reads every
+        # replay, and the overview does not need it.
+        from champions_ai.data.harvest import gather_evidence
+
+        return _detail(report, species, name, gather_evidence(replays), dex)
 
     print(f"  {'species':<20}{'teams':>7}{'share':>8}{'win rate':>11}   95% Wilson")
     for entry in report.most_used(count):
@@ -90,7 +94,7 @@ def meta(
     return 0
 
 
-def _detail(report, species: str, name) -> int:
+def _detail(report, species: str, name, evidence, dex) -> int:
     """One species: how often, how well, and what it is brought with."""
     wanted = species.lower().replace(" ", "").replace("-", "")
     entry = next((u for u in report.usage if u.species == wanted), None)
@@ -106,6 +110,8 @@ def _detail(report, species: str, name) -> int:
         f"({entry.win_rate:.1%}, [{low:.0%}, {high:.0%}])"
     )
 
+    _sets(sets_for(evidence, wanted), dex)
+
     partners = report.partners(wanted)
     if not partners:
         print("\n    No partner appeared with it often enough to measure.")
@@ -119,3 +125,58 @@ def _detail(report, species: str, name) -> int:
         "    being popular. Above 1.0 means more often than that explains."
     )
     return 0
+
+
+def _label(dex, kind: str, identifier: str) -> str:
+    """A move, item or ability as the dex spells it."""
+    try:
+        if kind == "move":
+            return dex.get_move(identifier).name
+        if kind == "item":
+            return dex.get_item(identifier).name
+    except KeyError:
+        pass
+    return identifier
+
+
+def _sets(usage, dex) -> None:
+    """What it was seen running, with each block's denominator stated.
+
+    The denominators differ and that is the point: moves divide by appearances
+    and are exact, items divide by how often an item was *revealed*, and
+    abilities divide by activations, which can exceed appearances several times
+    over. Printing a bare percentage for all three would invite reading them as
+    the same kind of number.
+    """
+    if usage is None or not usage.appearances:
+        print("\n    Never seen in play, so nothing is known about its sets.")
+        return
+
+    if usage.moves:
+        print(f"\n    moves, of {usage.appearances} appearances")
+        for move, seen in usage.moves:
+            print(f"    {_label(dex, 'move', move):<22}{seen:>7}{seen / usage.appearances:>8.0%}")
+
+    rate = usage.item_reveal_rate
+    print(
+        f"\n    items, revealed in {usage.revealed_items} of {usage.appearances} "
+        f"appearances ({rate:.0%})"
+    )
+    if not usage.items:
+        print("    none ever revealed -- nothing here to read")
+    else:
+        for item, seen in usage.items:
+            share = seen / usage.revealed_items if usage.revealed_items else 0.0
+            print(f"    {_label(dex, 'item', item):<22}{seen:>7}{share:>8.0%}")
+        if rate < 0.25:
+            print(
+                "    ** low reveal rate: an item is only seen when it fires, so this\n"
+                "       is a sample of the items that *announce themselves*, not of\n"
+                "       what the species runs. Read it as a hint at best."
+            )
+
+    if usage.abilities:
+        print(f"\n    abilities, of {usage.ability_activations} activations")
+        for ability, seen in usage.abilities:
+            share = seen / usage.ability_activations
+            print(f"    {ability:<22}{seen:>7}{share:>8.0%}")

@@ -172,3 +172,65 @@ def survey(replays: list[Replay], *, pair_minimum: int = 40) -> MetagameReport:
         usage=usage,
         pairs={pair: n for pair, n in pairs.items() if n >= pair_minimum},
     )
+
+
+@dataclass(frozen=True)
+class SetUsage:
+    """What one species was actually seen running.
+
+    Three blocks with **three different denominators**, which is the whole
+    difficulty of this view and the reason each is carried explicitly rather
+    than left for the caller to assume.
+
+    - **Moves** divide by appearances, and that is exact. `observed_sets` holds
+      one entry per (battle, player), so "seen in 1,420 of 1,701 appearances"
+      means what it says.
+    - **Items** divide by *reveals*, not appearances. An item is only visible
+      when it fires -- a berry eaten, a Choice lock announced, a Knock Off --
+      so `revealed` is also the honest measure of how much to trust the block
+      at all. It ranges from 70% of appearances for Sneasler to 0.5% for
+      Salamence, whose stone never announces itself.
+    - **Abilities** divide by *activations*, which can exceed appearances
+      several times over: Intimidate fires on every switch-in, so Incineroar
+      shows 2,722 activations across 1,386 appearances. A share here is a share
+      of firings, not of teams.
+    """
+
+    species: str
+    appearances: int
+    moves: tuple[tuple[str, int], ...]
+    items: tuple[tuple[str, int], ...]
+    abilities: tuple[tuple[str, int], ...]
+    revealed_items: int
+    ability_activations: int
+
+    @property
+    def item_reveal_rate(self) -> float:
+        return self.revealed_items / self.appearances if self.appearances else 0.0
+
+
+def sets_for(evidence, species: str, *, count: int = 8) -> SetUsage | None:
+    """What the corpus saw this species run, from `harvest.gather_evidence`.
+
+    Reads the same evidence the team harvester builds its sets from, rather
+    than re-parsing: a disagreement between what `meta` reports and what a
+    harvested pool contains would be the worst kind of bug to have here.
+    """
+    record = evidence.get(species)
+    if record is None:
+        return None
+
+    per_appearance: Counter = Counter()
+    for seen in record.observed_sets:
+        for move in seen:
+            per_appearance[move] += 1
+
+    return SetUsage(
+        species=species,
+        appearances=record.appearances,
+        moves=tuple(per_appearance.most_common(count)),
+        items=tuple(record.items.most_common(count)),
+        abilities=tuple(record.abilities.most_common(3)),
+        revealed_items=sum(record.items.values()),
+        ability_activations=sum(record.abilities.values()),
+    )

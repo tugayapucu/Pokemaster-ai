@@ -119,3 +119,68 @@ def test_pair_lift_is_relative_to_how_popular_each_species_is():
     report = survey(together + apart, pair_minimum=10)
     lifts = {name: lift for name, _, lift in report.partners("a")}
     assert lifts["b"] > lifts.get("c", 0)
+
+
+# -- what a species was seen running, and three different denominators --------
+
+
+class _Evidence:
+    """Stands in for `harvest.gather_evidence`'s record for one species."""
+
+    def __init__(self, observed_sets, items=None, abilities=None):
+        from collections import Counter
+
+        self.observed_sets = observed_sets
+        self.items = Counter(items or {})
+        self.abilities = Counter(abilities or {})
+
+    @property
+    def appearances(self):
+        return len(self.observed_sets)
+
+
+def test_move_usage_divides_by_appearances_not_by_uses():
+    """A Pokemon out for five turns presses a move up to five times. Counting
+    uses would report 'Protect in 140% of games'; `observed_sets` holds one
+    entry per appearance, so the share is a real fraction."""
+    from champions_ai.evaluation.metagame import sets_for
+
+    evidence = {"x": _Evidence([("protect", "tackle"), ("protect",), ("tackle",)])}
+    usage = sets_for(evidence, "x")
+    moves = dict(usage.moves)
+    assert usage.appearances == 3
+    assert moves["protect"] == 2
+    assert moves["tackle"] == 2
+
+
+def test_the_item_reveal_rate_is_carried_because_it_decides_the_block():
+    """An item is only visible when it fires. Sneasler's shows in 70% of
+    appearances and Salamence's in 0.5% -- the same table means very different
+    things, and only the rate says which."""
+    from champions_ai.evaluation.metagame import sets_for
+
+    seen = {"x": _Evidence([("tackle",)] * 100, items={"sitrusberry": 70})}
+    hidden = {"y": _Evidence([("tackle",)] * 100, items={"lifeorb": 1})}
+
+    assert sets_for(seen, "x").item_reveal_rate == 0.7
+    assert sets_for(hidden, "y").item_reveal_rate == 0.01
+
+
+def test_ability_activations_may_exceed_appearances():
+    """Intimidate fires on every switch-in, so Incineroar shows 2,722
+    activations across 1,386 appearances. A share of activations is not a share
+    of teams, and the field is named `ability_activations` to say so."""
+    from champions_ai.evaluation.metagame import sets_for
+
+    evidence = {"x": _Evidence([("tackle",)] * 10, abilities={"intimidate": 25})}
+    usage = sets_for(evidence, "x")
+    assert usage.ability_activations == 25
+    assert usage.appearances == 10
+
+
+def test_a_species_never_seen_in_play_returns_nothing():
+    """Brought at Team Preview and never sent out. `|poke|` counts it for
+    usage; there is nothing to say about its set."""
+    from champions_ai.evaluation.metagame import sets_for
+
+    assert sets_for({}, "missing") is None
