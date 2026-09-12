@@ -141,7 +141,7 @@ Everything on the critical path runs. What is left is not capability, it is
 
    | # | defect | where | kind |
    | --- | --- | --- | --- |
-   | 1 | **Charge moves** scored as immediate hits | `MoveInfo.flags` carries `charge` on 10 moves and nothing reads it | engine fact |
+   | 1 | ~~**Charge moves** scored as immediate hits~~ — **done, 0050.** Priced at half a hit on the turn they charge, dropped from focus fire; a Mega's move now uses the weather its forme sets. Neutral (198/202), ships on correctness | `mechanics.charge`, `WEATHER_ON_ARRIVAL` | engine fact |
    | 2 | **Trick Room reversal** unmodelled: worth 0 when already up, a flat 55 otherwise, blind to which side is faster | the field-effect scorer's Trick Room branch | fact (a second one ends it) + judgement (whether ending helps) |
    | 3 | Team Preview scores the **base forme**, not the Mega a set becomes | `own_stats` reads `dex.get_species(set.species)` | engine fact |
    | 4 | Team Preview models **no field for its own side** — only the opponent's (0048) | `matchup_table` | mostly fact: our own abilities are known |
@@ -151,6 +151,24 @@ Everything on the critical path runs. What is left is not capability, it is
    — and the largest lever in sight. One team is not the pool, so each is
    measured with `evaluate` across the pool before it is believed. Fixtures and
    experiments for these use pool teams and synthetic sets only.
+
+   Found while working on these, not yet ordered:
+
+   - **The harvested pool fills sets to four moves from the species' most
+     common moves** (`harvest.build_set`). Imputing the mode for every missing
+     slot inflates the mode. Sized against sets where all four moves were
+     revealed: about **6–10 points** on well-sampled moves (Indeedee-F's Trick
+     Room 95% in the pool against 86%, Kingambit's Protect 98% against 89%),
+     with larger gaps only on samples of four to six sets. *The first sizing
+     said 95% against 28% and was wrong* — it compared carry with use, and use
+     is only a floor. Fix candidate: draw fill moves in proportion to their
+     rate instead of always taking the top ones. Changes every pool-based
+     number, so measured before and after.
+   - **`field_conditions` values are always 0.** The tracker writes
+     `field_conditions[x] = 0` when a condition starts and never increments it,
+     so how long Trick Room, Gravity or a terrain has left is unknowable to the
+     agent — a counter-shaped field that never counts. Bug 2 has to treat an
+     active Trick Room as full-length until this is fixed.
 3. **~20 September: collect again, re-harvest, re-scout.** The ladder max moved
    1341 → 1437 in one day while the median barely moved, so the top is forming
    first. Check the distribution on the day rather than assuming it reached

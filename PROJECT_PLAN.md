@@ -1313,6 +1313,42 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Charge moves cost the turn they charge (0050, 2026-09-12)
+
+Bug 1 of the five `scout` exposed. Ten moves carry the engine's `charge` flag;
+`MoveInfo.flags` had loaded it since the dex loader was written and nothing
+read it, so Solar Beam and Electro Shot (6.8% and 11.1% of pool teams) were
+priced as a full hit on the turn the engine spends charging.
+
+| commit | what |
+| --- | --- |
+| `f1343ce` | abilities that set weather on arrival, from `data/abilities.ts` |
+| `83ab7e1` | when a charge move charges: sun / rain skips, Power Herb, Utility Umbrella, Mega Sol, the locked second turn |
+| `7f97f5e` | a Mega's move uses the weather its forme sets — the queue runs `megaEvo` (104) before moves (200) |
+| `29b4e52` | the agent prices a charging turn at half a hit and drops it from focus fire |
+
+| | | pre-registered |
+| --- | --- | --- |
+| a charge move legal | 4.9% of decisions | 3–15% ✓ |
+| a score moved | 3.6% | "essentially all of those" ✗ |
+| choice differed | 1.8% | 0.5–5% ✓ |
+| differed with no charge move | 0 | must be 0 ✓ |
+| A/B, 400 battles | 198 / 202, [44.6%, 54.4%] | neutral ✓ |
+
+Ships on correctness. **198/202 was exactly 0049's total**, so it was not taken
+on trust: a mirror run tied all 200 matchups, 0050 reproduced exactly, and 0049
+and 0050 decide different matchups (one in common of eighteen). The totals
+matched by arithmetic.
+
+**A correction made on the way to bug 2.** The harvested pool fills each set to
+four moves from the species' most common moves, and pool carry rates looked
+hugely inflated against replay use — 95% against 28%. That comparison was
+wrong: use is a floor on carry. Against sets where all four moves were revealed,
+well-sampled moves are inflated by roughly 6–10 points; the large gaps sit on
+four-to-six-set samples. Recorded, not acted on. And Trick Room really is
+common — 86% of fully revealed Indeedee-F sets carry it — which is the premise
+bug 2 rests on.
+
 ### A fix that fires constantly and decides almost nothing (0049, 2026-09-12)
 
 The item 0048 left open. `_matchup_against_field` — what the switch scorer asks
