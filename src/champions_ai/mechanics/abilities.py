@@ -545,3 +545,32 @@ def weather_on_arrival(ability: str | None) -> str | None:
     holder's own moves and sets nothing -- that is `effective_weather`'s job.
     """
     return WEATHER_ON_ARRIVAL.get(ability or "")
+
+
+# --- abilities that put a terrain up the moment their holder arrives ---------
+#
+# Transcribed from `data/abilities.ts`, where each calls `this.field.setTerrain`
+# from `onStart` -- so, like the weather setters above, on switch-in and on
+# Mega Evolution:
+#
+#     electricsurge  this.field.setTerrain('electricterrain');
+#     grassysurge    this.field.setTerrain('grassyterrain');
+#     mistysurge     this.field.setTerrain('mistyterrain');
+#     psychicsurge   this.field.setTerrain('psychicterrain');
+#     hadronengine   if (!this.field.setTerrain('electricterrain') && ...) { ... }
+#
+# Seed Sower is left out deliberately: it calls `setTerrain` from
+# `onDamagingHit`, so it sets Grassy Terrain when its holder is hit, not when it
+# arrives -- the same reason Sand Spit is absent from the weather table.
+TERRAIN_ON_ARRIVAL: dict[str, str] = {
+    "electricsurge": "electricterrain",
+    "grassysurge": "grassyterrain",
+    "mistysurge": "mistyterrain",
+    "psychicsurge": "psychicterrain",
+    "hadronengine": "electricterrain",
+}
+
+
+def terrain_on_arrival(ability: str | None) -> str | None:
+    """The terrain this ability sets when its holder arrives, if any."""
+    return TERRAIN_ON_ARRIVAL.get(ability or "")
