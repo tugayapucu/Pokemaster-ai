@@ -467,6 +467,25 @@ class HeuristicAgent(Agent):
         # On by default since 0032, at SWITCH_HORIZON = 2. The flag stays so
         # the flat cost remains constructible for comparison.
         matchup_switching: bool = True,
+        # Whether the switch scorer is told what field is actually up.
+        #
+        # It was not. `_matchup_against_field` had the `Observation` in hand and
+        # passed neither `weather` nor `terrain` to `matchup()`, while this file
+        # threads `observation.weather` into eleven other call sites and
+        # `observation.terrain` into six. So in rain it priced their Fire move
+        # at full and decided whether to switch on a battle nobody was playing.
+        #
+        # Second lap of one bug: `tracker._on_minor_fieldstart` still carries
+        # the comment about `terrain` being "declared, read into every
+        # Observation and never once assigned". That fix made the field real.
+        # This consumer never started reading it.
+        #
+        # Unlike `ability_priors` and `field_priors`, which are guesses and are
+        # off until measured, this is a fact the agent already has -- so it is
+        # **on** by default, and 0049 sizes it rather than deciding it. The flag
+        # stays so the bare-field behaviour remains constructible, the way
+        # `matchup_switching` kept the flat cost after 0032.
+        field_aware_switching: bool = True,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -503,6 +522,7 @@ class HeuristicAgent(Agent):
         self.field_priors = field_priors or {}
         self.tenure_boosts = tenure_boosts
         self.matchup_switching = matchup_switching
+        self.field_aware_switching = field_aware_switching
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -689,6 +709,12 @@ class HeuristicAgent(Agent):
                     our_hp=max(1, mon.current_hp),
                     their_hp=max(1, estimated["hp"] * observed.hp_percent // 100),
                     their_moves=revealed or None,
+                    # The field we are actually standing on. Deciding whether to
+                    # switch means comparing two Pokemon on *this* battle's
+                    # ground: in rain their Water move is the threat and our
+                    # Fire answer is not an answer.
+                    weather=observation.weather if self.field_aware_switching else None,
+                    terrain=observation.terrain if self.field_aware_switching else None,
                 ).net
             )
         return sum(scores) / len(scores) if scores else 0.0
