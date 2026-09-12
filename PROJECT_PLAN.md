@@ -1313,6 +1313,29 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Our own set, and the field our own team creates (0053, 2026-09-13)
+
+Bug 4. Two gaps in `matchup()`, which scores Team Preview and every switch:
+it never read our own ability or item — ours are never hidden — and compared
+Speed on the raw stat; and Team Preview modelled no field for its own side, so
+a four built around its own weather or terrain was ranked on bare ground.
+
+| | change | picks differ | A/B | decision |
+| --- | --- | --- | --- | --- |
+| **C** | our ability and item reach our attacks, their attacks on us, and our effective Speed | 55% of previews; 0.4% of battle decisions | 207/193 of 400, [46.9%, 56.6%] | **ships** |
+| **D** | each four scored in the field its own setters create, the evolving holder's forme included | 53% (random sample) | 210/190 of 400, [47.6%, 57.3%] | **ships** |
+
+Both are facts about our own team and neither cleared downward. The canary,
+which C could have moved for real, still passes.
+
+**A check that proved nothing, caught and re-run.** D's first instrument check
+found a setter on 100% of previewed teams, which made its must-be-0 row
+vacuous. The 100% was real enough — 85% of the whole pool carries an arrival
+setter, and the first twenty happened to draw all twenty — but it exposed that
+every instrument check since 0048 drew the first twenty pool teams in file
+order. Re-run on a random forty: 273 previews without a setter, none changed
+its pick. Checks draw at random from now on.
+
 ### Team Preview learns Mega Evolution (0052, 2026-09-12)
 
 Bug 3. Team Preview scored every Pokemon as its base forme, on both sides. The
