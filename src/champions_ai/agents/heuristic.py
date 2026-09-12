@@ -534,6 +534,11 @@ class HeuristicAgent(Agent):
         # measured rate. Off by default: the rate is a prior, and priors are
         # measured before they ship. See 0052.
         opponent_megas: bool = False,
+        # Whether `matchup()` is told our own ability and item. It never was,
+        # so Team Preview and every switch decision scored our Pokemon as
+        # holding nothing, with no ability, and compared Speed on the raw stat.
+        # On by default: our set is known, so this is a fact rather than a guess.
+        matchup_reads_our_set: bool = True,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -576,6 +581,7 @@ class HeuristicAgent(Agent):
         self.own_megas = own_megas
         self.mega_priors = mega_priors or {}
         self.opponent_megas = opponent_megas
+        self.matchup_reads_our_set = matchup_reads_our_set
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -768,6 +774,10 @@ class HeuristicAgent(Agent):
                     # Fire answer is not an answer.
                     weather=observation.weather if self.field_aware_switching else None,
                     terrain=observation.terrain if self.field_aware_switching else None,
+                    # The battle's current ability and item, not the set's: an
+                    # item can be consumed or knocked off, and an ability swapped.
+                    our_ability=mon.current_ability if self.matchup_reads_our_set else None,
+                    our_item=mon.current_item if self.matchup_reads_our_set else None,
                 ).net
             )
         return sum(scores) / len(scores) if scores else 0.0
@@ -3221,15 +3231,30 @@ class HeuristicAgent(Agent):
         return net + rate * (self._preview_net(ours, forme, predicted, shared) - net)
 
     def _preview_net(self, ours, species: SpeciesInfo, predicted, shared) -> float:
-        net = matchup(self.dex, ours, species, **shared).net
+        own = self._set_for_matchup(ours)
+        net = matchup(self.dex, ours, species, **shared, **own).net
         # Each predicted effect contributes its own marginal change, weighted
         # by how likely it is. With one effect this is exactly the expectation;
         # with two it is a linear approximation of it, which is the honest
         # simplification.
         for effect, kind, chance in predicted:
-            shifted = matchup(self.dex, ours, species, **{kind: effect}, **shared).net
+            shifted = matchup(self.dex, ours, species, **{kind: effect}, **shared, **own).net
             net += chance * (shifted - net)
         return net
+
+    def _set_for_matchup(self, pokemon_set: PokemonSet) -> dict[str, str | None]:
+        """Our ability and item as `matchup()` takes them, from a team sheet.
+
+        Converted to ids: a set parsed from an export says "Damp Rock" and
+        "Drizzle", while every rule table is keyed "damprock" and "drizzle" --
+        passing the names through would have matched nothing, silently.
+        """
+        if not self.matchup_reads_our_set:
+            return {}
+        return {
+            "our_ability": to_id(pokemon_set.ability) or None,
+            "our_item": to_id(pokemon_set.item) if pokemon_set.item else None,
+        }
 
     def _own_mega_set(self, pokemon_set: PokemonSet) -> PokemonSet | None:
         """The set as its Mega forme, if it holds the stone for its own species.
