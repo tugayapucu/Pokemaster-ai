@@ -164,22 +164,45 @@ Next, in order:
   `effective_types` handles Roost and nothing else. That touches typing,
   grounding and STAB together. It is worth doing when something needs the
   machinery — Cinderace fills 2 of 2,400 slots — and not before.
-- **Predict the field at Team Preview.** *The item 0047 turned into.* An
-  ability prior was derived from the corpus and measured as a **no-op**: 0 of
-  221 decisions differed, because a species only becomes an `ObservedPokemon`
-  once it has been on the field, by which point its loud ability has already
-  announced. The gate that makes the prior trustworthy is what makes it useless
-  there.
+- **Score switch decisions on the field that is actually up.** *Proposed as the
+  next item — raised, not reordered. 0048 found it and deliberately left it.*
 
-  Team Preview is where it pays, and it is the one place we see their six with
-  none on the field. `matchup_table` passes no weather because "none is set
-  yet" — true, and beside the point: a team with **Pelipper** (16.3%) is going
-  to be in rain, **Torkoal** in sun, **Rillaboom** (39.2%) on Grassy Terrain.
-  `matchup()` already takes `weather`. The prior covers every setter in the
-  format, and it is already built, tested and off by default.
+  `_score_switch_on_matchup` calls `matchup()` with the `observation` in hand
+  and passes **neither `weather` nor `terrain`**, while the same file threads
+  `observation.terrain` into six other call sites. So every switch decision
+  this project makes is scored on a bare field: rain does not halve their Fire
+  move, Grassy Terrain does not raise our Grass one, sand does not raise their
+  Special Defence.
 
-  Same discipline: pre-register, and **check the two arms differ before reading
-  the result.**
+  Data tracked and never read — the shape that has cost this project the most.
+
+  Why it may be worth more than 0048 was: Team Preview is **one** decision per
+  battle and measured neutral at 51.0%; switching is a decision made many times
+  per battle, and switching is one of only **two** changes that ever improved
+  the agent (+7.8). The lever 0048 says Team Preview is not.
+
+  One line to fix, then the same discipline: pre-register, verify the arms
+  differ, then read the number.
+
+- ~~Predict the field at Team Preview~~ — **done, 0048, and neutral.** The
+  prior was built from replays end to end (twelve species; Indeedee-F 73%,
+  Pelipper 68%, Rillaboom 59%) and wired into `matchup_table` as a weight
+  rather than a switch. **The picks genuinely changed — 122 of 380 previews,
+  32%** — and the win rate did not: 204/196 of 400, 51.0%, Wilson
+  [46.1%, 55.9%]. Neutral as pre-registered, so it ships **off by default**
+  beside `tenure_boosts` and the ability prior.
+
+  The finding was worth more than the result. The A/B would not start —
+  `matchup() got an unexpected keyword argument 'terrain'` — and underneath
+  that sat a second bug: `estimate_damage` fell back to **static** base power
+  for any caller that computed none, which was `matchup` alone among four. The
+  same Grass move was worth 90 when Team Preview priced it and 117 when the
+  move scorer did. Both fixed (`1c2ff79`, `a862683`), 1,399 unit and 115
+  integration tests passing.
+
+  **The instrument check is now earning its keep.** It ran before the win rate
+  this time and immediately found the scorer blind to the effect being
+  measured — the same class of bug 0047 only found by accident, afterwards.
 
 - **Emergency Exit** — **re-scoped 2026-09-12; it was mis-filed.** Recorded as
   "behavioural, not damage", which underrated it twice over.

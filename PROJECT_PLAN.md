@@ -1313,6 +1313,77 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Predicting the field, and the two bugs the check found first (0048, 2026-09-12)
+
+0047's item, done. The question: at Team Preview their six are visible and none
+has been on the field, so what field will they build? Measured end to end from
+replays rather than routed through an ability table, because the log states the
+whole chain in one line and the number that falls out is the one actually
+wanted — **P(this field is up | this species was previewed)**, which folds in
+the two things an ability table cannot know: they bring four of six, and a
+setter can be beaten to it or faint first.
+
+| species | effect | previewed | P |
+| --- | --- | --- | --- |
+| Rillaboom | grassy terrain | 2,941 | 59% |
+| Indeedee-F | psychic terrain | 1,657 | 73% |
+| Pelipper | rain | 1,221 | 68% |
+| Ninetales-Alola | snow | 376 | 64% |
+| Charizard | sun | 502 | 45% |
+
+Twelve species in all. **Charizard is the one worth reading twice**: it does not
+set sun, Charizard-Mega-Y does, so 45% is how often it Megas that way. Nothing
+was told that — it fell out of measuring the chain end to end.
+
+**The result.** The picks change and the win rate does not.
+
+| | |
+| --- | --- |
+| previews compared | 380 |
+| picks that **differed** | **122 — 32%** |
+| predicting vs bare, 400 battles | 204 / 196 — **51.0%** |
+| 95% Wilson | [46.1%, 55.9%] |
+
+Neutral, and neutral *as pre-registered* — the document says "neutral to
+slightly positive, and I expect it not to clear its interval," and predicted
+10–40% of picks changing. Off by default, number recorded. Team Preview is one
+decision against roughly twenty in-battle ones, and 0031 put ~93% of outcome
+variance on the team assignment itself, so this lever was bounded before it
+started.
+
+**The check ran first, and it paid immediately.** The A/B would not start at
+all: `matchup() got an unexpected keyword argument 'terrain'`. Two bugs stacked
+underneath.
+
+| | |
+| --- | --- |
+| `matchup()` took a `weather` and no `terrain` | every score ever computed was on bare ground |
+| `estimate_damage` fell back to **static** base power | so the terrain 1.3 could not apply even once threaded |
+
+The second is the sharper one. Three callers — the in-battle move scorer, the
+differential harness, the feature builder — each called `dynamic_base_power`
+and handed the answer in. `matchup` passed nothing and got the dex's printed
+number, so the same Grass move was worth **90 when Team Preview priced it and
+117 when the move scorer priced it, three call sites apart in the same file**.
+Neither was wrong about the rule; one was not asking.
+
+This matters more in M-C than it sounds: the two commonest field effects in the
+format are terrains (Rillaboom 39.2% of teams, Indeedee-F 22.1%), so the single
+effect most likely to be up was the one the scorer could not represent.
+
+**The difference from 0047 is the method, not the luck.** 0047 found this class
+of bug by accident, after a strange-looking number. 0048 found it because the
+experiment refused to read a win rate until the effect was known to be
+expressible. That is the discipline working as intended for the first time.
+
+**Still open, and named as the next item.** `_score_switch_on_matchup` has the
+`observation` in hand and passes neither weather nor terrain, while the same
+file threads `observation.terrain` into six other call sites. Every switch
+decision is scored on a bare field — many decisions per battle against Team
+Preview's one, and switching is one of only two changes that ever improved this
+agent (+7.8). Deliberately not fixed inside 0048: moving in-battle behaviour
+would shift the baseline under a pre-registration already written.
+
 ### An ability prior, and a no-op that was nearly read as a null (0047, 2026-09-12)
 
 Prompted by a good question: if the opponent brings Rillaboom, assume Grassy
