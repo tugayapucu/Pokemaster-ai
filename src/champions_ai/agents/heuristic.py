@@ -93,6 +93,7 @@ from champions_ai.mechanics import (
     spite_removes,
     weather_on_arrival,
 )
+from champions_ai.mechanics.abilities import terrain_on_arrival
 from champions_ai.mechanics.charge import CHARGE_TURN_MULTIPLIER, charges_this_turn
 
 # Scoring weights. Chosen to be legible rather than optimal: damage is the
@@ -539,6 +540,12 @@ class HeuristicAgent(Agent):
         # holding nothing, with no ability, and compared Speed on the raw stat.
         # On by default: our set is known, so this is a fact rather than a guess.
         matchup_reads_our_set: bool = True,
+        # Whether Team Preview scores each candidate four in the weather and
+        # terrain its own setters put up. It scored every four on bare ground,
+        # so a team built around its own weather was ranked as though it never
+        # set any. Our abilities are known and they set the field on arrival, so
+        # on by default; the simplifications are in `_own_field`.
+        own_field: bool = True,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -582,6 +589,7 @@ class HeuristicAgent(Agent):
         self.mega_priors = mega_priors or {}
         self.opponent_megas = opponent_megas
         self.matchup_reads_our_set = matchup_reads_our_set
+        self.own_field = own_field
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -3126,30 +3134,56 @@ class HeuristicAgent(Agent):
         return TeamPreviewAction(picks=picks)
 
     def _rank_team_preview(self, preview: TeamPreview, picked_team_size: int) -> tuple[int, ...]:
-        base, mega = self._team_preview_rows(preview)
-        if not base:
-            return tuple(range(picked_team_size))
+        return self._best_team_preview(preview, picked_team_size)[0]
 
-        best_set, best_score, best_table = None, float("-inf"), base
+    def _best_team_preview(
+        self, preview: TeamPreview, picked_team_size: int
+    ) -> tuple[tuple[int, ...], tuple[str | None, str | None]]:
+        """The four to bring in lead order, and the field our side sets with them.
+
+        Every candidate four is scored with one stone holder evolving and in the
+        weather and terrain its own setters put up. Rows are computed once per
+        distinct field -- there are only a handful -- not once per four.
+        """
+        bare: tuple[str | None, str | None] = (None, None)
+        rows_by_field: dict[tuple[str | None, str | None], tuple] = {}
+
+        def rows(field):
+            if field not in rows_by_field:
+                rows_by_field[field] = self._team_preview_rows(preview, own_field=field)
+            return rows_by_field[field]
+
+        base, mega = rows(bare)
+        if not base:
+            return tuple(range(picked_team_size)), bare
+
+        best_set, best_score, best_table, best_field = None, float("-inf"), base, bare
         # Six choose four is fifteen combinations, so the exhaustive answer is
         # cheaper than any clever approximation would be -- and still is with
         # each Mega Stone holder in a selection tried as the one that evolves.
         for candidate in combinations(range(len(preview.own_team)), picked_team_size):
-            for scores in self._mega_assignments(preview, candidate, base, mega):
+            for chosen in self._mega_choices(preview, candidate, mega):
+                field = self._own_field(preview, candidate, chosen) if self.own_field else bare
+                field_base, field_mega = rows(field)
+                scores = [
+                    field_mega[index] if index == chosen else field_base[index]
+                    for index in range(len(field_base))
+                ]
                 score = self._score_selection(candidate, scores, len(preview.opponent_team))
                 if score > best_score:
-                    best_set, best_score, best_table = candidate, score, scores
+                    best_set, best_score, best_table, best_field = candidate, score, scores, field
 
         assert best_set is not None
         # Lead with the two that fare best against their roster as a whole,
         # since which of their six leads is still unknown.
-        return tuple(
+        ordered = tuple(
             sorted(
                 best_set,
                 key=lambda index: sum(best_table[index]) / max(1, len(best_table[index])),
                 reverse=True,
             )
         )
+        return ordered, best_field
 
     def matchup_table(self, preview: TeamPreview) -> list[list[float]]:
         """`table[ours][theirs]` -- our net matchup against each of their six.
@@ -3158,7 +3192,10 @@ class HeuristicAgent(Agent):
         a player looking at six unfamiliar species wants the grid far more
         than they want the conclusion drawn from it.
         """
-        base, mega = self._team_preview_rows(preview)
+        # Drawn in the field the recommended four would set, so a team that
+        # brings its own weather is shown in that weather.
+        _, field = self._best_team_preview(preview, preview.regulation.picked_team_size)
+        base, mega = self._team_preview_rows(preview, own_field=field)
         # The grid shows a Mega Stone holder as the Mega it will become. When
         # two holders are brought only one can evolve; the ranking accounts for
         # that, and the grid shows each at its best.
@@ -3168,7 +3205,9 @@ class HeuristicAgent(Agent):
         ]
 
     def _team_preview_rows(
-        self, preview: TeamPreview
+        self,
+        preview: TeamPreview,
+        own_field: tuple[str | None, str | None] = (None, None),
     ) -> tuple[list[list[float]], list[list[float] | None]]:
         """Our six against their six: each as itself, and as its Mega if it holds its stone.
 
@@ -3190,25 +3229,33 @@ class HeuristicAgent(Agent):
         base: list[list[float]] = []
         mega: list[list[float] | None] = []
         for ours in preview.own_team.pokemon:
-            base.append(self._preview_row(ours, preview, predicted, shared))
+            base.append(self._preview_row(ours, preview, predicted, shared, own_field))
             evolved = self._own_mega_set(ours) if self.own_megas else None
             mega.append(
-                None if evolved is None else self._preview_row(evolved, preview, predicted, shared)
+                None
+                if evolved is None
+                else self._preview_row(evolved, preview, predicted, shared, own_field)
             )
         return base, mega
 
-    def _preview_row(self, ours, preview: TeamPreview, predicted, shared) -> list[float]:
+    def _preview_row(
+        self, ours, preview: TeamPreview, predicted, shared, own_field=(None, None)
+    ) -> list[float]:
         row: list[float] = []
         for theirs in preview.opponent_team:
             try:
                 species = self.dex.get_species(theirs.species)
-                row.append(self._opponent_blended_net(ours, species, predicted, shared))
+                row.append(
+                    self._opponent_blended_net(ours, species, predicted, shared, own_field)
+                )
             except KeyError:
                 # Missing data must not read as a good or bad matchup.
                 row.append(0.0)
         return row
 
-    def _opponent_blended_net(self, ours, species: SpeciesInfo, predicted, shared) -> float:
+    def _opponent_blended_net(
+        self, ours, species: SpeciesInfo, predicted, shared, own_field=(None, None)
+    ) -> float:
         """Our matchup against a previewed species, allowing that it may Mega Evolve.
 
         The expectation over "it evolves" and "it does not", weighted by how
@@ -3217,7 +3264,7 @@ class HeuristicAgent(Agent):
         Preview has about an opponent. Without a measured rate the species is
         scored as itself.
         """
-        net = self._preview_net(ours, species, predicted, shared)
+        net = self._preview_net(ours, species, predicted, shared, own_field)
         if not self.opponent_megas:
             return net
         found = self.mega_priors.get(to_id(species.base_species))
@@ -3228,17 +3275,34 @@ class HeuristicAgent(Agent):
             forme = self.dex.get_species(forme_name)
         except KeyError:
             return net
-        return net + rate * (self._preview_net(ours, forme, predicted, shared) - net)
+        return net + rate * (
+            self._preview_net(ours, forme, predicted, shared, own_field) - net
+        )
 
-    def _preview_net(self, ours, species: SpeciesInfo, predicted, shared) -> float:
+    def _preview_net(
+        self, ours, species: SpeciesInfo, predicted, shared, own_field=(None, None)
+    ) -> float:
         own = self._set_for_matchup(ours)
-        net = matchup(self.dex, ours, species, **shared, **own).net
-        # Each predicted effect contributes its own marginal change, weighted
-        # by how likely it is. With one effect this is exactly the expectation;
-        # with two it is a linear approximation of it, which is the honest
-        # simplification.
+        weather, terrain = own_field
+        # Our own setters decide their kind of field outright: we choose to
+        # bring them, and they set it the moment they arrive.
+        fixed = {
+            kind: value
+            for kind, value in (("weather", weather), ("terrain", terrain))
+            if value is not None
+        }
+        net = matchup(self.dex, ours, species, **shared, **own, **fixed).net
+        # Each predicted effect of the *opponent's* contributes its own marginal
+        # change, weighted by how likely it is -- except where our own setter
+        # has already decided that kind of field. With one effect this is
+        # exactly the expectation; with two it is a linear approximation of it,
+        # which is the honest simplification.
         for effect, kind, chance in predicted:
-            shifted = matchup(self.dex, ours, species, **{kind: effect}, **shared, **own).net
+            if kind in fixed:
+                continue
+            shifted = matchup(
+                self.dex, ours, species, **{kind: effect}, **shared, **own, **fixed
+            ).net
             net += chance * (shifted - net)
         return net
 
@@ -3292,17 +3356,55 @@ class HeuristicAgent(Agent):
         them); without rates, every holder is tried and the ranking keeps the
         best, which is the agent choosing for itself.
         """
+        return [
+            [mega[index] if index == chosen else base[index] for index in range(len(base))]
+            for chosen in self._mega_choices(preview, selection, mega)
+        ]
+
+    def _mega_choices(
+        self,
+        preview: TeamPreview,
+        selection: tuple[int, ...],
+        mega: list[list[float] | None],
+    ) -> list[int | None]:
+        """Which holder in a selection evolves; [None] when none can.
+
+        Several holders: with measured rates, only the one players evolve most
+        often (ties keep all of them); without rates, every holder, and the
+        ranking keeps the best.
+        """
         holders = [index for index in selection if mega[index] is not None]
         if not holders:
-            return [base]
+            return [None]
         if self.mega_priors:
             rates = {index: self._mega_rate(preview.own_team.pokemon[index]) for index in holders}
             top = max(rates.values())
             holders = [index for index in holders if rates[index] == top]
-        return [
-            [mega[index] if index == chosen else base[index] for index in range(len(base))]
-            for chosen in holders
-        ]
+        return holders
+
+    def _own_field(
+        self, preview: TeamPreview, selection: tuple[int, ...], chosen: int | None
+    ) -> tuple[str | None, str | None]:
+        """The weather and terrain this four puts up on its own.
+
+        Read off each member's ability -- the evolving holder's *forme* ability,
+        since a forme that sets weather does so the moment it evolves.
+
+        Simplifications, stated rather than hidden: the field is treated as up
+        for the whole matchup, with no duration and no opposing setter taking
+        it back; and with two setters of one kind in a four, the first in team
+        order wins, because which lands last is a battle event Team Preview
+        cannot see.
+        """
+        weather = terrain = None
+        for index in selection:
+            pokemon_set = preview.own_team.pokemon[index]
+            if index == chosen:
+                pokemon_set = self._own_mega_set(pokemon_set) or pokemon_set
+            ability = to_id(pokemon_set.ability)
+            weather = weather or weather_on_arrival(ability)
+            terrain = terrain or terrain_on_arrival(ability)
+        return weather, terrain
 
     def _mega_rate(self, pokemon_set: PokemonSet) -> float:
         """How often this species Mega Evolves on the field; 0 when never measured."""
