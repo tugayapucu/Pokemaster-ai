@@ -116,6 +116,41 @@ Everything on the critical path runs. What is left is not capability, it is
    - **The agent has no Choice-lock awareness when choosing.** The engine keeps
      it legal, but it picks a Choice holder's first move without weighing the
      commitment, so `scout` underrates teams that carry a Choice item.
+
+   **The largest finding of the day: `scout` was mostly measuring the agent's
+   Team Preview, not the team.** Forcing the player's usual four (and lead) on
+   the first candidate, on the same 120 opponents and seeds as the agent's own
+   picks:
+
+   | Team Preview by | record | 95% Wilson |
+   | --- | --- | --- |
+   | the agent | 133/240 — 55.4% | [49.1%, 61.6%] |
+   | **the player** | **175/240 — 72.9%** | [67.0%, 78.1%] |
+
+   37 opponents better, 15 worse, sign test **p = 0.003**, and the instrument
+   check confirmed the forced pick was applied to our side only. **The
+   opponents are picked and piloted by the same agent**, which shares every
+   blind spot below, so the paired gap is the trustworthy part and the level is
+   not a claim about humans. Scouting a candidate now forces the player's own
+   picks (done locally; not yet a `scout` flag).
+
+   Agent defects found by reading the code while chasing that gap. Each is its
+   own commit and its own measured change, in this order — set 2026-09-12, when
+   the user asked for them ahead of further scouting; cheapest facts first,
+   judgement last:
+
+   | # | defect | where | kind |
+   | --- | --- | --- | --- |
+   | 1 | **Charge moves** scored as immediate hits | `MoveInfo.flags` carries `charge` on 10 moves and nothing reads it | engine fact |
+   | 2 | **Trick Room reversal** unmodelled: worth 0 when already up, a flat 55 otherwise, blind to which side is faster | the field-effect scorer's Trick Room branch | fact (a second one ends it) + judgement (whether ending helps) |
+   | 3 | Team Preview scores the **base forme**, not the Mega a set becomes | `own_stats` reads `dex.get_species(set.species)` | engine fact |
+   | 4 | Team Preview models **no field for its own side** — only the opponent's (0048) | `matchup_table` | mostly fact: our own abilities are known |
+   | 5 | Team Preview rates each Pokemon **alone** | `_score_selection` | judgement |
+
+   3–5 are one idea — Team Preview learning what its own side becomes and does
+   — and the largest lever in sight. One team is not the pool, so each is
+   measured with `evaluate` across the pool before it is believed. Fixtures and
+   experiments for these use pool teams and synthetic sets only.
 3. **~20 September: collect again, re-harvest, re-scout.** The ladder max moved
    1341 → 1437 in one day while the median barely moved, so the top is forming
    first. Check the distribution on the day rather than assuming it reached
