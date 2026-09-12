@@ -569,6 +569,10 @@ class HeuristicAgent(Agent):
         # The race model is a judgement -- no switching, Protect or partners --
         # so off until measured. See 0055.
         speed_beyond_knockouts: bool = False,
+        # With `speed_beyond_knockouts`, the share of a denied hit credited in
+        # a race longer than one hit. 1.0 is 0055's rule, which over-valued
+        # speed; 0056 sweeps smaller values.
+        speed_race_credit: float = 1.0,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -616,6 +620,7 @@ class HeuristicAgent(Agent):
         self.own_field = own_field
         self.matchup_turn_costs = matchup_turn_costs
         self.speed_beyond_knockouts = speed_beyond_knockouts
+        self.speed_race_credit = speed_race_credit
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -814,6 +819,7 @@ class HeuristicAgent(Agent):
                     our_item=mon.current_item if self.matchup_reads_our_set else None,
                     price_turn_costs=self.matchup_turn_costs,
                     speed_beyond_knockouts=self.speed_beyond_knockouts,
+                    speed_race_credit=self.speed_race_credit,
                 ).net
             )
         return sum(scores) / len(scores) if scores else 0.0
@@ -3330,6 +3336,7 @@ class HeuristicAgent(Agent):
         costs = {
             "price_turn_costs": self.matchup_turn_costs,
             "speed_beyond_knockouts": self.speed_beyond_knockouts,
+            "speed_race_credit": self.speed_race_credit,
         }
         net = matchup(self.dex, ours, species, **shared, **own, **fixed, **costs).net
         # Each predicted effect of the *opponent's* contributes its own marginal
