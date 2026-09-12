@@ -212,7 +212,13 @@ def hits_to_knock_out(fraction: float) -> float:
     return float(math.ceil(round(1.0 / fraction, 9)))
 
 
-def _finishes_first(dealt: float, taken: float, ko_chance: float, beyond_knockouts: bool) -> float:
+def _finishes_first(
+    dealt: float,
+    taken: float,
+    ko_chance: float,
+    beyond_knockouts: bool,
+    race_credit: float = 1.0,
+) -> float:
     """Chance the faster side ends the race no later than the slower one could.
 
     `dealt` is the faster side's expected hit, `taken` the slower side's.
@@ -224,7 +230,7 @@ def _finishes_first(dealt: float, taken: float, ko_chance: float, beyond_knockou
         # A one-hit race keeps the knockout chance from the damage roll, which
         # is sharper than the expected fraction.
         return ko_chance
-    return 1.0 if hits <= hits_to_knock_out(taken) else 0.0
+    return race_credit if hits <= hits_to_knock_out(taken) else 0.0
 
 
 def order_edge(
@@ -236,6 +242,7 @@ def order_edge(
     their_speed: float,
     *,
     beyond_knockouts: bool = False,
+    race_credit: float = 1.0,
 ) -> float:
     """Signed value of the turn order, in fractions of HP.
 
@@ -250,12 +257,20 @@ def order_edge(
     two against their two, moving first wins a race that moving second loses.
 
     Still a race between two Pokemon: no switching, no Protect, no partners.
+    That is why `race_credit` exists: the share of the denied hit credited in a
+    race longer than one hit, standing in for how often doubles lets a race run
+    to its end. 1 credits the whole hit (0055, which over-valued speed); 0 is
+    the one-hit rule exactly. A one-hit race is unaffected at every value.
     """
+    if not 0.0 <= race_credit <= 1.0:
+        raise ValueError(f"race_credit must be within [0, 1], got {race_credit}")
     if our_speed == their_speed:
         return 0.0
     if our_speed > their_speed:
-        return _finishes_first(offence, defence, our_ko, beyond_knockouts) * defence
-    return -_finishes_first(defence, offence, their_ko, beyond_knockouts) * offence
+        first = _finishes_first(offence, defence, our_ko, beyond_knockouts, race_credit)
+        return first * defence
+    first = _finishes_first(defence, offence, their_ko, beyond_knockouts, race_credit)
+    return -first * offence
 
 
 def matchup(
@@ -297,6 +312,9 @@ def matchup(
     # in a one-hit knockout race. See `order_edge`. Off by default: the old
     # numbers exactly.
     speed_beyond_knockouts: bool = False,
+    # With `speed_beyond_knockouts`, the share of a denied hit credited in a
+    # race longer than one hit. See `order_edge`. 1.0 is 0055's rule.
+    speed_race_credit: float = 1.0,
 ) -> Matchup:
     """Score our Pokemon against a species we know nothing else about.
 
@@ -364,5 +382,6 @@ def matchup(
     edge = order_edge(
         offence, defence, our_ko, their_ko, our_speed, their_speed,
         beyond_knockouts=speed_beyond_knockouts,
+        race_credit=speed_race_credit,
     )
     return Matchup(offence=offence, defence=defence, speed_edge=edge)
