@@ -1313,6 +1313,34 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Team Preview learns Mega Evolution (0052, 2026-09-12)
+
+Bug 3. Team Preview scored every Pokemon as its base forme, on both sides. The
+design came from the user: rather than assume every stone holder evolves,
+measure how often each species actually does. `build_mega_priors` reads it off
+the engine's `|-mega|` line, forme taken from the stone — and the format splits
+in two, several species near 90% and others near zero because their stones are
+not carried.
+
+| | change | picks differ | A/B | decision |
+| --- | --- | --- | --- | --- |
+| **B** | our holders scored as their Megas; one per selection evolves, the most-evolved species when rates are loaded | 53% | 214/186 of 400, [48.6%, 58.3%] | **ships** (a fact about our team) |
+| **A** | an opponent blended toward its Mega by its rate | 50% | 418/382 of 800, [48.8%, 55.7%] | **off** (a prior; neutral) |
+
+B is the largest effect of the day's four changes. Both pick counts overshot
+their predicted bands.
+
+**It also found a blind spot in a guard.** After B, the calibration canary
+failed on its mean gap (26.1 against a floor of 28). Re-running its six battles
+with the day's changes toggled showed the scorer had not moved at all — every
+other change reproduced its recorded 25.4 / 38.8 exactly — and B moved it only
+by bringing a different four. The canary assumed its battles were fixed, which
+a Team Preview change silently breaks. Its Team Preview is now pinned to the
+picks its numbers were recorded on; its ranges were not widened.
+
+Not modelled: a Mega's ability, because `matchup()` reads no ability or item for
+either side; and for A, that only one opponent can Mega Evolve per battle.
+
 ### Trick Room priced by speed: neutral, so off (0051, 2026-09-12)
 
 Bug 2. Trick Room was worth a flat 55 when not up and zero when up. Both were
