@@ -526,6 +526,14 @@ class HeuristicAgent(Agent):
         # one players evolve more often is the one assumed to evolve -- which is
         # how players actually choose. Without it, the agent tries each.
         mega_priors: dict[str, tuple[str, float]] | None = None,
+        # Whether Team Preview allows that an opponent may Mega Evolve. Their
+        # items are hidden, so every previewed species was scored as its base
+        # forme -- a species that evolves 90% of the time it takes the field was
+        # rated as though it never did. On, each cell against a species in
+        # `mega_priors` is its base matchup moved toward its Mega matchup by the
+        # measured rate. Off by default: the rate is a prior, and priors are
+        # measured before they ship. See 0052.
+        opponent_megas: bool = False,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -567,6 +575,7 @@ class HeuristicAgent(Agent):
         self.trick_room_by_speed = trick_room_by_speed
         self.own_megas = own_megas
         self.mega_priors = mega_priors or {}
+        self.opponent_megas = opponent_megas
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -3183,11 +3192,33 @@ class HeuristicAgent(Agent):
         for theirs in preview.opponent_team:
             try:
                 species = self.dex.get_species(theirs.species)
-                row.append(self._preview_net(ours, species, predicted, shared))
+                row.append(self._opponent_blended_net(ours, species, predicted, shared))
             except KeyError:
                 # Missing data must not read as a good or bad matchup.
                 row.append(0.0)
         return row
+
+    def _opponent_blended_net(self, ours, species: SpeciesInfo, predicted, shared) -> float:
+        """Our matchup against a previewed species, allowing that it may Mega Evolve.
+
+        The expectation over "it evolves" and "it does not", weighted by how
+        often the species evolves once it takes the field. That rate conflates
+        carrying the stone with using it, which is exactly the uncertainty Team
+        Preview has about an opponent. Without a measured rate the species is
+        scored as itself.
+        """
+        net = self._preview_net(ours, species, predicted, shared)
+        if not self.opponent_megas:
+            return net
+        found = self.mega_priors.get(to_id(species.base_species))
+        if found is None:
+            return net
+        forme_name, rate = found
+        try:
+            forme = self.dex.get_species(forme_name)
+        except KeyError:
+            return net
+        return net + rate * (self._preview_net(ours, forme, predicted, shared) - net)
 
     def _preview_net(self, ours, species: SpeciesInfo, predicted, shared) -> float:
         net = matchup(self.dex, ours, species, **shared).net
