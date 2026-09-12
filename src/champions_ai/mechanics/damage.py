@@ -22,6 +22,7 @@ from typing import TypeVar
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
 from champions_ai.mechanics import abilities as ability_rules
 from champions_ai.mechanics.abilities import ATE_MULTIPLIER
+from champions_ai.mechanics.base_power import dynamic_base_power
 from champions_ai.mechanics.items import (
     attack_multiplier,
     base_power_multiplier,
@@ -392,6 +393,13 @@ def estimate_damage(
         volatiles=attacker_volatiles,
         field_conditions=field_conditions,
     )
+    defender_grounded = is_grounded(
+        effective_types(defender.types, defender_volatiles),
+        ability=defender_ability,
+        item=defender_item,
+        volatiles=defender_volatiles,
+        field_conditions=field_conditions,
+    )
     actual_type = effective_type(
         move,
         attacker=attacker,
@@ -461,7 +469,34 @@ def estimate_damage(
     # Engine order: the level/power/ratio term, then +2, then the modifiers.
     # A type-boosting item raises base power and Light Ball raises the stat, so
     # both belong inside this term rather than after it.
-    power = move.base_power if base_power is None else base_power
+    # A caller that works out the base power itself keeps its answer; one that
+    # passes nothing now gets the *computed* power rather than the static one.
+    #
+    # This was a real split in the codebase. The in-battle move scorer, the
+    # differential harness and the feature builder all called
+    # `dynamic_base_power` and passed the result in. `matchup` -- which is what
+    # Team Preview and every switch decision are scored with -- passed nothing,
+    # so the same Grass move was worth 90 there and 117 on Grassy Terrain three
+    # call sites away. Not a disagreement about policy: one of them was simply
+    # not asking. Centralised here so the default is the engine's answer and a
+    # caller has to opt *out* of it.
+    if base_power is None:
+        power = dynamic_base_power(
+            move,
+            attacker=attacker,
+            defender=defender,
+            attacker_hp_fraction=attacker_hp_fraction,
+            attacker_holds_item=None if attacker_item is None else bool(attacker_item),
+            attacker_status=attacker_status,
+            defender_status=defender_status,
+            terrain=terrain,
+            weather=weather,
+            attacker_grounded=attacker_grounded,
+            defender_grounded=defender_grounded,
+            attacker_ability=attacker_ability,
+        )
+    else:
+        power = base_power
     power = modify(power, base_power_multiplier(attacker_item, move))
     power = modify(power, ability_rules.base_power_multiplier(
         attacker_ability, move, base_power=power, weather=weather
