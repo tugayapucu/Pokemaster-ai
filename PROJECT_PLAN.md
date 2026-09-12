@@ -1313,6 +1313,29 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Moves that cost a turn (0054, 2026-09-13)
+
+Found while reviewing why Team Preview ratings moved after 0053. Two gaps of
+0050's shape — a flag loaded and never read:
+
+- **Recharge moves were free.** Six moves carry `recharge`; the move scorer
+  priced each as a full hit. The engine applies `mustrecharge` through
+  `selfDrops`, which skips targets not hit, so a miss costs no recharge and the
+  price is derivable: `1 / (1 + accuracy)`.
+- **`matchup()` knew neither kind.** 0050 taught the in-battle move scorer
+  about charge turns; Team Preview and switching, scored through `matchup()`,
+  still priced charging and recharging moves as free instant hits.
+
+| | change | instrument check | A/B | matchups decided |
+| --- | --- | --- | --- | --- |
+| **E** | move scorer prices recharge | 0.4% of decisions differ; must-be-0 holds over 449 | 200 / 200 | **0 of 200** |
+| **F** | `matchup()` prices both | 6% of picks differ; must-be-0 holds over 1,248 previews | 200 / 200 | 2 of 200 |
+
+**Both 200/200s were checked**, because that is the identical-agents number.
+E decided no matchup at all — the A/B is uninformative, not neutral; recharge
+moves are legal on 0.7% of decisions. F decided two, one each way. Both ship on
+correctness, as registered.
+
 ### Our own set, and the field our own team creates (0053, 2026-09-13)
 
 Bug 4. Two gaps in `matchup()`, which scores Team Preview and every switch:
