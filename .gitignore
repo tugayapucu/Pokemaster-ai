@@ -42,3 +42,8 @@ data/priors-*.json
 # replays regenerates it; `experiments/0048-team-preview-field/build.py` is the
 # script that does.
 data/field-priors-*.json
+
+# Mega Evolution rates per species, on the same terms: a measurement of an
+# unpublished corpus, rebuilt rather than inherited.
+# `experiments/0052-team-preview-megas/build.py` regenerates it.
+data/mega-priors-*.json

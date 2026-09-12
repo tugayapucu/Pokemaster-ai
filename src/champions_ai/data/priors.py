@@ -303,3 +303,117 @@ def load_field_priors(path: Path) -> dict[str, tuple[str, str, float]]:
         species: (entry["effect"], entry["kind"], float(entry["probability"]))
         for species, entry in payload.items()
     }
+
+
+DEFAULT_MIN_ON_FIELD = 50
+
+
+@dataclass(frozen=True)
+class MegaPrior:
+    """How often a species Mega Evolves once it is on the field, and into what."""
+
+    species: str
+    forme: str
+    on_field: int
+    megas: int
+
+    @property
+    def rate(self) -> float:
+        return self.megas / self.on_field if self.on_field else 0.0
+
+
+def _base_species(dex, name: str) -> str:
+    from champions_ai.simulator.tracker import to_id
+
+    try:
+        return to_id(dex.get_species(name).base_species)
+    except KeyError:
+        return to_id(name)
+
+
+def build_mega_priors(
+    replays, dex, *, min_on_field: int = DEFAULT_MIN_ON_FIELD
+) -> dict[str, MegaPrior]:
+    """Base species -> how often it Megas when it takes the field, measured.
+
+    Team Preview hides items, so whether an opponent's Salamence is holding its
+    stone is unknowable -- but how often a Salamence that reaches the field
+    Mega Evolves is not. Measured on the Reg M-C corpus it splits the format in
+    two: Salamence and Golisopod near 90%, while species whose stones are
+    rarely carried sit near zero. Excadrill Megas once in 227 appearances;
+    its harvested sets hold Focus Sash and Air Balloon, not its stone.
+
+    Read off the engine's own announcement rather than inferred from names:
+
+        |-mega|p1a: Salamence|Salamence|Salamencite
+
+    names the **stone**, and the stone names the forme exactly, so a species
+    with two Megas is never confused between them.
+
+    The number conflates two choices a replay cannot separate -- carrying the
+    stone, and using it -- which is what makes it the right prior for an
+    opponent whose item is hidden, and the wrong one for our own Pokemon, whose
+    item we know.
+    """
+    from collections import Counter, defaultdict
+
+    from champions_ai.simulator.tracker import species_from_details, to_id
+
+    on_field: Counter = Counter()
+    megas: Counter = Counter()
+    formes: dict[str, Counter] = defaultdict(Counter)
+
+    for replay in replays:
+        seen: set[tuple[str, str]] = set()
+        evolved: dict[tuple[str, str], str | None] = {}
+        for line in replay.log:
+            parts = line.split("|")
+            if line.startswith(("|switch|", "|drag|", "|replace|")) and len(parts) > 3:
+                side = parts[2].split(":")[0].strip()[:2]
+                seen.add((side, _base_species(dex, species_from_details(parts[3]))))
+            elif line.startswith("|-mega|") and len(parts) > 4:
+                side = parts[2].split(":")[0].strip()[:2]
+                stone = dex.items.get(to_id(parts[4]))
+                evolved[(side, _base_species(dex, parts[3]))] = (
+                    stone.mega_forme if stone is not None else None
+                )
+        for _, base in seen:
+            on_field[base] += 1
+        for (_, base), forme in evolved.items():
+            megas[base] += 1
+            if forme:
+                formes[base][forme] += 1
+
+    priors: dict[str, MegaPrior] = {}
+    for base, count in on_field.items():
+        if count < min_on_field or not formes[base]:
+            continue
+        forme, _ = formes[base].most_common(1)[0]
+        priors[base] = MegaPrior(species=base, forme=forme, on_field=count, megas=megas[base])
+    return priors
+
+
+def save_mega_priors(priors: dict[str, MegaPrior], path: Path) -> None:
+    """With the counts, for the same reason the other priors keep theirs."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        species: {
+            "forme": prior.forme,
+            "on_field": prior.on_field,
+            "megas": prior.megas,
+            "rate": round(prior.rate, 4),
+        }
+        for species, prior in sorted(priors.items())
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def load_mega_priors(path: Path) -> dict[str, tuple[str, float]]:
+    """Base species id -> (Mega forme name, rate). Empty when the file is absent."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {
+        species: (entry["forme"], float(entry["rate"])) for species, entry in payload.items()
+    }
