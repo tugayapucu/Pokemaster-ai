@@ -1149,17 +1149,7 @@ class HeuristicAgent(Agent):
             return 0.0
 
         trick_room = TRICK_ROOM in observation.field_conditions
-        ours = effective_speed(
-            (attacker.computed_stats or {}).get("spe", 0),
-            boost_stage=attacker.boosts.speed,
-            tailwind=TAILWIND in observation.own_side.side_conditions,
-            paralysed=attacker.status == PARALYSIS,
-            item=attacker.current_item,
-            ability=attacker.current_ability,
-            weather=observation.weather,
-            holds_item=attacker.current_item is not None,
-        )
-        their_tailwind = TAILWIND in observation.opponent_side.side_conditions
+        ours = self._our_speed(observation, attacker)
 
         chance = 1.0
         opponent = observation.opponent_side
@@ -1173,18 +1163,7 @@ class HeuristicAgent(Agent):
                 species = self.dex.get_species(observed.species)
             except KeyError:
                 continue
-            theirs = effective_speed(
-                self._opponent_stats(species)["spe"],
-                boost_stage=observed.boosts.speed,
-                tailwind=their_tailwind,
-                paralysed=observed.status == PARALYSIS,
-                item=self._known_item(observed),
-                # A Mega forme has one possible ability, so this is often
-                # known without ever having watched it fire.
-                ability=self._known_ability(observed),
-                weather=observation.weather,
-                holds_item=observed.may_hold_item,
-            )
+            theirs = self._their_speed(observation, observed, species)
             chance = min(
                 chance,
                 moves_first(
@@ -1200,6 +1179,39 @@ class HeuristicAgent(Agent):
                 ),
             )
         return chance
+
+    def _our_speed(self, observation: Observation, mon) -> float:
+        """One of our Pokemon's effective Speed right now.
+
+        Split out of `_moves_first` so that turn-order reasoning and anything
+        pricing a change to the speed order read the same number -- the two
+        must not disagree about who is faster.
+        """
+        return effective_speed(
+            (mon.computed_stats or {}).get("spe", 0),
+            boost_stage=mon.boosts.speed,
+            tailwind=TAILWIND in observation.own_side.side_conditions,
+            paralysed=mon.status == PARALYSIS,
+            item=mon.current_item,
+            ability=mon.current_ability,
+            weather=observation.weather,
+            holds_item=mon.current_item is not None,
+        )
+
+    def _their_speed(self, observation: Observation, observed, species: SpeciesInfo) -> float:
+        """An opponent's effective Speed, as far as we can know it."""
+        return effective_speed(
+            self._opponent_stats(species)["spe"],
+            boost_stage=observed.boosts.speed,
+            tailwind=TAILWIND in observation.opponent_side.side_conditions,
+            paralysed=observed.status == PARALYSIS,
+            item=self._known_item(observed),
+            # A Mega forme has one possible ability, so this is often
+            # known without ever having watched it fire.
+            ability=self._known_ability(observed),
+            weather=observation.weather,
+            holds_item=observed.may_hold_item,
+        )
 
     def _revealed_priority(self, observed) -> float:
         """The highest priority we have actually seen this Pokemon use.
