@@ -44,6 +44,7 @@ from champions_ai.domain import (
     MoveAction,
     Observation,
     PassAction,
+    PokemonSet,
     SlotAction,
     SwitchAction,
     TeamPreview,
@@ -512,6 +513,19 @@ class HeuristicAgent(Agent):
         # Off by default: the mechanic is a fact, but pricing it is a judgement,
         # and this project does not ship unmeasured judgements. See 0051.
         trick_room_by_speed: bool = False,
+        # Team Preview scores a Pokemon holding its own Mega Stone as the Mega it
+        # becomes. It scored the base forme, so a Mega's whole reason to be
+        # brought was invisible to the pick. Only one Pokemon Mega Evolves per
+        # battle and 23.8% of pool teams hold two or more stones, so each
+        # selection has exactly one holder evolve. On by default: our own items
+        # are known, so this is a fact about our team rather than a guess.
+        own_megas: bool = True,
+        # Base species id -> (Mega forme, rate), from
+        # `data.priors.build_mega_priors`: how often the species Mega Evolves
+        # once it is on the field. With several holders in one selection, the
+        # one players evolve more often is the one assumed to evolve -- which is
+        # how players actually choose. Without it, the agent tries each.
+        mega_priors: dict[str, tuple[str, float]] | None = None,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -551,6 +565,8 @@ class HeuristicAgent(Agent):
         self.field_aware_switching = field_aware_switching
         self.charge_turns = charge_turns
         self.trick_room_by_speed = trick_room_by_speed
+        self.own_megas = own_megas
+        self.mega_priors = mega_priors or {}
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -3091,17 +3107,19 @@ class HeuristicAgent(Agent):
         return TeamPreviewAction(picks=picks)
 
     def _rank_team_preview(self, preview: TeamPreview, picked_team_size: int) -> tuple[int, ...]:
-        scores = self.matchup_table(preview)
-        if not scores:
+        base, mega = self._team_preview_rows(preview)
+        if not base:
             return tuple(range(picked_team_size))
 
-        best_set, best_score = None, float("-inf")
+        best_set, best_score, best_table = None, float("-inf"), base
         # Six choose four is fifteen combinations, so the exhaustive answer is
-        # cheaper than any clever approximation would be.
+        # cheaper than any clever approximation would be -- and still is with
+        # each Mega Stone holder in a selection tried as the one that evolves.
         for candidate in combinations(range(len(preview.own_team)), picked_team_size):
-            score = self._score_selection(candidate, scores, len(preview.opponent_team))
-            if score > best_score:
-                best_set, best_score = candidate, score
+            for scores in self._mega_assignments(preview, candidate, base, mega):
+                score = self._score_selection(candidate, scores, len(preview.opponent_team))
+                if score > best_score:
+                    best_set, best_score, best_table = candidate, score, scores
 
         assert best_set is not None
         # Lead with the two that fare best against their roster as a whole,
@@ -3109,7 +3127,7 @@ class HeuristicAgent(Agent):
         return tuple(
             sorted(
                 best_set,
-                key=lambda index: sum(scores[index]) / max(1, len(scores[index])),
+                key=lambda index: sum(best_table[index]) / max(1, len(best_table[index])),
                 reverse=True,
             )
         )
@@ -3121,6 +3139,23 @@ class HeuristicAgent(Agent):
         a player looking at six unfamiliar species wants the grid far more
         than they want the conclusion drawn from it.
         """
+        base, mega = self._team_preview_rows(preview)
+        # The grid shows a Mega Stone holder as the Mega it will become. When
+        # two holders are brought only one can evolve; the ranking accounts for
+        # that, and the grid shows each at its best.
+        return [
+            mega_row if mega_row is not None else base_row
+            for base_row, mega_row in zip(base, mega)
+        ]
+
+    def _team_preview_rows(
+        self, preview: TeamPreview
+    ) -> tuple[list[list[float]], list[list[float] | None]]:
+        """Our six against their six: each as itself, and as its Mega if it holds its stone.
+
+        The Mega rows are None for a Pokemon that cannot evolve, and for every
+        Pokemon when `own_megas` is off.
+        """
         # What field their six is likely to put up. None is set *yet* -- the
         # battle has not started -- but a team with Pelipper is going to be in
         # rain, and scoring the grid on a bare field is scoring a battle that
@@ -3128,34 +3163,99 @@ class HeuristicAgent(Agent):
         # reaches the field 68% of the time and Rillaboom 59%, so each effect
         # is weighted by its own probability rather than switched on.
         predicted = self._predicted_field(preview.opponent_team)
-
-        table: list[list[float]] = []
+        shared = dict(
+            level=preview.regulation.level,
+            doubles=preview.regulation.game_type == "doubles",
+            assumed_points=self.assumed_opponent_points,
+        )
+        base: list[list[float]] = []
+        mega: list[list[float] | None] = []
         for ours in preview.own_team.pokemon:
-            row: list[float] = []
-            for theirs in preview.opponent_team:
-                try:
-                    species = self.dex.get_species(theirs.species)
-                    shared = dict(
-                        level=preview.regulation.level,
-                        doubles=preview.regulation.game_type == "doubles",
-                        assumed_points=self.assumed_opponent_points,
-                    )
-                    net = matchup(self.dex, ours, species, **shared).net
-                    # Each predicted effect contributes its own marginal
-                    # change, weighted by how likely it is. With one effect
-                    # this is exactly the expectation; with two it is a linear
-                    # approximation of it, which is the honest simplification.
-                    for effect, kind, chance in predicted:
-                        shifted = matchup(
-                            self.dex, ours, species, **{kind: effect}, **shared
-                        ).net
-                        net += chance * (shifted - net)
-                    row.append(net)
-                except KeyError:
-                    # Missing data must not read as a good or bad matchup.
-                    row.append(0.0)
-            table.append(row)
-        return table
+            base.append(self._preview_row(ours, preview, predicted, shared))
+            evolved = self._own_mega_set(ours) if self.own_megas else None
+            mega.append(
+                None if evolved is None else self._preview_row(evolved, preview, predicted, shared)
+            )
+        return base, mega
+
+    def _preview_row(self, ours, preview: TeamPreview, predicted, shared) -> list[float]:
+        row: list[float] = []
+        for theirs in preview.opponent_team:
+            try:
+                species = self.dex.get_species(theirs.species)
+                row.append(self._preview_net(ours, species, predicted, shared))
+            except KeyError:
+                # Missing data must not read as a good or bad matchup.
+                row.append(0.0)
+        return row
+
+    def _preview_net(self, ours, species: SpeciesInfo, predicted, shared) -> float:
+        net = matchup(self.dex, ours, species, **shared).net
+        # Each predicted effect contributes its own marginal change, weighted
+        # by how likely it is. With one effect this is exactly the expectation;
+        # with two it is a linear approximation of it, which is the honest
+        # simplification.
+        for effect, kind, chance in predicted:
+            shifted = matchup(self.dex, ours, species, **{kind: effect}, **shared).net
+            net += chance * (shifted - net)
+        return net
+
+    def _own_mega_set(self, pokemon_set: PokemonSet) -> PokemonSet | None:
+        """The set as its Mega forme, if it holds the stone for its own species.
+
+        Item first, never species first: a species with two Megas has two
+        stones, and asking the species for "its" stone returns whichever is
+        found first -- the trap `Dex.mega_stone_for` documents. Stat Points,
+        moves and nature carry over; `own_stats` rebuilds the stats from the
+        forme's base.
+        """
+        stone = self.dex.items.get(to_id(pokemon_set.item or ""))
+        if stone is None or not stone.mega_forme:
+            return None
+        try:
+            species = self.dex.get_species(pokemon_set.species)
+            forme = self.dex.get_species(stone.mega_forme)
+        except KeyError:
+            return None
+        if stone.mega_stone not in (species.name, species.base_species):
+            return None
+        ability = to_id(forme.abilities[0]) if forme.abilities else pokemon_set.ability
+        return pokemon_set.model_copy(update={"species": forme.name, "ability": ability})
+
+    def _mega_assignments(
+        self,
+        preview: TeamPreview,
+        selection: tuple[int, ...],
+        base: list[list[float]],
+        mega: list[list[float] | None],
+    ) -> list[list[list[float]]]:
+        """The score tables a selection could be played with: one holder evolves.
+
+        No holder in the selection: the base table. Several: with measured
+        rates, only the holder players evolve most often (ties keep all of
+        them); without rates, every holder is tried and the ranking keeps the
+        best, which is the agent choosing for itself.
+        """
+        holders = [index for index in selection if mega[index] is not None]
+        if not holders:
+            return [base]
+        if self.mega_priors:
+            rates = {index: self._mega_rate(preview.own_team.pokemon[index]) for index in holders}
+            top = max(rates.values())
+            holders = [index for index in holders if rates[index] == top]
+        return [
+            [mega[index] if index == chosen else base[index] for index in range(len(base))]
+            for chosen in holders
+        ]
+
+    def _mega_rate(self, pokemon_set: PokemonSet) -> float:
+        """How often this species Mega Evolves on the field; 0 when never measured."""
+        try:
+            base_species = self.dex.get_species(pokemon_set.species).base_species
+        except KeyError:
+            return 0.0
+        found = self.mega_priors.get(to_id(base_species))
+        return found[1] if found is not None else 0.0
 
     def _predicted_field(self, opponent_team) -> list[tuple[str, str, float]]:
         """The likeliest weather and terrain their six will establish.
