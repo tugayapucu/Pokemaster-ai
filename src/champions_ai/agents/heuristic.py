@@ -94,7 +94,12 @@ from champions_ai.mechanics import (
     weather_on_arrival,
 )
 from champions_ai.mechanics.abilities import terrain_on_arrival
-from champions_ai.mechanics.charge import CHARGE_TURN_MULTIPLIER, charges_this_turn
+from champions_ai.mechanics.charge import (
+    CHARGE_TURN_MULTIPLIER,
+    RECHARGE_FLAG,
+    charges_this_turn,
+    recharge_multiplier,
+)
 
 # Scoring weights. Chosen to be legible rather than optimal: damage is the
 # baseline currency, and everything else is priced relative to it.
@@ -502,6 +507,12 @@ class HeuristicAgent(Agent):
         # An engine fact, so on by default like `field_aware_switching`; 0050
         # sizes it. The flag keeps the old pricing constructible.
         charge_turns: bool = True,
+        # The mirror image: a move that hits now and costs the next turn
+        # recharging. The engine's `recharge` flag was loaded and never read, so
+        # a recharge move was priced as a free hit. Priced at
+        # `recharge_multiplier` -- 1 / (1 + accuracy), since a miss costs no
+        # recharge. An engine fact, so on; 0054 sizes it.
+        recharge_turns: bool = True,
         # Whether Trick Room is priced by what flipping the speed order does for
         # *us*, rather than at a flat value that ignores who is faster.
         #
@@ -584,6 +595,7 @@ class HeuristicAgent(Agent):
         self.matchup_switching = matchup_switching
         self.field_aware_switching = field_aware_switching
         self.charge_turns = charge_turns
+        self.recharge_turns = recharge_turns
         self.trick_room_by_speed = trick_room_by_speed
         self.own_megas = own_megas
         self.mega_priors = mega_priors or {}
@@ -1042,6 +1054,14 @@ class HeuristicAgent(Agent):
         if charging:
             score *= CHARGE_TURN_MULTIPLIER
             reasons.append(f"{move.name} charges this turn and lands next")
+
+        # A recharge move lands this turn and spends the next one, if it hits.
+        # The damage is real *now*, so focus fire keeps counting it; only the
+        # score is priced per turn committed. Not limited to the move as chosen:
+        # Sleep Talk and Copycat can call a recharge move, and pay for it.
+        if self.recharge_turns and RECHARGE_FLAG in move.flags:
+            score *= recharge_multiplier(move)
+            reasons.append(f"{move.name} costs the next turn recharging")
 
         # Deliberately *not* scaled by how dangerous the target is. That was
         # built and measured (experiment 0013): it made agreement significantly
