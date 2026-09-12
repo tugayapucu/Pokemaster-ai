@@ -142,8 +142,8 @@ Everything on the critical path runs. What is left is not capability, it is
    | # | defect | where | kind |
    | --- | --- | --- | --- |
    | 1 | ~~**Charge moves** scored as immediate hits~~ — **done, 0050.** Priced at half a hit on the turn they charge, dropped from focus fire; a Mega's move now uses the weather its forme sets. Neutral (198/202), ships on correctness | `mechanics.charge`, `WEATHER_ON_ARRIVAL` | engine fact |
-   | 2 | **Trick Room reversal** unmodelled: worth 0 when already up, a flat 55 otherwise, blind to which side is faster | the field-effect scorer's Trick Room branch | fact (a second one ends it) + judgement (whether ending helps) |
-   | 3 | Team Preview scores the **base forme**, not the Mega a set becomes | `own_stats` reads `dex.get_species(set.species)` | engine fact |
+   | 2 | ~~**Trick Room reversal** unmodelled~~ — **built and measured, 0051: neutral, so off.** `trick_room_by_speed` prices the move as a toggle by the speed-share change. 406/394 over 800 battles; its score moved on 10% of decisions and the choice on 0.5% | `_trick_room_value`, `_speed_share` | fact (a second one ends it) + judgement (whether ending helps) |
+   | 3 | Team Preview scores the **base forme**, not the Mega a set becomes. **23.8% of pool teams have two or more stone holders** and only one can Mega per battle, so the fix must choose which holder Megas per selection rather than score every holder as Mega | `own_stats` reads `dex.get_species(set.species)` | engine fact + the agent's own choice |
    | 4 | Team Preview models **no field for its own side** — only the opponent's (0048) | `matchup_table` | mostly fact: our own abilities are known |
    | 5 | Team Preview rates each Pokemon **alone** | `_score_selection` | judgement |
 

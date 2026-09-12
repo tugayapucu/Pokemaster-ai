@@ -1313,6 +1313,28 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Trick Room priced by speed: neutral, so off (0051, 2026-09-12)
+
+Bug 2. Trick Room was worth a flat 55 when not up and zero when up. Both were
+blind to what the move does: reverse the speed order, and — `onFieldRestart` →
+`removePseudoWeather('trickroom')` — end itself when used while up.
+`trick_room_by_speed` prices it as a toggle: 55 × scale × the change in how
+often our active Pokemon move first, pairing by pairing. Built on
+`_our_speed` / `_their_speed`, extracted from `_moves_first` first so the two
+cannot disagree.
+
+| | | pre-registered |
+| --- | --- | --- |
+| Trick Room legal | 13.1% of decisions | 5–25% ✓ |
+| score moved | 10.0% | 50–95% of those ✓ |
+| choice differed | **0.5%** | 1–10% ✗ |
+| A/B, 800 battles | 406 / 394, [47.3%, 54.2%] | positive ✗ |
+
+Neutral, so **off**, by the rule written beforehand. It is 0049's shape again —
+the price moves often and decides almost nothing — and it measures this agent,
+which rarely reaches for Trick Room at all, rather than the value of using the
+move deliberately.
+
 ### Charge moves cost the turn they charge (0050, 2026-09-12)
 
 Bug 1 of the five `scout` exposed. Ten moves carry the engine's `charge` flag;
