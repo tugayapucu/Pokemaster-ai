@@ -93,3 +93,42 @@ def charges_this_turn(
         if seen in skipped_in:
             return False
     return True
+
+
+# --- recharge moves: the hit first, then a turn of nothing ------------------
+#
+# The mirror image of a charge move, transcribed from the pinned engine. Six
+# moves in this dex carry the `recharge` flag, and each has
+#
+#     self: { volatileStatus: 'mustrecharge' },
+#
+# where `mustrecharge` spends its holder's next action:
+#
+#     onBeforeMove(pokemon) {
+#         this.add('cant', pokemon, 'recharge');
+#         pokemon.removeVolatile('mustrecharge'); ...
+#         return null;
+#     },
+#
+# `self` is applied by `BattleActions.selfDrops`, which skips every target the
+# move did not hit -- `if (target === false) continue;` -- so a **miss costs no
+# recharge**, while a hit does, including one that knocks its target out: a
+# fainted target is still a target that was hit.
+#
+# Unlike a charge move, Sleep Talk and Copycat *can* call these (Hyper Beam has
+# no `nosleeptalk`), so the cost applies to a borrowed move as well.
+RECHARGE_FLAG = "recharge"
+
+
+def recharge_multiplier(move: MoveInfo) -> float:
+    """What a recharge move is worth per turn it commits, as a share of its hit.
+
+    Derived rather than tuned. A hit, with chance p, deals its damage and costs
+    the next turn; a miss deals nothing and costs no extra turn. Expected
+    damage p * D over expected turns 1 + p, against p * D per turn for an
+    ordinary move, is 1 / (1 + p): exactly half for a move that cannot miss,
+    the same as a charge move, and a little more for one that can.
+    """
+    if RECHARGE_FLAG not in move.flags:
+        return 1.0
+    return 1.0 / (1.0 + move.hit_chance)
