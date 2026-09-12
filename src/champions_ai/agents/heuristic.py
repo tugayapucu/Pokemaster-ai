@@ -450,6 +450,12 @@ class HeuristicAgent(Agent):
         # A *revealed* ability always wins over it -- see `_known_ability`.
         # The prior only fills the gap where there was nothing.
         ability_priors: dict[str, str] | None = None,
+        # Species id -> (effect, kind, probability): the field an opponent's
+        # previewed Pokemon is likely to put up, from `data.priors`. Used
+        # only at Team Preview, which is the one moment we see six Pokemon
+        # and none of them has been on the field. Opt-in, and measured
+        # before it ships -- see experiments/0048.
+        field_priors: dict[str, tuple[str, str, float]] | None = None,
         # Off by default: measured at +0.9 points over 1,600 battles, 95% CI
         # 48.4%-53.3%, p = 0.48. That is neutral, not an improvement, and this
         # project does not ship unproven changes to the shipped agent. The code
@@ -494,6 +500,7 @@ class HeuristicAgent(Agent):
         self.assumed_opponent_points = assumed_opponent_points
         self.infer_spreads = infer_spreads
         self.ability_priors = ability_priors or {}
+        self.field_priors = field_priors or {}
         self.tenure_boosts = tenure_boosts
         self.matchup_switching = matchup_switching
         self.redirect_weight = (
@@ -2936,29 +2943,58 @@ class HeuristicAgent(Agent):
         a player looking at six unfamiliar species wants the grid far more
         than they want the conclusion drawn from it.
         """
+        # What field their six is likely to put up. None is set *yet* -- the
+        # battle has not started -- but a team with Pelipper is going to be in
+        # rain, and scoring the grid on a bare field is scoring a battle that
+        # will not happen. Measured rather than asserted: a previewed Pelipper
+        # reaches the field 68% of the time and Rillaboom 59%, so each effect
+        # is weighted by its own probability rather than switched on.
+        predicted = self._predicted_field(preview.opponent_team)
+
         table: list[list[float]] = []
         for ours in preview.own_team.pokemon:
             row: list[float] = []
             for theirs in preview.opponent_team:
                 try:
                     species = self.dex.get_species(theirs.species)
-                    row.append(
-                        matchup(
-                            self.dex,
-                            ours,
-                            species,
-                            level=preview.regulation.level,
-                            doubles=preview.regulation.game_type == "doubles",
-                            assumed_points=self.assumed_opponent_points,
-                            # No weather at Team Preview: the battle has not
-                            # started, so none is set yet.
-                        ).net
+                    shared = dict(
+                        level=preview.regulation.level,
+                        doubles=preview.regulation.game_type == "doubles",
+                        assumed_points=self.assumed_opponent_points,
                     )
+                    net = matchup(self.dex, ours, species, **shared).net
+                    # Each predicted effect contributes its own marginal
+                    # change, weighted by how likely it is. With one effect
+                    # this is exactly the expectation; with two it is a linear
+                    # approximation of it, which is the honest simplification.
+                    for effect, kind, chance in predicted:
+                        shifted = matchup(
+                            self.dex, ours, species, **{kind: effect}, **shared
+                        ).net
+                        net += chance * (shifted - net)
+                    row.append(net)
                 except KeyError:
                     # Missing data must not read as a good or bad matchup.
                     row.append(0.0)
             table.append(row)
         return table
+
+    def _predicted_field(self, opponent_team) -> list[tuple[str, str, float]]:
+        """The likeliest weather and terrain their six will establish.
+
+        At most one of each: two weathers cannot both be up, and the same for
+        terrain, so the stronger prediction wins rather than both being
+        applied. An empty list is the old behaviour exactly.
+        """
+        best: dict[str, tuple[str, str, float]] = {}
+        for entry in opponent_team:
+            found = self.field_priors.get(to_id(entry.species))
+            if found is None:
+                continue
+            effect, kind, chance = found
+            if kind not in best or chance > best[kind][2]:
+                best[kind] = (effect, kind, chance)
+        return list(best.values())
 
     @staticmethod
     def _score_selection(
