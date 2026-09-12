@@ -92,6 +92,7 @@ from champions_ai.mechanics import (
     spite_removes,
     weather_on_arrival,
 )
+from champions_ai.mechanics.charge import CHARGE_TURN_MULTIPLIER, charges_this_turn
 
 # Scoring weights. Chosen to be legible rather than optimal: damage is the
 # baseline currency, and everything else is priced relative to it.
@@ -487,6 +488,18 @@ class HeuristicAgent(Agent):
         # stays so the bare-field behaviour remains constructible, the way
         # `matchup_switching` kept the flat cost after 0032.
         field_aware_switching: bool = True,
+        # Whether a move that spends this turn charging is priced as the turn it
+        # charges rather than as the hit it eventually lands.
+        #
+        # `MoveInfo.flags` has carried the engine's `charge` flag since the dex
+        # loader was written, and nothing read it -- so Solar Beam and Electro
+        # Shot (6.8% and 11.1% of pool teams) were a full hit on the turn the
+        # engine spends charging. The rules are `mechanics.charge`, transcribed
+        # from `data/moves.ts`.
+        #
+        # An engine fact, so on by default like `field_aware_switching`; 0050
+        # sizes it. The flag keeps the old pricing constructible.
+        charge_turns: bool = True,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -524,6 +537,7 @@ class HeuristicAgent(Agent):
         self.tenure_boosts = tenure_boosts
         self.matchup_switching = matchup_switching
         self.field_aware_switching = field_aware_switching
+        self.charge_turns = charge_turns
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -952,6 +966,27 @@ class HeuristicAgent(Agent):
             reasons.append("knockout on a high roll")
         score += knockout_bonus
 
+        # A move that charges this turn lands nothing now and the engine locks
+        # the next turn in, so the choice is two turns for one hit. Priced at
+        # `CHARGE_TURN_MULTIPLIER` of that hit, applied to the damage and the
+        # knockout together and before anything else is added. Only the move as
+        # chosen: Sleep Talk, Instruct and Copycat cannot call a charge move,
+        # which the engine marks with `nosleeptalk` / `failinstruct`.
+        charging = (
+            self.charge_turns
+            and borrow_depth == 0
+            and charges_this_turn(
+                move,
+                weather=move_weather,
+                ability=self._own_ability(attacker),
+                item=attacker.current_item,
+                already_charging=self._locked_mid_charge(attacker, action),
+            )
+        )
+        if charging:
+            score *= CHARGE_TURN_MULTIPLIER
+            reasons.append(f"{move.name} charges this turn and lands next")
+
         # Deliberately *not* scaled by how dangerous the target is. That was
         # built and measured (experiment 0013): it made agreement significantly
         # worse on both halves and *increased* the wrong-target count it was
@@ -999,9 +1034,25 @@ class HeuristicAgent(Agent):
             score,
             tuple(reasons),
             target_index=target.index,
-            damage_fraction=estimate.average_fraction * move.hit_chance,
-            knockout_bonus=knockout_bonus,
+            # Focus fire adds up what the slots do to one target *this* turn,
+            # and a charging Pokemon does nothing to it yet.
+            damage_fraction=0.0 if charging else estimate.average_fraction * move.hit_chance,
+            knockout_bonus=0.0 if charging else knockout_bonus,
         )
+
+    @staticmethod
+    def _locked_mid_charge(attacker, action: MoveAction) -> bool:
+        """Whether this is the engine's second turn of a charge move.
+
+        A Pokemon locked mid-charge is sent its one move with the target field
+        omitted, which is how `choosable_move_targets` comes to hold None for
+        it. Choice and Encore locks trim the list too but keep the target, so
+        a missing target is specific to this case. No request, no lock.
+        """
+        targets = attacker.choosable_move_targets
+        if targets is None or action.move_index >= len(targets):
+            return False
+        return targets[action.move_index] is None
 
     def _rider_value(
         self, move, defender_species, observation: Observation, slot: int
