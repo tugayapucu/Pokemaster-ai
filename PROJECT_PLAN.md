@@ -1313,6 +1313,29 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### No speed credit helps; the smallest is merely harmless (0056, 2026-09-13)
+
+0055's follow-up, done the way its write-up required: a partial credit for the
+denied hit, swept on fresh seeds, with the decision rule committed and pushed
+before any arm reported (`3c755e9`).
+
+| credit | above the damage trade | picks differ | record, 800 battles | 98.75% Wilson |
+| --- | --- | --- | --- | --- |
+| 0.25 | 18% | 42% | **403 / 397** | [46.0%, 54.8%] |
+| 0.50 | 27% | 61% | 388 / 412 | [44.1%, 52.9%] |
+| 0.75 | 32% | 72% | 385 / 415 | [43.7%, 52.5%] |
+| 1.00 (control) | 35% | 81% | 389 / 411 | [44.2%, 53.0%] |
+
+No arm clears the Bonferroni-adjusted bar, none clears even 95%, and the
+control replicated 0055. **Speed stays priced by the one-hit rule and is not
+revisited before Frankfurt.** Five settings on two seeds, none helpful.
+
+One prediction missed usefully: the share of pairings where speed outweighs the
+damage trade shrank far more slowly than the credit (18 / 27 / 32%), because in
+close matchups the trade itself is small — so speed dominance is a property of
+close matchups, not only of how large the credit is. The arms share battles, so
+they were not pooled.
+
 ### Speed beyond knockouts: measured, and pointing the wrong way (0055, 2026-09-13)
 
 Bug 5 — "Team Preview rates each Pokemon alone" — was investigated before
