@@ -1313,6 +1313,36 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Speed beyond knockouts: measured, and pointing the wrong way (0055, 2026-09-13)
+
+Bug 5 — "Team Preview rates each Pokemon alone" — was investigated before
+anything was built, and turned out to be three problems:
+
+| | finding | decision |
+| --- | --- | --- |
+| partner bonus from data | 2 of 63 species–partner comparisons (150+ games each way) show a detectable effect — about chance | not supportable; dropped |
+| speed only in one-hit races | a fast set outspeeding every previewed opponent had its speed count in 6% of those pairings | built and measured here |
+| support effects, status moves | Fake Out on 76% of pool teams, Trick Room 56%, Intimidate 56%, Tailwind 55%; `matchup()` is damage-only | open |
+
+`order_edge` values moving first over a race of any length: the faster side
+denies the slower side's hit whenever it needs no more hits to finish.
+
+| | |
+| --- | --- |
+| Team Preview picks differ | 81% (predicted 20–60%) |
+| battle decisions differ | 6.8% (predicted 1–6%) |
+| A/B, 800 battles | **385 / 415, [44.7%, 51.6%], 133 of 400 matchups decided** |
+
+A real measurement, negative in direction, not clearing — **off**, by the rule
+written beforehand. A magnitude check run alongside explains it: the new speed
+edge outweighs the whole damage trade in 35% of pairings and a typical neutral
+hit in 43%, the shape `matchup.py`'s own comment warns against. The derivation
+fits a clean two-Pokemon race; doubles rarely runs one.
+
+A discounted denied hit is the natural follow-up and was deliberately not tried
+on the same battles. It is recorded as a proposal for its own pre-registered
+sweep.
+
 ### Moves that cost a turn (0054, 2026-09-13)
 
 Found while reviewing why Team Preview ratings moved after 0053. Two gaps of
