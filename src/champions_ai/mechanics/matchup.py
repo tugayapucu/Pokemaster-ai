@@ -18,6 +18,12 @@ from dataclasses import dataclass
 
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
 from champions_ai.domain import PokemonSet
+from champions_ai.mechanics.charge import (
+    CHARGE_TURN_MULTIPLIER,
+    RECHARGE_FLAG,
+    charges_this_turn,
+    recharge_multiplier,
+)
 from champions_ai.mechanics.damage import attacking_side, estimate_damage
 from champions_ai.mechanics.stats import (
     assumed_stats,
@@ -136,6 +142,7 @@ def _best_fraction(
     attacker_item: str | None = None,
     defender_ability: str | None = None,
     defender_item: str | None = None,
+    price_turn_costs: bool = False,
 ) -> tuple[float, float]:
     """(expected fraction of the defender's HP removed, chance of a knockout).
 
@@ -172,12 +179,25 @@ def _best_fraction(
             defender_item=defender_item,
         )
         expected = estimate.average_fraction * move.hit_chance
+        # Moves that cost a turn, priced per turn they commit -- the same
+        # prices the move scorer uses. A charge move charging this turn lands
+        # nothing now, so it also cannot win a knockout race this turn. A
+        # recharge move does land now, so its knockout chance stands.
+        ko_scale = 1.0
+        if price_turn_costs:
+            if charges_this_turn(
+                move, weather=weather, ability=attacker_ability, item=attacker_item
+            ):
+                expected *= CHARGE_TURN_MULTIPLIER
+                ko_scale = 0.0
+            elif RECHARGE_FLAG in move.flags:
+                expected *= recharge_multiplier(move)
         if expected > best:
             best = expected
             if estimate.guaranteed_ko:
-                best_ko = move.hit_chance
+                best_ko = move.hit_chance * ko_scale
             elif estimate.possible_ko:
-                best_ko = 0.5 * move.hit_chance
+                best_ko = 0.5 * move.hit_chance * ko_scale
             else:
                 best_ko = 0.0
     return min(best, 1.0), best_ko
@@ -212,6 +232,12 @@ def matchup(
     # are at Team Preview. None for both is the old behaviour exactly.
     our_ability: str | None = None,
     our_item: str | None = None,
+    # Price moves that cost a turn -- a charge move charging now, a recharge
+    # move -- per turn they commit, as the move scorer does. It priced both as
+    # free, instant hits here, so Team Preview and switching overrated any
+    # Pokemon whose best move was one of them. Off by default: the old numbers
+    # exactly, until a caller opts in.
+    price_turn_costs: bool = False,
 ) -> Matchup:
     """Score our Pokemon against a species we know nothing else about.
 
@@ -242,6 +268,7 @@ def matchup(
         weather, terrain,
         attacker_ability=our_ability,
         attacker_item=our_item,
+        price_turn_costs=price_turn_costs,
     )
     # Their attacking stats get the investment credit; the defensive ones they
     # showed us above do not.
@@ -258,6 +285,7 @@ def matchup(
         weather, terrain,
         defender_ability=our_ability,
         defender_item=our_item,
+        price_turn_costs=price_turn_costs,
     )
     # A speed tie is a coin flip, not a loss. Scoring it as a loss made a
     # neutral attacker that happened to be faster outrank a super-effective
