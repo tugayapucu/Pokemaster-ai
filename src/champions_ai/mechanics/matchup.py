@@ -130,6 +130,7 @@ def _best_fraction(
     level: int,
     doubles: bool,
     weather: str | None = None,
+    terrain: str | None = None,
 ) -> tuple[float, float]:
     """(expected fraction of the defender's HP removed, chance of a knockout).
 
@@ -159,6 +160,7 @@ def _best_fraction(
             level=level,
             doubles=doubles,
             weather=weather,
+            terrain=terrain,
         )
         expected = estimate.average_fraction * move.hit_chance
         if expected > best:
@@ -186,6 +188,13 @@ def matchup(
     their_hp: int | None = None,
     their_moves: list[MoveInfo] | None = None,
     weather: str | None = None,
+    # `estimate_damage` has taken a terrain all along -- it is what applies the
+    # 1.3 to a Grass move in Grassy Terrain, Expanding Force's spread bonus and
+    # Grass Pelt's defence -- but nothing above it ever passed one, so every
+    # matchup this project has ever scored was scored on bare ground. The two
+    # commonest field effects in Reg M-C are terrains (Rillaboom at 39.2% of
+    # teams, Indeedee-F at 22.1%), so the omission was not a small one.
+    terrain: str | None = None,
 ) -> Matchup:
     """Score our Pokemon against a species we know nothing else about.
 
@@ -213,7 +222,7 @@ def matchup(
     offence, our_ko = _best_fraction(
         dex, our_moves, our_species, our_stats, theirs, their_stats,
         their_hp if their_hp is not None else their_stats["hp"], level, doubles,
-        weather,
+        weather, terrain,
     )
     # Their attacking stats get the investment credit; the defensive ones they
     # showed us above do not.
@@ -227,7 +236,7 @@ def matchup(
         their_moves if their_moves else assumed_attacks(theirs),
         theirs, their_offence, our_species, our_stats,
         our_hp if our_hp is not None else our_stats["hp"], level, doubles,
-        weather,
+        weather, terrain,
     )
     # A speed tie is a coin flip, not a loss. Scoring it as a loss made a
     # neutral attacker that happened to be faster outrank a super-effective
