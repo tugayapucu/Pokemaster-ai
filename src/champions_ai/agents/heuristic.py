@@ -90,6 +90,7 @@ from champions_ai.mechanics import (
     retyped_by,
     sleep_talk_candidates,
     spite_removes,
+    weather_on_arrival,
 )
 
 # Scoring weights. Chosen to be legible rather than optimal: damage is the
@@ -780,10 +781,18 @@ class HeuristicAgent(Agent):
         # A Mega action is the same move thrown by a different Pokemon, so it
         # is scored as that Pokemon. Everything below -- damage, typing,
         # ability, speed -- then follows without a special case of its own.
+        # The weather this move will actually be thrown in. Usually the field's,
+        # but a Mega whose forme sets weather on arrival has it up before it
+        # attacks: the queue runs `megaEvo` (104) before moves (200), and
+        # `formeChange` hands the forme its ability through `setAbility`, which
+        # fires `Start`. Scoring the Mega turn in the old weather priced the
+        # one turn the forme changes the field as though it did not.
+        move_weather = observation.weather
         if action.special == MEGA and borrow_depth == 0:
             became = self._mega_form(attacker, attacker_species)
             if became is not None:
                 attacker_species, attacker = became
+                move_weather = weather_on_arrival(attacker.current_ability) or move_weather
 
         if move.move_id in FIRST_TURN_MOVES and attacker.turns_on_field > 1:
             # The engine refuses these outright after the first turn out, and
@@ -875,12 +884,12 @@ class HeuristicAgent(Agent):
                 defender_item_removable=self._item_can_be_taken(target, defender_species),
                 fainted_allies=sum(1 for mon in observation.own_side.team if mon.fainted),
                 terrain=observation.terrain,
-                weather=observation.weather,
+                weather=move_weather,
             ),
             level=observation.regulation.level,
             doubles=observation.regulation.game_type == "doubles",
             attacker_burned=attacker.status == "brn",
-            weather=observation.weather,
+            weather=move_weather,
             # Ours comes from our own request and is never hidden. Theirs is
             # None until the engine announces it -- `revealed_item` was
             # tracked from the day it was written and read by nothing.
