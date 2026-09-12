@@ -25,6 +25,7 @@ from champions_ai.mechanics.stats import (
     hp_stat,
     other_stat,
 )
+from champions_ai.mechanics.turn_order import effective_speed
 
 # Base power assumed for an attack we have not seen. Roughly a standard STAB
 # move -- enough that an unknown Pokemon does not read as harmless, which is
@@ -131,6 +132,10 @@ def _best_fraction(
     doubles: bool,
     weather: str | None = None,
     terrain: str | None = None,
+    attacker_ability: str | None = None,
+    attacker_item: str | None = None,
+    defender_ability: str | None = None,
+    defender_item: str | None = None,
 ) -> tuple[float, float]:
     """(expected fraction of the defender's HP removed, chance of a knockout).
 
@@ -161,6 +166,10 @@ def _best_fraction(
             doubles=doubles,
             weather=weather,
             terrain=terrain,
+            attacker_ability=attacker_ability,
+            attacker_item=attacker_item,
+            defender_ability=defender_ability,
+            defender_item=defender_item,
         )
         expected = estimate.average_fraction * move.hit_chance
         if expected > best:
@@ -195,6 +204,14 @@ def matchup(
     # commonest field effects in Reg M-C are terrains (Rillaboom at 39.2% of
     # teams, Indeedee-F at 22.1%), so the omission was not a small one.
     terrain: str | None = None,
+    # Our own ability and item, as Showdown ids. Ours are never hidden -- the
+    # set says what they are, and in battle the engine's request does -- but
+    # nothing here read them, so every matchup was scored as though our
+    # Pokemon had neither: no attacking or defensive ability, no item, and a
+    # Speed comparison on the raw stat. The opponent's stay unknown, as they
+    # are at Team Preview. None for both is the old behaviour exactly.
+    our_ability: str | None = None,
+    our_item: str | None = None,
 ) -> Matchup:
     """Score our Pokemon against a species we know nothing else about.
 
@@ -223,6 +240,8 @@ def matchup(
         dex, our_moves, our_species, our_stats, theirs, their_stats,
         their_hp if their_hp is not None else their_stats["hp"], level, doubles,
         weather, terrain,
+        attacker_ability=our_ability,
+        attacker_item=our_item,
     )
     # Their attacking stats get the investment credit; the defensive ones they
     # showed us above do not.
@@ -237,14 +256,28 @@ def matchup(
         theirs, their_offence, our_species, our_stats,
         our_hp if our_hp is not None else our_stats["hp"], level, doubles,
         weather, terrain,
+        defender_ability=our_ability,
+        defender_item=our_item,
     )
     # A speed tie is a coin flip, not a loss. Scoring it as a loss made a
     # neutral attacker that happened to be faster outrank a super-effective
     # one that merely tied.
-    if our_stats["spe"] > their_stats["spe"]:
+    # Our Speed as the engine orders on it: the item's multiplier, and an
+    # ability that doubles Speed in its own weather. Theirs stays the raw
+    # estimate, because at Team Preview neither their item nor their ability
+    # is known.
+    our_speed = effective_speed(
+        our_stats["spe"],
+        item=our_item,
+        ability=our_ability,
+        weather=weather,
+        holds_item=our_item is not None,
+    )
+    their_speed = their_stats["spe"]
+    if our_speed > their_speed:
         # We end it first, so their hit never arrives.
         edge = our_ko * defence
-    elif our_stats["spe"] < their_stats["spe"]:
+    elif our_speed < their_speed:
         # They end it first, so our attack never happens.
         edge = -their_ko * offence
     else:
