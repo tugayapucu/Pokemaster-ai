@@ -500,6 +500,18 @@ class HeuristicAgent(Agent):
         # An engine fact, so on by default like `field_aware_switching`; 0050
         # sizes it. The flag keeps the old pricing constructible.
         charge_turns: bool = True,
+        # Whether Trick Room is priced by what flipping the speed order does for
+        # *us*, rather than at a flat value that ignores who is faster.
+        #
+        # Two things were wrong with the flat price. It paid the same for
+        # setting Trick Room with a fast team as with a slow one. And it scored
+        # Trick Room at nothing when it was already up -- but the engine's
+        # `onFieldRestart` calls `removePseudoWeather('trickroom')`, so using it
+        # then *ends* it, which is worth a great deal when the opponent set it.
+        #
+        # Off by default: the mechanic is a fact, but pricing it is a judgement,
+        # and this project does not ship unmeasured judgements. See 0051.
+        trick_room_by_speed: bool = False,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -538,6 +550,7 @@ class HeuristicAgent(Agent):
         self.matchup_switching = matchup_switching
         self.field_aware_switching = field_aware_switching
         self.charge_turns = charge_turns
+        self.trick_room_by_speed = trick_room_by_speed
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -2691,7 +2704,9 @@ class HeuristicAgent(Agent):
 
         if move.pseudo_weather:
             condition = to_id(move.pseudo_weather)
-            if condition in observation.field_conditions:
+            if condition == TRICK_ROOM and self.trick_room_by_speed:
+                value += self._trick_room_value(observation, reasons)
+            elif condition in observation.field_conditions:
                 reasons.append(f"{move.pseudo_weather} is already up")
             else:
                 worth = PSEUDO_WEATHER_VALUE.get(condition, PSEUDO_WEATHER_DEFAULT)
@@ -2701,6 +2716,71 @@ class HeuristicAgent(Agent):
                 reasons.append(f"sets {move.pseudo_weather}")
 
         return value
+
+    def _speed_share(self, observation: Observation, *, trick_room: bool) -> float | None:
+        """How often our active Pokemon move before theirs, pairing by pairing.
+
+        Every (ours, theirs) pairing on the field counts once: 1 when ours
+        moves first, 0.5 on a tie, 0 when theirs does. Priority is held equal,
+        because Trick Room only reorders Pokemon within a priority bracket.
+        None when there is no pairing to judge.
+        """
+        own = observation.own_side
+        ours = [
+            self._our_speed(observation, own.team[index])
+            for index in own.active_slots
+            if index is not None and own.team[index].current_hp > 0
+        ]
+        theirs = []
+        opponent = observation.opponent_side
+        for index in opponent.active_slots:
+            if index is None:
+                continue
+            observed = opponent.revealed[index]
+            if observed.fainted:
+                continue
+            try:
+                species = self.dex.get_species(observed.species)
+            except KeyError:
+                continue
+            theirs.append(self._their_speed(observation, observed, species))
+        if not ours or not theirs:
+            return None
+        outcomes = [
+            moves_first(0, mine, 0, other, trick_room=trick_room)
+            for mine in ours
+            for other in theirs
+        ]
+        return sum(outcomes) / len(outcomes)
+
+    def _trick_room_value(self, observation: Observation, reasons: list[str]) -> float:
+        """What flipping the speed order is worth to us -- which can be negative.
+
+        Using Trick Room while it is up ends it (`onFieldRestart` calls
+        `removePseudoWeather('trickroom')`), so the move is a toggle either
+        way. It is priced as the change in `_speed_share` the toggle causes,
+        scaled by the value the flat price already used: turning every pairing
+        from lost to won is worth exactly what Trick Room used to be worth
+        unconditionally, and turning every one from won to lost costs that
+        much.
+
+        Not modelled: how many turns an active Trick Room has left -- the
+        tracker's `field_conditions` counter never counts, so an active one is
+        treated as fresh -- and the benches, since what switches in next is not
+        on the field yet.
+        """
+        up = TRICK_ROOM in observation.field_conditions
+        now = self._speed_share(observation, trick_room=up)
+        after = self._speed_share(observation, trick_room=not up)
+        if now is None or after is None:
+            reasons.append("no pairing on the field to judge Trick Room by")
+            return 0.0
+        change = after - now
+        verb = "ends" if up else "sets"
+        reasons.append(
+            f"{verb} Trick Room: we move first in {after:.0%} of pairings, from {now:.0%}"
+        )
+        return PSEUDO_WEATHER_VALUE[TRICK_ROOM] * self.speed_control_scale * change
 
     def _volatile_value(self, move, observed, on_us, reasons) -> float:
         """Taunt, Encore, Leech Seed, Substitute and the rest.
