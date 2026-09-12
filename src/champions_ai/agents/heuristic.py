@@ -563,6 +563,12 @@ class HeuristicAgent(Agent):
         # switching any Pokemon whose best move was one. An engine fact, so on;
         # 0054 sizes it.
         matchup_turn_costs: bool = True,
+        # Whether `matchup()` values moving first over a race of any length.
+        # It only counted a one-hit knockout race, so a Pokemon that outspeeds
+        # the field but rarely knocks out in one hit got nothing for its speed.
+        # The race model is a judgement -- no switching, Protect or partners --
+        # so off until measured. See 0055.
+        speed_beyond_knockouts: bool = False,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -609,6 +615,7 @@ class HeuristicAgent(Agent):
         self.matchup_reads_our_set = matchup_reads_our_set
         self.own_field = own_field
         self.matchup_turn_costs = matchup_turn_costs
+        self.speed_beyond_knockouts = speed_beyond_knockouts
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -806,6 +813,7 @@ class HeuristicAgent(Agent):
                     our_ability=mon.current_ability if self.matchup_reads_our_set else None,
                     our_item=mon.current_item if self.matchup_reads_our_set else None,
                     price_turn_costs=self.matchup_turn_costs,
+                    speed_beyond_knockouts=self.speed_beyond_knockouts,
                 ).net
             )
         return sum(scores) / len(scores) if scores else 0.0
@@ -3319,7 +3327,10 @@ class HeuristicAgent(Agent):
             for kind, value in (("weather", weather), ("terrain", terrain))
             if value is not None
         }
-        costs = {"price_turn_costs": self.matchup_turn_costs}
+        costs = {
+            "price_turn_costs": self.matchup_turn_costs,
+            "speed_beyond_knockouts": self.speed_beyond_knockouts,
+        }
         net = matchup(self.dex, ours, species, **shared, **own, **fixed, **costs).net
         # Each predicted effect of the *opponent's* contributes its own marginal
         # change, weighted by how likely it is -- except where our own setter
