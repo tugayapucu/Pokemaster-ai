@@ -557,6 +557,12 @@ class HeuristicAgent(Agent):
         # set any. Our abilities are known and they set the field on arrival, so
         # on by default; the simplifications are in `_own_field`.
         own_field: bool = True,
+        # Whether `matchup()` prices a charge move charging now and a recharge
+        # move per turn they commit, as the move scorer already does. It priced
+        # both as free, instant hits, overrating at Team Preview and when
+        # switching any Pokemon whose best move was one. An engine fact, so on;
+        # 0054 sizes it.
+        matchup_turn_costs: bool = True,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -602,6 +608,7 @@ class HeuristicAgent(Agent):
         self.opponent_megas = opponent_megas
         self.matchup_reads_our_set = matchup_reads_our_set
         self.own_field = own_field
+        self.matchup_turn_costs = matchup_turn_costs
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -798,6 +805,7 @@ class HeuristicAgent(Agent):
                     # item can be consumed or knocked off, and an ability swapped.
                     our_ability=mon.current_ability if self.matchup_reads_our_set else None,
                     our_item=mon.current_item if self.matchup_reads_our_set else None,
+                    price_turn_costs=self.matchup_turn_costs,
                 ).net
             )
         return sum(scores) / len(scores) if scores else 0.0
@@ -3311,7 +3319,8 @@ class HeuristicAgent(Agent):
             for kind, value in (("weather", weather), ("terrain", terrain))
             if value is not None
         }
-        net = matchup(self.dex, ours, species, **shared, **own, **fixed).net
+        costs = {"price_turn_costs": self.matchup_turn_costs}
+        net = matchup(self.dex, ours, species, **shared, **own, **fixed, **costs).net
         # Each predicted effect of the *opponent's* contributes its own marginal
         # change, weighted by how likely it is -- except where our own setter
         # has already decided that kind of field. With one effect this is
@@ -3321,7 +3330,7 @@ class HeuristicAgent(Agent):
             if kind in fixed:
                 continue
             shifted = matchup(
-                self.dex, ours, species, **{kind: effect}, **shared, **own, **fixed
+                self.dex, ours, species, **{kind: effect}, **shared, **own, **fixed, **costs
             ).net
             net += chance * (shifted - net)
         return net
