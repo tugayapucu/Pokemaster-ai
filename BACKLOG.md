@@ -87,8 +87,35 @@ Everything on the critical path runs. What is left is not capability, it is
    means nothing); abilities divide by activations, which exceed appearances
    whenever the ability fires on switch-in.
 
-2. **`scout` the candidates** as they appear. Already built. Read the *losing*
-   matchups, not the win rate.
+2. **`scout` the candidates** as they appear. Already built. *The first
+   candidate is in and scouted (2026-09-12); results stay local, since the
+   team is the user's own competitive work.*
+
+   **Correction to the advice that stood here** ("read the *losing* matchups,
+   not the win rate"). At two battles per opponent, **individual matchup rows
+   are noise**, and the first scout proved it twice:
+
+   | observation | what it shows |
+   | --- | --- |
+   | the same roster, drawn three times, went 0/2 and 2/2 | the battle seed alone flips a row |
+   | swapping one member of a roster moved it from 0/4 to 4/4 | one row cannot separate structure from luck |
+   | a 40-opponent run read 57.5%; the same draw at 120 read 50.8% | the headline needs 120 opponents too |
+
+   A pattern spotted in five losing rows was tested on 120 opponents and **was
+   not there** — the two buckets came out 4.9 points apart with intervals
+   overlapping almost completely. So: read the headline at 120 opponents, and
+   test a structural question by **paired re-scouting** (same opponents, same
+   seeds, one change) rather than by reading rows. Adding the team's items that
+   way moved it 122/240 → 133/240, readable precisely because it was paired.
+
+   Two things `scout` should learn, neither blocking:
+   - **Group rows by roster.** The pool is 5,858 team texts but only **3,408
+     rosters**: zero exact duplicates, but many near-copies — the same player's
+     team reconstructed from different replays. A roster drawn four times is
+     one 8-battle matchup, not four 2-battle ones.
+   - **The agent has no Choice-lock awareness when choosing.** The engine keeps
+     it legal, but it picks a Choice holder's first move without weighing the
+     commitment, so `scout` underrates teams that carry a Choice item.
 3. **~20 September: collect again, re-harvest, re-scout.** The ladder max moved
    1341 → 1437 in one day while the median barely moved, so the top is forming
    first. Check the distribution on the day rather than assuming it reached
