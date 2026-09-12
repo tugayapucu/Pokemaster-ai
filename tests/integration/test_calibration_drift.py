@@ -30,6 +30,7 @@ import pytest
 
 from champions_ai.agents import HeuristicAgent
 from champions_ai.dex import Dex
+from champions_ai.domain import TeamPreviewAction
 from champions_ai.env.battle_env import Decision
 from champions_ai.recommendation import Recommender
 
@@ -69,9 +70,17 @@ def gaps(env, dex, mega_teams) -> list[float]:
             choices = {}
             for player in waiting:
                 if env.decision(player) is Decision.TEAM_PREVIEW:
-                    choices[player] = agents[player].select_team_preview(
-                        env.team_preview(player), env.regulation.picked_team_size
-                    )
+                    # Pinned, not chosen. This canary measures the *scale* of
+                    # in-battle scores on fixed battles, and the battles are
+                    # only fixed if the same four are brought. Letting the agent
+                    # pick made a Team Preview change read as a scale change:
+                    # 0052 taught Team Preview about Mega Evolution, the pick
+                    # moved from (1, 2, 4, 3) to (1, 0, 4, 3), and the mean gap
+                    # fell 38.8 -> 26.1 with the in-battle scorer untouched.
+                    # Re-running with the old pick reproduced 25.4 / 38.8
+                    # exactly. These are the picks the recorded numbers were
+                    # measured on.
+                    choices[player] = TeamPreviewAction(picks=(1, 2, 4, 3))
                     continue
                 observation = env.observation(player)
                 legal = env.legal_actions(player)
