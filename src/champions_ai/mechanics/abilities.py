@@ -501,3 +501,47 @@ MEGA_SOL_WEATHER = "sunnyday"
 def effective_weather(ability: str | None, weather: str | None) -> str | None:
     """The weather this attacker's hit is calculated in."""
     return MEGA_SOL_WEATHER if ability == MEGA_SOL else weather
+
+
+# --- abilities that put weather up the moment their holder arrives -----------
+#
+# Transcribed from `data/abilities.ts`, where each of these calls
+# `this.field.setWeather(...)` from `onStart`:
+#
+#     drought          this.field.setWeather('sunnyday');
+#     drizzle          this.field.setWeather('raindance');
+#     sandstream       this.field.setWeather('sandstorm');
+#     snowwarning      this.field.setWeather('snowscape');
+#     orichalcumpulse  if (this.field.setWeather('sunnyday')) { ... }
+#     desolateland / primordialsea / deltastream   set themselves
+#
+# `onStart` runs on switch-in *and* on Mega Evolution:
+# `Pokemon.formeChange(..., isPermanent)` hands the forme its ability through
+# `setAbility`, which fires `Start`. And Mega Evolution resolves before any
+# move -- `battle-queue.ts` orders `switch: 103`, `megaEvo: 104`, moves `200`
+# -- so a Mega with one of these has its weather up when it attacks that turn,
+# even over a setter the opponent switched in the same turn.
+#
+# Sand Spit is left out deliberately: it sets sand when its holder is *hit*,
+# not when it arrives. And no species in the Reg M-C dex carries a primal
+# ability, so the rule that a primal weather refuses ordinary setters is not
+# modelled here.
+WEATHER_ON_ARRIVAL: dict[str, str] = {
+    "drought": "sunnyday",
+    "drizzle": "raindance",
+    "sandstream": "sandstorm",
+    "snowwarning": "snowscape",
+    "orichalcumpulse": "sunnyday",
+    "desolateland": "desolateland",
+    "primordialsea": "primordialsea",
+    "deltastream": "deltastream",
+}
+
+
+def weather_on_arrival(ability: str | None) -> str | None:
+    """The weather this ability sets when its holder arrives, if any.
+
+    Mega Sol is deliberately absent: it makes the weather *read* as sun for its
+    holder's own moves and sets nothing -- that is `effective_weather`'s job.
+    """
+    return WEATHER_ON_ARRIVAL.get(ability or "")

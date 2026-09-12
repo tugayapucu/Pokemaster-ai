@@ -5,6 +5,7 @@ from champions_ai.mechanics.abilities import (
     effective_weather,
     extra_hit_multiplier,
     linked_hits,
+    weather_on_arrival,
 )
 from champions_ai.mechanics.base_power import dynamic_base_power
 from champions_ai.mechanics.damage import (
@@ -90,6 +91,7 @@ __all__ = [
     "ABILITY_MOVES",
     "abilities_after",
     "effective_weather",
+    "weather_on_arrival",
     "extra_hit_multiplier",
     "linked_hits",
     "ability_move_succeeds",
