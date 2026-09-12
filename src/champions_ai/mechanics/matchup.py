@@ -14,6 +14,7 @@ rather than hidden in a constant, because it is the single biggest assumption
 here and Milestone 10 is meant to replace it with something inferred.
 """
 
+import math
 from dataclasses import dataclass
 
 from champions_ai.dex import Dex, MoveInfo, SpeciesInfo
@@ -203,6 +204,60 @@ def _best_fraction(
     return min(best, 1.0), best_ko
 
 
+def hits_to_knock_out(fraction: float) -> float:
+    """Hits needed to remove a whole health bar at `fraction` of it per hit."""
+    if fraction <= 0:
+        return math.inf
+    # Rounded before the ceiling so 1 / 0.5 does not become 2.0000000001 -> 3.
+    return float(math.ceil(round(1.0 / fraction, 9)))
+
+
+def _finishes_first(dealt: float, taken: float, ko_chance: float, beyond_knockouts: bool) -> float:
+    """Chance the faster side ends the race no later than the slower one could.
+
+    `dealt` is the faster side's expected hit, `taken` the slower side's.
+    """
+    if not beyond_knockouts:
+        return ko_chance
+    hits = hits_to_knock_out(dealt)
+    if hits <= 1:
+        # A one-hit race keeps the knockout chance from the damage roll, which
+        # is sharper than the expected fraction.
+        return ko_chance
+    return 1.0 if hits <= hits_to_knock_out(taken) else 0.0
+
+
+def order_edge(
+    offence: float,
+    defence: float,
+    our_ko: float,
+    their_ko: float,
+    our_speed: float,
+    their_speed: float,
+    *,
+    beyond_knockouts: bool = False,
+) -> float:
+    """Signed value of the turn order, in fractions of HP.
+
+    Moving first is worth the hit it denies: on the turn a side finishes the
+    race, the other side's attack that turn never lands.
+
+    Without `beyond_knockouts` only a one-hit race counts, which is the rule
+    this project always had -- and it prices speed at nothing for a Pokemon
+    that rarely knocks out in one hit, however much faster it is. With it, the
+    race runs over as many hits as it takes: the faster side denies the slower
+    side's hit whenever it needs no more hits than the slower side does. Needing
+    two against their two, moving first wins a race that moving second loses.
+
+    Still a race between two Pokemon: no switching, no Protect, no partners.
+    """
+    if our_speed == their_speed:
+        return 0.0
+    if our_speed > their_speed:
+        return _finishes_first(offence, defence, our_ko, beyond_knockouts) * defence
+    return -_finishes_first(defence, offence, their_ko, beyond_knockouts) * offence
+
+
 def matchup(
     dex: Dex,
     ours: PokemonSet,
@@ -238,6 +293,10 @@ def matchup(
     # Pokemon whose best move was one of them. Off by default: the old numbers
     # exactly, until a caller opts in.
     price_turn_costs: bool = False,
+    # Whether moving first is valued over a race of any length rather than only
+    # in a one-hit knockout race. See `order_edge`. Off by default: the old
+    # numbers exactly.
+    speed_beyond_knockouts: bool = False,
 ) -> Matchup:
     """Score our Pokemon against a species we know nothing else about.
 
@@ -302,12 +361,8 @@ def matchup(
         holds_item=our_item is not None,
     )
     their_speed = their_stats["spe"]
-    if our_speed > their_speed:
-        # We end it first, so their hit never arrives.
-        edge = our_ko * defence
-    elif our_speed < their_speed:
-        # They end it first, so our attack never happens.
-        edge = -their_ko * offence
-    else:
-        edge = 0.0
+    edge = order_edge(
+        offence, defence, our_ko, their_ko, our_speed, their_speed,
+        beyond_knockouts=speed_beyond_knockouts,
+    )
     return Matchup(offence=offence, defence=defence, speed_edge=edge)
