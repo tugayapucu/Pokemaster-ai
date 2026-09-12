@@ -36,3 +36,9 @@ data/*team*.txt
 # rather than inherited. `data.priors.build_ability_priors` over
 # `harvest.gather_evidence` regenerates it.
 data/priors-*.json
+
+# Field priors -- which species predicts which weather or terrain -- for the
+# same reason and on the same terms. `data.priors.build_field_priors` over the
+# replays regenerates it; `experiments/0048-team-preview-field/build.py` is the
+# script that does.
+data/field-priors-*.json
