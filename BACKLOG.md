@@ -121,6 +121,52 @@ Mega stones to 75, nothing removed, identical rule table.
 
 Next, in order:
 
+- ~~Score switch decisions on the field that is actually up~~ — **done, 0049,
+  and it ships.** `field_aware_switching` defaults on.
+
+  The fix fires constantly and decides almost nothing. Where a field is up, a
+  switch score moves **49% of the time**; the action chosen changes **1.9%** of
+  the time. Over 564 decisions: 212 on a field, 103 scores moved, **2 choices
+  differed**.
+
+  | | |
+  | --- | --- |
+  | aware vs blind, 400 battles | 198 / 202 — 49.5% |
+  | 95% Wilson | [44.6%, 54.4%] |
+
+  **Uninformative, and known to be** — noise around a change that hardly ever
+  fires. It ships because it is an engine fact, exactly as pre-registered: 0048
+  came back at 51.0% and stayed off because it was a guess, this comes back at
+  49.5% and ships because it is a fact, and only the written-down rule tells
+  those apart.
+
+  **My prediction was wrong by an order of magnitude** — 5–25% of decisions
+  predicted to differ against 0.4% actual. The score-movement counter did not
+  exist on the first run, and `2 of 564` is unreadable without it. Two reasons
+  for the gap, and the pre-registration had only the first: the score is a
+  *difference* on a shared field, so a modifier moving both candidates alike
+  cancels; and switching is rarely the marginal decision.
+
+  What was bought is **consistency, not win rate**. The agent could price an
+  attack in rain correctly and, the same turn, evaluate switching away from
+  that rain as though it were dry. That matters for the position evaluator and
+  any future search, where a wrong score at the root of a tree is not a 0.4%
+  problem.
+
+  Third lap of one bug — tracker, `matchup()`, `estimate_damage`, then this.
+  Each fix made the next reachable; none made it happen.
+
+- **Price the field a switch would *create*.** *Opened by 0049.* The switch
+  scorer now reads the field that is up **now**, but a Pokemon coming in may set
+  its own — which is what 59% of Rillabooms do. So the switch that creates
+  Grassy Terrain is still priced on whatever preceded it.
+
+  Unlike 0049 this is a **judgement, not a fact**: it needs the ability prior
+  to guess what the incoming Pokemon will do, and the incoming Pokemon may be
+  beaten to it. So it gets the 0047/0048 treatment — off until measured — and
+  it is the first thing that would genuinely use `ability_priors`, which 0047
+  built and could not find a home for.
+
 - ~~Compare agreement at matched ratings~~ — **done, 0044.** Flat everywhere:
   44.7% for M-B at 1500–1827 and 44.6% for M-C at 1000–1341. The 45.0% vs 43.9%
   that prompted this was a 300-replay sample; over the full corpora the two are
@@ -164,26 +210,6 @@ Next, in order:
   `effective_types` handles Roost and nothing else. That touches typing,
   grounding and STAB together. It is worth doing when something needs the
   machinery — Cinderace fills 2 of 2,400 slots — and not before.
-- **Score switch decisions on the field that is actually up.** *Proposed as the
-  next item — raised, not reordered. 0048 found it and deliberately left it.*
-
-  `_score_switch_on_matchup` calls `matchup()` with the `observation` in hand
-  and passes **neither `weather` nor `terrain`**, while the same file threads
-  `observation.terrain` into six other call sites. So every switch decision
-  this project makes is scored on a bare field: rain does not halve their Fire
-  move, Grassy Terrain does not raise our Grass one, sand does not raise their
-  Special Defence.
-
-  Data tracked and never read — the shape that has cost this project the most.
-
-  Why it may be worth more than 0048 was: Team Preview is **one** decision per
-  battle and measured neutral at 51.0%; switching is a decision made many times
-  per battle, and switching is one of only **two** changes that ever improved
-  the agent (+7.8). The lever 0048 says Team Preview is not.
-
-  One line to fix, then the same discipline: pre-register, verify the arms
-  differ, then read the number.
-
 - ~~Predict the field at Team Preview~~ — **done, 0048, and neutral.** The
   prior was built from replays end to end (twelve species; Indeedee-F 73%,
   Pelipper 68%, Rillaboom 59%) and wired into `matchup_table` as a weight

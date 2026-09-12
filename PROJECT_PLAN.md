@@ -1313,6 +1313,71 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### A fix that fires constantly and decides almost nothing (0049, 2026-09-12)
+
+The item 0048 left open. `_matchup_against_field` — what the switch scorer asks
+"would this Pokemon do better than the one out there" — had the `Observation`
+in hand and passed **neither `weather` nor `terrain`** to `matchup()`, while the
+same file threads `observation.weather` into eleven call sites and
+`observation.terrain` into six.
+
+| | | pre-registered |
+| --- | --- | --- |
+| decisions compared | 564 | |
+| taken with a field up | 212 — 38% | 30–70% ✓ |
+| **a switch score moved** | 103 — 18% | |
+| decisions that **differed** | **2 — 0.4%** | 5–25% ✗ |
+| differed on bare ground | 0 | must be 0 ✓ |
+| aware vs blind, 400 battles | 198 / 202 — 49.5% | |
+| 95% Wilson | [44.6%, 54.4%] | |
+
+**The prediction was wrong by an order of magnitude**, and recorded as a miss
+rather than softened. 18% is inside the 5–25% band, but 18% is the *score*
+moving and the prediction was about the *choice* changing — the wrong quantity
+was predicted, and the band being right for the other one is not a defence.
+
+**The second counter is what made the result readable.** It did not exist on
+the first run, and `2 of 564` on its own is indistinguishable from a fix that
+never fires — precisely the 0047 failure. Splitting it gave two facts instead
+of one riddle: where a field is up, a switch score moves **49%** of the time and
+the chosen action changes **1.9%** of the time.
+
+Two multipliers explain the gap, and the pre-registration had only the first:
+
+1. The score is a **difference** — `coming_in − staying`, both on the same
+   field — so a modifier that moves both alike cancels. Visible as 103 of 212.
+2. **Switching is rarely the marginal decision.** It competes against the
+   attack scores, and attacking usually wins by more than the field moves the
+   switch differential. That turns 103 into 2, and it was not predicted at all.
+
+So the A/B is **uninformative and known to be**: noise around a change that
+hardly ever fires, not evidence about its quality. Read alone, 49.5% would have
+looked like a fair test that came back flat.
+
+**It ships anyway, as pre-registered.** 0048 came back at 51.0% and stayed off
+because it was a guess; this comes back at 49.5% and ships because it is a fact,
+and `BACKLOG.md`'s two-instrument rule settles which is which. Writing that down
+in advance is what makes it a decision instead of a rationalisation.
+
+**What was bought is consistency, not win rate.** The agent could price an
+attack in rain correctly and, in the same turn, evaluate switching away from
+that rain as though it were dry. That matters most for what has not been built
+yet — the position evaluator, and any search that expands a switch and scores
+the resulting position. A wrong score at the root of a tree is not a 0.4%
+problem.
+
+**Third lap of one bug, and the trail is in the comments.**
+
+| where | what |
+| --- | --- |
+| `tracker._on_minor_fieldstart` | `terrain` declared, read into every Observation, **never assigned** |
+| `matchup()` | no `terrain` parameter to pass (0048) |
+| `estimate_damage` | static base power, so a threaded terrain could not apply (0048) |
+| `_matchup_against_field` | had the Observation, passed neither (0049) |
+
+Each fix made the next reachable and none made it happen. The tracker's comment
+has been describing the shape of a bug three layers above it the whole time.
+
 ### Predicting the field, and the two bugs the check found first (0048, 2026-09-12)
 
 0047's item, done. The question: at Team Preview their six are visible and none
