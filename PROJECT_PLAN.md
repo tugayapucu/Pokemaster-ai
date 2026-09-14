@@ -1313,6 +1313,27 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Empty move slots now come from usage (0058, 2026-09-14)
+
+0057 left moves alone: every empty slot still took the species' most common
+revealed moves. Filled from usage carry rates instead, in two forms, with the
+rule pushed first (`19eb4d8`):
+
+| arm | survival | weighted move distance |
+| --- | --- | --- |
+| most common moves (0057 pool) | 98.1% | 0.196 |
+| plain carry rate | 98.2% | 0.098 |
+| **corrected for what replays reveal** | 98.1% | **0.069** |
+
+**Adopted: corrected.** The old fill's real error was putting every set on the
+same second tier — Kingambit's Protect 98% against 69% real, Salamence's Draco
+Meteor 11% against 59% — larger than the 6–10 points it had been sized at.
+
+One prediction missed usefully: plain did not overshoot the most-revealed moves;
+both fills leave near-universal moves about 10 points low, because weighted
+draws without replacement do not include a move at its rate. Recorded as the
+remaining move defect. Pool team 0 scouted 38.3% → 44.2%, not a criterion.
+
 ### The pool now carries what sets actually carry (0057, 2026-09-14)
 
 The team pool is the measuring stick for every scout and every A/B, and it was
@@ -1744,7 +1765,7 @@ plays what, carries wide intervals, and describes a ladder four days old rated
 | | |
 | --- | --- |
 | M-C corpus | 3,750 replays, rated 1000-1437, median 1059 |
-| M-C team pool | 5,858 teams, re-harvested from 2,990 train replays (5,851 with usage-drawn items and spreads since 0057) |
+| M-C team pool | 5,858 teams, re-harvested from 2,990 train replays (5,852 with usage-drawn items and spreads since 0057, and moves since 0058) |
 | damage model | 95.5% inside the predicted range on the pinned build (0046) |
 | agreement | 44.6% on M-C, +21-25 points of lift over chance at every branching factor (0044, 0045) |
 | tests | 1,467 |

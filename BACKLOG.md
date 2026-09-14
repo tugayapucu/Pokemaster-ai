@@ -59,7 +59,7 @@ tests that *looked* like they covered the case.
 | | |
 | --- | --- |
 | M-C corpus | **3,750 replays**, rated 1000-1437, median 1059 |
-| M-C team pool | **5,851 teams** from 2,990 train replays; items, natures and spreads drawn from usage data since 0057 (2026-09-14) |
+| M-C team pool | **5,852 teams** from 2,990 train replays; items, natures and spreads drawn from usage data since 0057, empty move slots since 0058 (2026-09-14) |
 | M-B corpus | 1,769 replays, rated 1500-1827 (kept for comparison) |
 | damage model | **95.5%** inside the predicted range on the pinned build (0046) |
 | tools that work | `play` `position` `review` `scout` `collect` `regulations` |
@@ -172,16 +172,20 @@ Everything on the critical path runs. What is left is not capability, it is
      seed built a different pool each process (178 of 5,851 teams). Now
      identical under any hash seed, for both harvest methods, and guarded by a
      subprocess test. Scouting a saved pool file was always reproducible.
-   - **The harvested pool fills sets to four moves from the species' most
-     common moves** (`harvest.build_set`). Imputing the mode for every missing
-     slot inflates the mode. Sized against sets where all four moves were
-     revealed: about **6–10 points** on well-sampled moves (Indeedee-F's Trick
-     Room 95% in the pool against 86%, Kingambit's Protect 98% against 89%),
-     with larger gaps only on samples of four to six sets. *The first sizing
-     said 95% against 28% and was wrong* — it compared carry with use, and use
-     is only a floor. Fix candidate: draw fill moves in proportion to their
-     rate instead of always taking the top ones. Changes every pool-based
-     number, so measured before and after.
+   - ~~**The harvested pool fills sets to four moves from the species' most
+     common moves**~~ — **done, 0058, and it ships.** Empty slots are now drawn
+     from usage carry rates, discounted for what replays already reveal
+     ("corrected", beating "plain" 0.069 to 0.098). Weighted move distance to
+     the truth **0.196 → 0.069**, survival level at 98.1%. The error was bigger
+     than the 6–10 points first sized — that sizing used sets with all four
+     moves revealed, which are not a neutral sample: Kingambit's Protect was
+     98% in the pool against 69% in real use, and Salamence's Draco Meteor 11%
+     against 59%.
+   - **Near-universal moves land about 10 points low in the pool.** *Found in
+     0058.* Moves on 97–100% of real sets reach 85–93%: slots drawn in
+     proportion to weight do not include each move at its rate. Fix candidate:
+     draw by inclusion probability rather than weight. Small next to what 0058
+     removed; not before the re-harvest unless it turns out cheap.
    - **`field_conditions` values are always 0.** The tracker writes
      `field_conditions[x] = 0` when a condition starts and never increments it,
      so how long Trick Room, Gravity or a terrain has left is unknowable to the
