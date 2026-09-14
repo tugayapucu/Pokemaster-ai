@@ -16,14 +16,14 @@ look anything like even.
 
 Two sources here, both of which see a set whole rather than what fired:
 
-- **Smogon's chaos usage file** -- items, natures and Stat Point spreads. It
-  covers the species legal in the regulation it was built for, and lists each
-  Mega forme as its own entry, which is folded back into the species that holds
-  the stone.
-- **Open team sheets** (`|showteam|`) in our own replays -- items and natures,
-  no Stat Points. Few, but true, and they cover species newer than the usage
-  file: Baxcalibur holds its Mega Stone on 96% of sheets and on 2% of the old
-  pool's sets.
+- **Smogon's chaos usage file** -- items, natures, Stat Point spreads and moves.
+  It covers the species legal in the regulation it was built for, and lists
+  each Mega forme as its own entry, which is folded back into the species that
+  holds the stone.
+- **Open team sheets** (`|showteam|`) in our own replays -- items, natures and
+  moves, no Stat Points. Few, but true, and they cover species newer than the
+  usage file: Baxcalibur holds its Mega Stone on 96% of sheets and on 2% of the
+  old pool's sets.
 
 Both are measurements of unpublished or third-party data and are kept out of
 the repository; see `.gitignore`.
@@ -46,7 +46,7 @@ NO_ITEM = ""
 
 @dataclass
 class SetDistribution:
-    """How often a species carries each item, nature and spread."""
+    """How often a species carries each item, nature, spread and move."""
 
     species: str
     source: str
@@ -55,6 +55,12 @@ class SetDistribution:
     natures: Counter = field(default_factory=Counter)
     # (nature, (hp, atk, def, spa, spd, spe)) -> weight
     spreads: Counter = field(default_factory=Counter)
+    # move id -> weight of the sets carrying it. A set carries four, so these
+    # sum to about four times `sets`.
+    moves: Counter = field(default_factory=Counter)
+    # Weight of whole sets seen: the denominator for a move's carry rate. Not
+    # `samples` -- Smogon's move weights are rating-weighted, its raw count is not.
+    sets: float = 0.0
 
 
 def _own_key(dex, name: str) -> str:
@@ -92,6 +98,11 @@ def load_smogon_chaos(path: Path, dex) -> dict[str, SetDistribution]:
         dist.samples += entry.get("Raw count", 0)
         for item, weight in entry.get("Items", {}).items():
             dist.items[NO_ITEM if item == "nothing" else item] += weight
+            dist.sets += weight
+        for move, weight in entry.get("Moves", {}).items():
+            # "" is Smogon's count of empty move slots, not a move.
+            if move:
+                dist.moves[move] += weight
         for spread, weight in entry.get("Spreads", {}).items():
             nature, _, points = spread.partition(":")
             values = tuple(int(value) for value in points.split("/"))
@@ -108,9 +119,10 @@ def open_sheet_distributions(
     """Species id -> distribution, from `|showteam|` lines.
 
     The packed format is `name|species|item|ability|moves|nature|evs|...`, with
-    the species field empty when it matches the name and the Stat Points left
-    blank -- open sheets show everything but those. Species seen on fewer than
-    `min_sets` sheets are dropped: a distribution from three sets is a guess.
+    the species field empty when it matches the name, the moves comma-separated
+    and the Stat Points left blank -- open sheets show everything but those.
+    Species seen on fewer than `min_sets` sheets are dropped: a distribution
+    from three sets is a guess.
     """
     raw: dict[str, SetDistribution] = {}
     for replay in replays:
@@ -124,11 +136,14 @@ def open_sheet_distributions(
                 fields = packed.split("|")
                 if len(fields) < 6:
                     continue
-                name, species, item, _ability, _moves, nature = fields[:6]
+                name, species, item, _ability, moves, nature = fields[:6]
                 key = _own_key(dex, species or name)
                 dist = raw.setdefault(key, SetDistribution(species=key, source="open-sheets"))
                 dist.samples += 1
+                dist.sets += 1
                 dist.items[to_id(item)] += 1
+                for move in {to_id(move) for move in moves.split(",")} - {""}:
+                    dist.moves[move] += 1
                 if nature:
                     dist.natures[nature] += 1
     return {key: dist for key, dist in raw.items() if dist.samples >= min_sets}
@@ -187,3 +202,50 @@ def sample_spread(
     if dist.natures:
         return _weighted_choice(rng, dist.natures), None
     return None, None
+
+
+def carry_rates(dist: SetDistribution) -> dict[str, float]:
+    """Move id -> share of whole sets carrying it, capped at 1."""
+    if dist.sets <= 0:
+        return {}
+    return {move: min(1.0, weight / dist.sets) for move, weight in dist.moves.items()}
+
+
+def sample_moves(
+    dist: SetDistribution,
+    rng: random.Random,
+    *,
+    chosen,
+    slots: int,
+    reveal_rates: dict[str, float] | None = None,
+) -> list[str]:
+    """Up to `slots` moves not already `chosen`, drawn without replacement.
+
+    Plain (`reveal_rates` None): each move weighted by its carry rate.
+
+    Corrected: the slots being filled are the ones a replay did *not* reveal,
+    and a move revealed often is already in the partial set often, so weighting
+    by the whole carry rate would count it twice. Given a move was not revealed,
+    the chance it is carried anyway is (carry - reveal) / (1 - reveal), and that
+    is the weight. A move revealed at least as often as it is carried gets none.
+
+    Returns fewer than `slots` when the distribution runs out; the caller fills
+    the rest.
+    """
+    weights: dict[str, float] = {}
+    for move, rate in carry_rates(dist).items():
+        if move in chosen:
+            continue
+        if reveal_rates is not None:
+            seen = reveal_rates.get(move, 0.0)
+            rate = max(rate - seen, 0.0) / (1.0 - seen) if seen < 1.0 else 0.0
+        if rate > 0:
+            weights[move] = rate
+    picked: list[str] = []
+    while len(picked) < slots:
+        move = _weighted_choice(rng, weights)
+        if move is None:
+            break
+        picked.append(move)
+        del weights[move]
+    return picked

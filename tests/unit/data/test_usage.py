@@ -16,10 +16,12 @@ from champions_ai.data.harvest import SpeciesEvidence, build_set
 from champions_ai.data.replay import Replay, ReplayMetadata
 from champions_ai.data.usage import (
     SetDistribution,
+    carry_rates,
     combine,
     load_smogon_chaos,
     open_sheet_distributions,
     sample_item,
+    sample_moves,
     sample_spread,
 )
 from champions_ai.dex import BaseStats, Dex, ItemInfo, SpeciesInfo, TypeChart
@@ -65,11 +67,13 @@ CHAOS = {
             "Raw count": 100,
             "Items": {"lifeorb": 60, "nothing": 10},
             "Spreads": {"Adamant:32/32/0/0/2/0": 70},
+            "Moves": {"tackle": 70, "ember": 35, "": 1},
         },
         "Drake-Mega-X": {
             "Raw count": 50,
             "Items": {"drakitex": 50},
             "Spreads": {"Jolly:2/32/0/0/0/32": 50},
+            "Moves": {"tackle": 50, "roar": 25},
         },
         "Bloom-Mega": {
             "Raw count": 30,
@@ -110,9 +114,21 @@ def test_a_plain_json_file_loads_too(tmp_path):
     assert "drake" in load_smogon_chaos(path, DEX)
 
 
+def test_move_carry_rates_are_shares_of_whole_sets(chaos_path):
+    """Divided by the set weight, not the raw count, and the empty-slot key
+    Smogon writes as "" is not a move."""
+    drake = load_smogon_chaos(chaos_path, DEX)["drake"]
+    assert drake.sets == 120
+    rates = carry_rates(drake)
+    assert rates["tackle"] == 1.0
+    assert rates["ember"] == pytest.approx(35 / 120)
+    assert rates["roar"] == pytest.approx(25 / 120)
+    assert "" not in rates
+
+
 def _sheet_replay(n):
     line = (
-        "|showteam|p1|Drake||Life Orb|Run Away|Tackle|Adamant||M|||50|"
+        "|showteam|p1|Drake||Life Orb|Run Away|Tackle,Ember|Adamant||M|||50|"
         "]Bloom|Bloom-Eternal|White Herb|Run Away|Tackle|Timid||F|||50|"
     )
     return Replay(
@@ -124,10 +140,12 @@ def _sheet_replay(n):
     )
 
 
-def test_open_sheets_give_items_and_natures_but_no_spreads():
+def test_open_sheets_give_items_natures_and_moves_but_no_spreads():
     usage = open_sheet_distributions([_sheet_replay(n) for n in range(25)], DEX)
     assert usage["drake"].items == Counter({"lifeorb": 25})
     assert usage["drake"].natures == Counter({"Adamant": 25})
+    assert usage["drake"].moves == Counter({"tackle": 25, "ember": 25})
+    assert carry_rates(usage["drake"]) == {"tackle": 1.0, "ember": 1.0}
     assert not usage["drake"].spreads
     assert usage["bloometernal"].items == Counter({"whiteherb": 25})
 
@@ -183,6 +201,52 @@ def test_a_draw_is_reproducible_from_its_seed():
 def test_a_distribution_with_natures_only_leaves_the_points_to_the_caller():
     dist = SetDistribution("x", "open-sheets", natures=Counter({"Timid": 1}))
     assert sample_spread(dist, random.Random(0)) == ("Timid", None)
+
+
+def _moves(sets=4, **moves):
+    return SetDistribution("x", "test", moves=Counter(moves), sets=sets)
+
+
+def test_moves_are_drawn_in_proportion_to_their_carry_rate():
+    dist = _moves(sets=4, a=3, b=1)
+    draws = Counter(
+        sample_moves(dist, random.Random(s), chosen=(), slots=1)[0] for s in range(4000)
+    )
+    assert 0.70 < draws["a"] / 4000 < 0.80
+
+
+def test_a_move_already_chosen_is_never_drawn_and_none_repeats():
+    dist = _moves(sets=4, a=4, b=2, c=2, d=2)
+    for seed in range(50):
+        picked = sample_moves(dist, random.Random(seed), chosen=("a",), slots=3)
+        assert "a" not in picked and len(set(picked)) == len(picked) == 3
+
+
+def test_a_draw_stops_when_the_distribution_runs_out():
+    assert sample_moves(_moves(sets=4, a=4, b=1), random.Random(0), chosen=("a",), slots=3) == ["b"]
+
+
+def test_the_corrected_weight_removes_what_the_reveal_already_covers():
+    """A move revealed as often as it is carried is always in the partial set
+    when carried, so it is never the answer for a slot the replay left empty."""
+    dist = _moves(sets=10, protect=5, tackle=5)
+    picked = {
+        sample_moves(dist, random.Random(s), chosen=(), slots=1,
+                     reveal_rates={"protect": 0.5})[0]
+        for s in range(50)
+    }
+    assert picked == {"tackle"}
+
+
+def test_the_corrected_weight_is_carried_given_not_revealed():
+    dist = _moves(sets=10, protect=8, tackle=5)
+    # protect: (0.8 - 0.6) / (1 - 0.6) = 0.5, the same as tackle's 0.5
+    draws = Counter(
+        sample_moves(dist, random.Random(s), chosen=(), slots=1,
+                     reveal_rates={"protect": 0.6})[0]
+        for s in range(4000)
+    )
+    assert 0.45 < draws["protect"] / 4000 < 0.55
 
 
 def _evidence():
