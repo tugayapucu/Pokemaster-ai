@@ -294,3 +294,77 @@ def test_build_set_with_a_nature_only_distribution_keeps_the_even_points():
 def test_a_species_without_usage_falls_back_to_the_old_behaviour():
     text = build_set("drake", _evidence(), random.Random(0), usage={"other": _dist(lifeorb=1)})
     assert "@ sitrusberry" in text and "Serious Nature" in text
+
+
+def _set_moves(text):
+    return {line[2:] for line in text.splitlines() if line.startswith("- ")}
+
+
+def _move_evidence(observed_sets, moves):
+    return {
+        "drake": SpeciesEvidence(
+            moves=Counter(moves), abilities=Counter({"runaway": 1}),
+            observed_sets=list(observed_sets),
+        )
+    }
+
+
+MOVE_USAGE = {
+    "drake": SetDistribution(
+        "drake", "smogon", sets=2,
+        moves=Counter({"tackle": 2, "ember": 1, "roar": 1, "leer": 1, "bite": 1}),
+    )
+}
+
+
+def test_without_a_move_fill_usage_leaves_the_moves_alone():
+    """0057's pool must rebuild byte for byte: the default draws nothing extra."""
+    evidence = _move_evidence([("tackle",)], {"tackle": 3, "growl": 2})
+    plain = build_set("drake", evidence, random.Random(0))
+    with_usage = build_set("drake", evidence, random.Random(0), usage=MOVE_USAGE)
+    assert _set_moves(plain) == _set_moves(with_usage) == {"tackle", "growl"}
+
+
+def test_a_plain_fill_draws_the_empty_slots_from_usage():
+    evidence = _move_evidence([("tackle",)], {"tackle": 3, "growl": 2})
+    text = build_set("drake", evidence, random.Random(0), usage=MOVE_USAGE, move_fill="plain")
+    moves = _set_moves(text)
+    assert "tackle" in moves and "growl" not in moves and len(moves) == 4
+
+
+def test_the_corrected_fill_lands_on_the_carry_rate_where_plain_overshoots():
+    """Ember is carried by half of real sets and revealed in half of replays.
+
+    Plain fill adds it again to sets that did not reveal it and ends up on
+    about 88% of sets; corrected fill ends up on about 50%, the truth.
+    """
+    evidence = _move_evidence([("tackle", "ember"), ("tackle",)], {"tackle": 2, "ember": 1})
+    usage = {
+        "drake": SetDistribution(
+            "drake", "smogon", sets=2,
+            moves=Counter({"tackle": 2, "ember": 1, "roar": 1, "leer": 1, "bite": 1}),
+        )
+    }
+
+    def ember_share(fill):
+        sets = [
+            build_set("drake", evidence, random.Random(s), usage=usage, move_fill=fill)
+            for s in range(400)
+        ]
+        return sum("ember" in _set_moves(t) for t in sets) / len(sets)
+
+    assert ember_share("plain") > 0.80
+    assert 0.40 < ember_share("corrected") < 0.60
+
+
+def test_what_the_draw_cannot_fill_falls_back_to_common_moves():
+    evidence = _move_evidence([("tackle",)], {"tackle": 3, "growl": 2})
+    usage = {"drake": SetDistribution("drake", "smogon", sets=1,
+                                      moves=Counter({"tackle": 1, "ember": 1}))}
+    text = build_set("drake", evidence, random.Random(0), usage=usage, move_fill="plain")
+    assert _set_moves(text) == {"tackle", "ember", "growl"}
+
+
+def test_an_unknown_move_fill_is_refused():
+    with pytest.raises(ValueError):
+        build_set("drake", _evidence(), random.Random(0), move_fill="mode")

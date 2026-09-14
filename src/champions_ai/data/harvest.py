@@ -77,6 +77,9 @@ TEAM_SIZE = 6
 # under test, and in nothing else.
 POINTS_PER_STAT = 11
 NEUTRAL_NATURE = "Serious"
+# How empty move slots are filled: None is the species' most common moves;
+# "plain" and "corrected" draw from a usage source (`usage.sample_moves`).
+MOVE_FILLS = (None, "plain", "corrected")
 
 
 @dataclass
@@ -240,6 +243,7 @@ def build_set(
     fallback_abilities: dict[str, str] | None = None,
     taken_items: set[str] | None = None,
     usage: dict | None = None,
+    move_fill: str | None = None,
 ) -> str | None:
     """One Pokemon in Showdown's export format, or None if too little is known.
 
@@ -248,15 +252,41 @@ def build_set(
     a real one -- it is a Pokemon that can only Struggle, which would quietly
     weaken every team carrying it.
     """
+    if move_fill not in MOVE_FILLS:
+        raise ValueError(f"move_fill must be one of {MOVE_FILLS}, not {move_fill!r}")
     record = evidence.get(species)
     if record is None or not record.moves:
         return None
+    distribution = usage.get(species) if usage else None
 
     # A real partial set first, so two copies of the same species on different
     # teams differ the way real ones do; then the species' common moves to fill.
     moves: list[str] = []
     if record.observed_sets:
         moves.extend(rng.choice(record.observed_sets))
+    # Filling every empty slot with the species' most common moves inflates
+    # them. With `move_fill` and a source that saw whole sets, the empty slots
+    # are drawn from its carry rates instead -- "corrected" discounting what a
+    # replay already reveals (`usage.sample_moves`). Whatever the draw cannot
+    # fill falls through to the common moves below.
+    if move_fill is not None and distribution is not None and distribution.moves:
+        from champions_ai.data.usage import sample_moves
+
+        reveal_rates = None
+        if move_fill == "corrected" and record.observed_sets:
+            seen = Counter(move for one in record.observed_sets for move in set(one))
+            reveal_rates = {
+                move: count / len(record.observed_sets) for move, count in seen.items()
+            }
+        moves.extend(
+            sample_moves(
+                distribution,
+                rng,
+                chosen=moves,
+                slots=max(0, MOVES_PER_POKEMON - len(moves)),
+                reveal_rates=reveal_rates,
+            )
+        )
     for move, _ in record.moves.most_common():
         if len(moves) >= MOVES_PER_POKEMON:
             break
@@ -296,7 +326,6 @@ def build_set(
     # saw whole sets is given (`data.usage`), the item is drawn from it instead,
     # in proportion to use -- drawn, not the mode, because imputing the mode for
     # every set is what inflated the pool's moves.
-    distribution = usage.get(species) if usage else None
     if distribution is not None:
         from champions_ai.data.usage import sample_item
 
@@ -356,6 +385,7 @@ def harvest_teams(
     evidence: dict[str, SpeciesEvidence] | None = None,
     fallback_abilities: dict[str, str] | None = None,
     usage: dict | None = None,
+    move_fill: str | None = None,
 ) -> list[str]:
     """Showdown export text for every team the corpus can fully assemble.
 
@@ -388,6 +418,7 @@ def harvest_teams(
                     fallback_abilities=fallback_abilities,
                     taken_items=taken_items,
                     usage=usage,
+                    move_fill=move_fill,
                 )
                 for s in species
             ]
@@ -411,6 +442,7 @@ def harvested_pool(
     limit: int | None = None,
     cache: Path | None = None,
     usage: dict | None = None,
+    move_fill: str | None = None,
 ):
     """A `TeamPool` of real teams, with the engine as the only gate.
 
@@ -443,7 +475,9 @@ def harvested_pool(
             if text.strip()
         ]
     else:
-        texts = harvest_teams(replays, dex=dex, seed=seed, usage=usage)
+        texts = harvest_teams(
+            replays, dex=dex, seed=seed, usage=usage, move_fill=move_fill
+        )
 
     teams: list[BattleTeam] = []
     kept_texts: list[str] = []
