@@ -63,9 +63,30 @@ The reference team (pool team 0, built by the old method) scouted at seed 0:
 
 The `--write` run rebuilt both pools from scratch and reproduced every assembly,
 coverage and distance figure exactly, yet the new-pool scout came out two wins
-lower on the same seed. **A scout is not bit-reproducible across processes**
-on the new pool; the cause is not yet known. Two wins in 240 does not move the
-reading, but a paired scout that differs by two wins should not be over-read.
+lower on the same seed.
+
+**Traced and fixed after this write-up was first committed (`3bfd3b8`).** The
+battles were reproducible — 60 on a fixed pool file repeat exactly across
+processes. The harvest was not: `gather_evidence` counted each battle's moves
+from a set, so ties in the four-move fill followed Python's per-process hash
+seed, and a second process built a different pool from the same seed (178 of
+5,851 teams differed). The old method had the same defect. Both now build
+byte-identical pools under any hash seed, and the pool was re-written with the
+fixed harvest — see *Re-written with the fixed harvest* below.
+
+### Re-written with the fixed harvest
+
+After `3bfd3b8`, `run.py --write` was run once more and the pool re-written, so
+the installed pool is the one the committed code builds under any hash seed:
+
+| | result |
+| --- | --- |
+| assembled / validated, both methods | 5,964 / 5,858 old, 5,964 / 5,851 new — unchanged |
+| coverage, weighted item distance | 76.0 / 19.9 / 4.1%, 0.569 → 0.083 — unchanged |
+| reference team vs old pool / new pool | 127 / 240, **81 / 240** |
+| adoption rule | met; pool written |
+
+Every figure above this section stands.
 
 As a consistency check on the written pool: 8,437 of its 35,106 Pokemon still
 carry even 11s, which is exactly the open-sheet plus fallback count — the only

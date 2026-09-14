@@ -163,11 +163,15 @@ Everything on the critical path runs. What is left is not capability, it is
      **52.9% → 33.8%** — one old-built team against properly-built opponents, so
      **every scout before 0057 is likely flattering**. Paired A/Bs stand as
      comparisons; their levels were on the old pool.
-   - **A scout is not bit-reproducible across processes.** *Found in 0057.* The
-     same team, pool and seed scouted 81/240 and then 79/240 in a second
-     process, while the old pool gave 127/240 both times. Small, cause unknown;
-     it matters because paired re-scouting is how structural questions about a
-     team are answered.
+   - ~~**A scout is not bit-reproducible across processes**~~ — **wrong
+     diagnosis, and fixed (`3bfd3b8`).** *Found in 0057*: pool team 0 scouted
+     81/240, then 79/240 in a second process. Battles were never the problem —
+     60 battles on a fixed pool file repeat exactly across processes. The
+     **harvest** was: `gather_evidence` counted moves from a set, so ties in
+     the four-move fill followed Python's per-process hash seed, and the same
+     seed built a different pool each process (178 of 5,851 teams). Now
+     identical under any hash seed, for both harvest methods, and guarded by a
+     subprocess test. Scouting a saved pool file was always reproducible.
    - **The harvested pool fills sets to four moves from the species' most
      common moves** (`harvest.build_set`). Imputing the mode for every missing
      slot inflates the mode. Sized against sets where all four moves were
