@@ -59,7 +59,7 @@ tests that *looked* like they covered the case.
 | | |
 | --- | --- |
 | M-C corpus | **3,750 replays**, rated 1000-1437, median 1059 |
-| M-C team pool | **5,852 teams** from 2,990 train replays; items, natures and spreads drawn from usage data since 0057, empty move slots since 0058 (2026-09-14) |
+| M-C team pool | **5,852 teams** from 2,990 train replays; items, natures and spreads drawn from usage data since 0057, empty move slots since 0058, picked by inclusion since 0059 (2026-09-14) |
 | M-B corpus | 1,769 replays, rated 1500-1827 (kept for comparison) |
 | damage model | **95.5%** inside the predicted range on the pinned build (0046) |
 | tools that work | `play` `position` `review` `scout` `collect` `regulations` |
@@ -181,11 +181,13 @@ Everything on the critical path runs. What is left is not capability, it is
      moves revealed, which are not a neutral sample: Kingambit's Protect was
      98% in the pool against 69% in real use, and Salamence's Draco Meteor 11%
      against 59%.
-   - **Near-universal moves land about 10 points low in the pool.** *Found in
-     0058.* Moves on 97–100% of real sets reach 85–93%: slots drawn in
-     proportion to weight do not include each move at its rate. Fix candidate:
-     draw by inclusion probability rather than weight. Small next to what 0058
-     removed; not before the re-harvest unless it turns out cheap.
+   - ~~**Near-universal moves land about 10 points low in the pool**~~ —
+     **done, 0059, and it ships.** Slots are now picked by conditional Poisson
+     sampling (`move_fill="inclusion"`), so a move's chance follows its odds and
+     a move on every real set is always kept. Moves on 95%+ of real sets:
+     **89.9% → 98.6%** of pool sets; weighted move distance 0.069 → 0.053;
+     mid-rate moves up 1.3 points, the feared cost. **The ~20 September
+     re-harvest uses `usage` with `move_fill="inclusion"`.**
    - **`field_conditions` values are always 0.** The tracker writes
      `field_conditions[x] = 0` when a condition starts and never increments it,
      so how long Trick Room, Gravity or a terrain has left is unknowable to the
@@ -195,8 +197,9 @@ Everything on the critical path runs. What is left is not capability, it is
    1341 → 1437 in one day while the median barely moved, so the top is forming
    first. Check the distribution on the day rather than assuming it reached
    1500. The Cloudflare retry fix means a long run survives a blip now.
-   **Re-harvest with usage data** (`experiments/0057-pool-from-usage/run.py
-   --write`): the open team sheets are re-read from the new corpus, and
+   **Re-harvest with usage data and the inclusion move fill**
+   (`experiments/0059-universal-moves/run.py --write`, which builds with
+   `move_fill="inclusion"`): the open team sheets are re-read from the new corpus, and
    Smogon's September M-C file will not exist until October, so M-B's August
    file stays the Smogon source.
 4. **Practise with `position`** until the command language is muscle memory. It

@@ -1313,6 +1313,24 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Near-universal moves are back on their sets (0059, 2026-09-14)
+
+0058's one recorded defect: moves on nearly every real set sat about 10 points
+low, because one weighted draw per slot does not include a move at its rate.
+Slots are now picked by conditional Poisson sampling — a move's chance follows
+its odds, so a move at 100% is always kept. Rule pushed first (`6dac88e`):
+
+| | 0058 pool | inclusion |
+| --- | --- | --- |
+| moves on 95%+ of real sets | 89.9% | **98.6%** |
+| weighted move distance | 0.069 | **0.053** |
+| survival | 98.1% | 98.1% |
+
+**Adopted.** The feared cost — mid-rate moves pushed up — was 1.3 points. Across
+0057–0059 the pool's items went 0.569 → 0.083 from the truth and its moves
+0.196 → 0.053, and no named pool defect is left; its limits now are its sources
+(Smogon's file is Reg M-B, open sheets cover 21 species).
+
 ### Empty move slots now come from usage (0058, 2026-09-14)
 
 0057 left moves alone: every empty slot still took the species' most common
@@ -1765,7 +1783,7 @@ plays what, carries wide intervals, and describes a ladder four days old rated
 | | |
 | --- | --- |
 | M-C corpus | 3,750 replays, rated 1000-1437, median 1059 |
-| M-C team pool | 5,858 teams, re-harvested from 2,990 train replays (5,852 with usage-drawn items and spreads since 0057, and moves since 0058) |
+| M-C team pool | 5,858 teams, re-harvested from 2,990 train replays (5,852 with usage-drawn items and spreads since 0057, moves since 0058, picked by inclusion since 0059) |
 | damage model | 95.5% inside the predicted range on the pinned build (0046) |
 | agreement | 44.6% on M-C, +21-25 points of lift over chance at every branching factor (0044, 0045) |
 | tests | 1,467 |
