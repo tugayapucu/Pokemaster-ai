@@ -197,7 +197,11 @@ def gather_evidence(replays: list[Replay]) -> dict[str, SpeciesEvidence]:
         for (_, species), moves in per_side.items():
             record = evidence[species]
             record.observed_sets.append(tuple(sorted(moves)))
-            record.moves.update(moves)
+            # Sorted, not the set itself: counts are broken by first insertion
+            # when tied, and a set's order follows Python's per-process string
+            # hashing -- so the same seed built a different pool in a new
+            # process (0057).
+            record.moves.update(sorted(moves))
 
     return dict(evidence)
 

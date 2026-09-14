@@ -247,6 +247,42 @@ def test_harvesting_is_reproducible(seed):
     assert first == second
 
 
+_EVIDENCE_ORDER_SCRIPT = """
+import json
+from champions_ai.data.harvest import gather_evidence
+moves = ["Move " + chr(ord("A") + i) for i in range(12)]
+lines = ["|poke|p1|Drake, L50, M|", "|switch|p1a: Drake|Drake, L50, M|100/100"]
+for turn, move in enumerate(moves, start=1):
+    lines += ["|turn|" + str(turn), "|move|p1a: Drake|" + move + "|"]
+class R:
+    log = tuple(lines)
+print(json.dumps(list(gather_evidence([R()])["drake"].moves)))
+"""
+
+
+def test_harvesting_does_not_depend_on_the_hash_seed():
+    """The test above runs twice in one process, so it cannot see this.
+
+    A battle's moves were gathered into a set and counted from it, so the
+    order of tied counts -- which fills a set to four moves -- followed Python's
+    per-process string hashing. The same seed built a different pool in a new
+    process: 178 of 5,851 teams differed (found in 0057).
+    """
+    import os
+    import subprocess
+    import sys
+
+    orders = set()
+    for hash_seed in ("1", "2", "3", "4"):
+        env = {**os.environ, "PYTHONHASHSEED": hash_seed}
+        out = subprocess.run(
+            [sys.executable, "-c", _EVIDENCE_ORDER_SCRIPT],
+            env=env, capture_output=True, text=True, check=True,
+        )
+        orders.add(out.stdout.strip())
+    assert len(orders) == 1, f"move order changed with the hash seed: {orders}"
+
+
 class TestAbilityRevealedAsAnEffectsSource:
     """An ability that names itself as the *source* of an effect.
 
