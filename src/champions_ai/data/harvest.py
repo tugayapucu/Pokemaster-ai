@@ -78,8 +78,10 @@ TEAM_SIZE = 6
 POINTS_PER_STAT = 11
 NEUTRAL_NATURE = "Serious"
 # How empty move slots are filled: None is the species' most common moves;
-# "plain" and "corrected" draw from a usage source (`usage.sample_moves`).
-MOVE_FILLS = (None, "plain", "corrected")
+# "plain" and "corrected" draw from a usage source (`usage.sample_moves`), and
+# "inclusion" is "corrected" with slots picked so near-universal moves are not
+# left short (0058).
+MOVE_FILLS = (None, "plain", "corrected", "inclusion")
 
 
 @dataclass
@@ -273,7 +275,7 @@ def build_set(
         from champions_ai.data.usage import sample_moves
 
         reveal_rates = None
-        if move_fill == "corrected" and record.observed_sets:
+        if move_fill in ("corrected", "inclusion") and record.observed_sets:
             seen = Counter(move for one in record.observed_sets for move in set(one))
             reveal_rates = {
                 move: count / len(record.observed_sets) for move, count in seen.items()
@@ -285,6 +287,7 @@ def build_set(
                 chosen=moves,
                 slots=max(0, MOVES_PER_POKEMON - len(moves)),
                 reveal_rates=reveal_rates,
+                by_inclusion=move_fill == "inclusion",
             )
         )
     for move, _ in record.moves.most_common():

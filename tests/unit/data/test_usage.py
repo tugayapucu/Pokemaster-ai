@@ -427,6 +427,31 @@ def test_what_the_draw_cannot_fill_falls_back_to_common_moves():
     assert _set_moves(text) == {"tackle", "ember", "growl"}
 
 
+def test_the_inclusion_fill_keeps_a_universal_move_that_corrected_drops():
+    """Three moves revealed, one slot left, and a move on every real set.
+
+    Corrected draws that slot by weight, 1.0 against the others' 0.5 + 0.5,
+    and keeps the universal move about half the time; inclusion always does.
+    """
+    evidence = _move_evidence([("tackle", "ember", "roar")], {"tackle": 1, "ember": 1, "roar": 1})
+    usage = {
+        "drake": SetDistribution(
+            "drake", "smogon", sets=2,
+            moves=Counter({"tackle": 2, "ember": 2, "roar": 2, "fakeout": 2, "leer": 1, "bite": 1}),
+        )
+    }
+
+    def fakeout_share(fill):
+        sets = [
+            build_set("drake", evidence, random.Random(s), usage=usage, move_fill=fill)
+            for s in range(400)
+        ]
+        return sum("fakeout" in _set_moves(t) for t in sets) / len(sets)
+
+    assert 0.40 < fakeout_share("corrected") < 0.60
+    assert fakeout_share("inclusion") == 1.0
+
+
 def test_an_unknown_move_fill_is_refused():
     with pytest.raises(ValueError):
         build_set("drake", _evidence(), random.Random(0), move_fill="mode")
