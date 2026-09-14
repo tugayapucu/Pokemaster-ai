@@ -235,6 +235,7 @@ def build_set(
     dex=None,
     fallback_abilities: dict[str, str] | None = None,
     taken_items: set[str] | None = None,
+    usage: dict | None = None,
 ) -> str | None:
     """One Pokemon in Showdown's export format, or None if too little is known.
 
@@ -285,16 +286,46 @@ def build_set(
     # answering "Sitrus Berry" independently is how a team ends up with three
     # of them, so the choice is made against what the rest of the team already
     # holds.
-    item = next(
-        (
-            candidate
-            for candidate, _ in record.items.most_common()
-            if taken_items is None or candidate not in taken_items
-        ),
-        None,
-    )
+    # Items the replays revealed are the items that announce themselves: a seed
+    # activating, a berry eaten. A Life Orb never does, so the most common
+    # *revealed* item systematically misses the silent ones. When a source that
+    # saw whole sets is given (`data.usage`), the item is drawn from it instead,
+    # in proportion to use -- drawn, not the mode, because imputing the mode for
+    # every set is what inflated the pool's moves.
+    distribution = usage.get(species) if usage else None
+    if distribution is not None:
+        from champions_ai.data.usage import sample_item
+
+        item = sample_item(
+            distribution,
+            rng,
+            taken=taken_items,
+            legal=set(dex.items) if dex is not None else None,
+        )
+    else:
+        item = next(
+            (
+                candidate
+                for candidate, _ in record.items.most_common()
+                if taken_items is None or candidate not in taken_items
+            ),
+            None,
+        )
     if item and taken_items is not None:
         taken_items.add(item)
+
+    # An even 11 in every stat and a neutral nature describe almost no real set:
+    # 0.2% of the thirty most-used Reg M-B species' spreads look even. With
+    # usage, the nature and Stat Points are drawn from real sets; an open sheet
+    # gives the nature only, and the points stay even.
+    points: tuple[int, ...] = (POINTS_PER_STAT,) * 6
+    nature = NEUTRAL_NATURE
+    if distribution is not None:
+        from champions_ai.data.usage import sample_spread
+
+        drawn_nature, drawn_points = sample_spread(distribution, rng)
+        nature = drawn_nature or nature
+        points = drawn_points or points
 
     head = species if not item else f"{species} @ {item}"
     lines = [head]
@@ -304,10 +335,11 @@ def build_set(
     lines.append(
         "EVs: "
         + " / ".join(
-            f"{POINTS_PER_STAT} {stat}" for stat in ("HP", "Atk", "Def", "SpA", "SpD", "Spe")
+            f"{value} {stat}"
+            for value, stat in zip(points, ("HP", "Atk", "Def", "SpA", "SpD", "Spe"))
         )
     )
-    lines.append(f"{NEUTRAL_NATURE} Nature")
+    lines.append(f"{nature} Nature")
     lines.extend(f"- {move}" for move in moves)
     return "\n".join(lines)
 
@@ -319,6 +351,7 @@ def harvest_teams(
     seed: int = 0,
     evidence: dict[str, SpeciesEvidence] | None = None,
     fallback_abilities: dict[str, str] | None = None,
+    usage: dict | None = None,
 ) -> list[str]:
     """Showdown export text for every team the corpus can fully assemble.
 
@@ -350,6 +383,7 @@ def harvest_teams(
                     dex=dex,
                     fallback_abilities=fallback_abilities,
                     taken_items=taken_items,
+                    usage=usage,
                 )
                 for s in species
             ]
@@ -372,6 +406,7 @@ def harvested_pool(
     seed: int = 0,
     limit: int | None = None,
     cache: Path | None = None,
+    usage: dict | None = None,
 ):
     """A `TeamPool` of real teams, with the engine as the only gate.
 
@@ -404,7 +439,7 @@ def harvested_pool(
             if text.strip()
         ]
     else:
-        texts = harvest_teams(replays, dex=dex, seed=seed)
+        texts = harvest_teams(replays, dex=dex, seed=seed, usage=usage)
 
     teams: list[BattleTeam] = []
     kept_texts: list[str] = []

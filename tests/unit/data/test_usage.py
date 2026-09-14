@@ -1,0 +1,232 @@
+"""Set distributions from sources that see whole sets, and drawing from them.
+
+The pool's items came from what replays reveal, so silent items went missing.
+These tests pin the two replacement sources -- Smogon's chaos file and open team
+sheets -- and the draws: proportional, seeded, and respectful of Item Clause.
+"""
+
+import gzip
+import json
+import random
+from collections import Counter
+
+import pytest
+
+from champions_ai.data.harvest import SpeciesEvidence, build_set
+from champions_ai.data.replay import Replay, ReplayMetadata
+from champions_ai.data.usage import (
+    SetDistribution,
+    combine,
+    load_smogon_chaos,
+    open_sheet_distributions,
+    sample_item,
+    sample_spread,
+)
+from champions_ai.dex import BaseStats, Dex, ItemInfo, SpeciesInfo, TypeChart
+
+STATS = BaseStats(hp=80, attack=80, defense=80, special_attack=80, special_defense=80, speed=80)
+
+
+def _species(species_id, name, base=None):
+    return SpeciesInfo(
+        species_id=species_id, name=name, types=("Normal",), base_stats=STATS,
+        abilities=("Run Away",), base_species=base or name,
+    )
+
+
+DEX = Dex(
+    species={
+        s.species_id: s
+        for s in (
+            _species("drake", "Drake"),
+            _species("drakemegax", "Drake-Mega-X", base="Drake"),
+            _species("bloom", "Bloom"),
+            _species("bloometernal", "Bloom-Eternal", base="Bloom"),
+            _species("bloommega", "Bloom-Mega", base="Bloom"),
+        )
+    },
+    moves={},
+    types=("Normal",),
+    type_chart=TypeChart(multipliers={"Normal": {"Normal": 1.0}}),
+    items={
+        "drakitex": ItemInfo(item_id="drakitex", name="Drakite X",
+                             mega_stone="Drake", mega_forme="Drake-Mega-X"),
+        "bloomite": ItemInfo(item_id="bloomite", name="Bloomite",
+                             mega_stone="Bloom-Eternal", mega_forme="Bloom-Mega"),
+        "lifeorb": ItemInfo(item_id="lifeorb", name="Life Orb"),
+        "whiteherb": ItemInfo(item_id="whiteherb", name="White Herb"),
+    },
+)
+
+CHAOS = {
+    "info": {"metagame": "test", "cutoff": 1500},
+    "data": {
+        "Drake": {
+            "Raw count": 100,
+            "Items": {"lifeorb": 60, "nothing": 10},
+            "Spreads": {"Adamant:32/32/0/0/2/0": 70},
+        },
+        "Drake-Mega-X": {
+            "Raw count": 50,
+            "Items": {"drakitex": 50},
+            "Spreads": {"Jolly:2/32/0/0/0/32": 50},
+        },
+        "Bloom-Mega": {
+            "Raw count": 30,
+            "Items": {"bloomite": 30},
+            "Spreads": {"Modest:32/0/0/32/2/0": 30},
+        },
+    },
+}
+
+
+@pytest.fixture
+def chaos_path(tmp_path):
+    path = tmp_path / "chaos.json.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump(CHAOS, handle)
+    return path
+
+
+def test_a_mega_entry_is_folded_into_the_species_that_holds_its_stone(chaos_path):
+    usage = load_smogon_chaos(chaos_path, DEX)
+    drake = usage["drake"]
+    assert drake.samples == 150
+    assert drake.items == Counter({"lifeorb": 60, "drakitex": 50, "": 10})
+    assert drake.natures == Counter({"Adamant": 70, "Jolly": 50})
+    assert drake.spreads[("Jolly", (2, 32, 0, 0, 0, 32))] == 50
+    assert "drakemegax" not in usage
+
+
+def test_the_stone_decides_the_holder_not_the_base_species(chaos_path):
+    """A Mega that evolves from a forme is filed under that forme."""
+    usage = load_smogon_chaos(chaos_path, DEX)
+    assert "bloometernal" in usage and "bloom" not in usage
+
+
+def test_a_plain_json_file_loads_too(tmp_path):
+    path = tmp_path / "chaos.json"
+    path.write_text(json.dumps(CHAOS), encoding="utf-8")
+    assert "drake" in load_smogon_chaos(path, DEX)
+
+
+def _sheet_replay(n):
+    line = (
+        "|showteam|p1|Drake||Life Orb|Run Away|Tackle|Adamant||M|||50|"
+        "]Bloom|Bloom-Eternal|White Herb|Run Away|Tackle|Timid||F|||50|"
+    )
+    return Replay(
+        metadata=ReplayMetadata(
+            replay_id=str(n), format_id="gen9championsvgc2026regmc",
+            players=("a", "b"), ratings=(1200, 1200), upload_time=0, rated=True,
+        ),
+        log=(line,),
+    )
+
+
+def test_open_sheets_give_items_and_natures_but_no_spreads():
+    usage = open_sheet_distributions([_sheet_replay(n) for n in range(25)], DEX)
+    assert usage["drake"].items == Counter({"lifeorb": 25})
+    assert usage["drake"].natures == Counter({"Adamant": 25})
+    assert not usage["drake"].spreads
+    assert usage["bloometernal"].items == Counter({"whiteherb": 25})
+
+
+def test_a_species_on_too_few_sheets_is_dropped():
+    assert open_sheet_distributions([_sheet_replay(n) for n in range(5)], DEX) == {}
+
+
+def test_the_first_source_wins_and_later_ones_fill_gaps():
+    first = {"drake": SetDistribution("drake", "smogon")}
+    second = {"drake": SetDistribution("drake", "open-sheets"),
+              "bloom": SetDistribution("bloom", "open-sheets")}
+    combined = combine(first, second)
+    assert combined["drake"].source == "smogon"
+    assert combined["bloom"].source == "open-sheets"
+
+
+def _dist(**items):
+    return SetDistribution("x", "test", items=Counter(items))
+
+
+def test_items_are_drawn_in_proportion_to_use():
+    dist = _dist(lifeorb=3, whiteherb=1)
+    rng = random.Random(0)
+    draws = Counter(sample_item(dist, rng) for _ in range(4000))
+    assert 0.70 < draws["lifeorb"] / 4000 < 0.80
+
+
+def test_an_item_already_on_the_team_is_never_drawn():
+    dist = _dist(lifeorb=99, whiteherb=1)
+    assert {sample_item(dist, random.Random(s), taken={"lifeorb"}) for s in range(50)} == {
+        "whiteherb"
+    }
+
+
+def test_an_item_the_regulation_lacks_is_never_drawn():
+    dist = _dist(lifeorb=1, oldamber=99)
+    assert {sample_item(dist, random.Random(s), legal={"lifeorb"}) for s in range(50)} == {
+        "lifeorb"
+    }
+
+
+def test_holding_nothing_is_drawn_as_none():
+    assert sample_item(_dist(**{"": 1}), random.Random(0)) is None
+
+
+def test_a_draw_is_reproducible_from_its_seed():
+    dist = _dist(lifeorb=1, whiteherb=1, sitrusberry=1)
+    first = [sample_item(dist, random.Random(7)) for _ in range(5)]
+    assert first == [sample_item(dist, random.Random(7)) for _ in range(5)]
+
+
+def test_a_distribution_with_natures_only_leaves_the_points_to_the_caller():
+    dist = SetDistribution("x", "open-sheets", natures=Counter({"Timid": 1}))
+    assert sample_spread(dist, random.Random(0)) == ("Timid", None)
+
+
+def _evidence():
+    return {
+        "drake": SpeciesEvidence(
+            moves=Counter({"tackle": 3}),
+            abilities=Counter({"runaway": 3}),
+            items=Counter({"sitrusberry": 3}),
+            observed_sets=[("tackle",)],
+        )
+    }
+
+
+def test_build_set_without_usage_is_unchanged():
+    text = build_set("drake", _evidence(), random.Random(0))
+    assert "@ sitrusberry" in text
+    assert "EVs: 11 HP / 11 Atk / 11 Def / 11 SpA / 11 SpD / 11 Spe" in text
+    assert "Serious Nature" in text
+
+
+def test_build_set_with_usage_draws_the_item_nature_and_spread():
+    usage = {
+        "drake": SetDistribution(
+            "drake", "smogon",
+            items=Counter({"lifeorb": 1}),
+            natures=Counter({"Jolly": 1}),
+            spreads=Counter({("Jolly", (2, 32, 0, 0, 0, 32)): 1}),
+        )
+    }
+    text = build_set("drake", _evidence(), random.Random(0), usage=usage)
+    assert "@ lifeorb" in text
+    assert "EVs: 2 HP / 32 Atk / 0 Def / 0 SpA / 0 SpD / 32 Spe" in text
+    assert "Jolly Nature" in text
+
+
+def test_build_set_with_a_nature_only_distribution_keeps_the_even_points():
+    usage = {"drake": SetDistribution("drake", "open-sheets",
+                                      items=Counter({"lifeorb": 1}),
+                                      natures=Counter({"Adamant": 1}))}
+    text = build_set("drake", _evidence(), random.Random(0), usage=usage)
+    assert "Adamant Nature" in text
+    assert "EVs: 11 HP / 11 Atk / 11 Def / 11 SpA / 11 SpD / 11 Spe" in text
+
+
+def test_a_species_without_usage_falls_back_to_the_old_behaviour():
+    text = build_set("drake", _evidence(), random.Random(0), usage={"other": _dist(lifeorb=1)})
+    assert "@ sitrusberry" in text and "Serious Nature" in text

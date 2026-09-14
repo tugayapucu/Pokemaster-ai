@@ -47,3 +47,8 @@ data/field-priors-*.json
 # unpublished corpus, rebuilt rather than inherited.
 # `experiments/0052-team-preview-megas/build.py` regenerates it.
 data/mega-priors-*.json
+
+# Usage statistics downloaded from Smogon (items, natures, Stat Point spreads).
+# Third-party data, used for local research the way the replays are and never
+# republished; `experiments/0057-pool-from-usage/fetch.py` downloads it again.
+data/usage/
