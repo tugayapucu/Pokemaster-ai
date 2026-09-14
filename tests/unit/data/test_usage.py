@@ -249,6 +249,68 @@ def test_the_corrected_weight_is_carried_given_not_revealed():
     assert 0.45 < draws["protect"] / 4000 < 0.55
 
 
+def _inclusion_shares(rates, slots, draws=4000, **kwargs):
+    dist = _moves(sets=1, **{move: rate for move, rate in rates.items()})
+    counts = Counter()
+    for s in range(draws):
+        picked = sample_moves(dist, random.Random(s), chosen=(), slots=slots,
+                              by_inclusion=True, **kwargs)
+        assert len(picked) == len(set(picked)) == min(slots, len(rates))
+        counts.update(picked)
+    return {move: counts[move] / draws for move in rates}
+
+
+def test_by_inclusion_a_move_on_every_real_set_is_always_included():
+    """The 0058 defect: with one slot and weight 1 against others' 2, a
+    weighted draw included the universal move about a third of the time."""
+    shares = _inclusion_shares({"fakeout": 1.0, "a": 0.5, "b": 0.5, "c": 0.5, "d": 0.5}, slots=1)
+    assert shares["fakeout"] == 1.0
+
+
+def test_by_inclusion_a_near_universal_move_is_nearly_always_included():
+    """Odds 0.97 / 0.03 = 32.3 against four moves at odds 1 for one slot:
+    32.3 / 36.3 = 0.89. A weighted draw gives 0.97 / 2.97 = 0.33."""
+    shares = _inclusion_shares({"fakeout": 0.97, "a": 0.5, "b": 0.5, "c": 0.5, "d": 0.5}, slots=1)
+    assert shares["fakeout"] > 0.85
+
+
+def test_by_inclusion_a_higher_rate_is_never_included_less_often():
+    rates = {"a": 0.9, "b": 0.6, "c": 0.3, "d": 0.2}
+    shares = _inclusion_shares(rates, slots=2)
+    assert shares["a"] > shares["b"] > shares["c"] > shares["d"]
+
+
+def test_by_inclusion_lands_within_about_ten_points_of_the_rates():
+    """Not exact. Conditioning on the count pulls shares apart -- worked by hand
+    for these rates: 0.95 / 0.70 / 0.22 / 0.13 -- so this pins the size of that
+    distortion rather than claiming there is none. How it nets out on real
+    species is 0059's measurement."""
+    rates = {"a": 0.9, "b": 0.6, "c": 0.3, "d": 0.2}  # sums to 2, the slots
+    shares = _inclusion_shares(rates, slots=2)
+    for move, rate in rates.items():
+        assert abs(shares[move] - rate) < 0.12, (move, shares[move], rate)
+
+
+def test_by_inclusion_takes_every_candidate_when_there_are_no_more_than_the_slots():
+    shares = _inclusion_shares({"a": 0.1, "b": 0.2}, slots=3)
+    assert shares == {"a": 1.0, "b": 1.0}
+
+
+def test_by_inclusion_respects_moves_already_chosen():
+    dist = _moves(sets=1, a=1, b=1, c=1)
+    for seed in range(50):
+        picked = sample_moves(dist, random.Random(seed), chosen=("a",), slots=1, by_inclusion=True)
+        assert picked in (["b"], ["c"])
+
+
+def test_by_inclusion_is_reproducible_from_its_seed():
+    dist = _moves(sets=10, a=9, b=6, c=3, d=2)
+    first = [sample_moves(dist, random.Random(3), chosen=(), slots=2, by_inclusion=True)
+             for _ in range(5)]
+    assert first == [sample_moves(dist, random.Random(3), chosen=(), slots=2, by_inclusion=True)
+                     for _ in range(5)]
+
+
 def _evidence():
     return {
         "drake": SpeciesEvidence(

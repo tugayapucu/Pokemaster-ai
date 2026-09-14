@@ -211,6 +211,55 @@ def carry_rates(dist: SetDistribution) -> dict[str, float]:
     return {move: min(1.0, weight / dist.sets) for move, weight in dist.moves.items()}
 
 
+def _inclusion_sample(rng: random.Random, rates: dict[str, float], slots: int) -> list[str]:
+    """`slots` distinct keys, as if each were carried independently at its rate
+    and only outcomes with exactly `slots` carried were kept.
+
+    Weighted draws without replacement do not behave like that: with one slot
+    left, a move carried by every real set competes against the others' combined
+    weight and is included far less often than always (0058). Here a set's
+    probability is proportional to the product of its members' odds,
+    rate / (1 - rate) -- conditional Poisson sampling -- so a move at rate 1 is
+    always included, near-universal moves nearly always, and rarer ones share
+    what is left.
+
+    Drawn exactly, one key at a time, from the elementary symmetric sums of the
+    remaining odds.
+    """
+    keys = sorted(key for key, rate in rates.items() if rate > 0)
+    if slots <= 0 or not keys:
+        return []
+    if len(keys) <= slots:
+        return keys
+
+    certain = [key for key in keys if rates[key] >= 1.0]
+    if len(certain) >= slots:
+        return sorted(rng.sample(certain, slots))
+    odds = [(key, rates[key] / (1.0 - rates[key])) for key in keys if rates[key] < 1.0]
+    need = slots - len(certain)
+
+    # suffix[i][j]: sum over j-subsets of odds[i:] of the product of their odds.
+    n = len(odds)
+    suffix = [[0.0] * (need + 1) for _ in range(n + 1)]
+    suffix[n][0] = 1.0
+    for i in range(n - 1, -1, -1):
+        suffix[i][0] = 1.0
+        for j in range(1, need + 1):
+            suffix[i][j] = suffix[i + 1][j] + odds[i][1] * suffix[i + 1][j - 1]
+
+    picked = list(certain)
+    for i, (key, weight) in enumerate(odds):
+        if need == 0:
+            break
+        if n - i == need:
+            picked.extend(k for k, _ in odds[i:])
+            break
+        if rng.random() * suffix[i][need] < weight * suffix[i + 1][need - 1]:
+            picked.append(key)
+            need -= 1
+    return picked
+
+
 def sample_moves(
     dist: SetDistribution,
     rng: random.Random,
@@ -218,6 +267,7 @@ def sample_moves(
     chosen,
     slots: int,
     reveal_rates: dict[str, float] | None = None,
+    by_inclusion: bool = False,
 ) -> list[str]:
     """Up to `slots` moves not already `chosen`, drawn without replacement.
 
@@ -228,6 +278,10 @@ def sample_moves(
     by the whole carry rate would count it twice. Given a move was not revealed,
     the chance it is carried anyway is (carry - reveal) / (1 - reveal), and that
     is the weight. A move revealed at least as often as it is carried gets none.
+
+    `by_inclusion` picks the slots so each move is *included* in proportion to
+    its rate (`_inclusion_sample`) instead of drawing one weighted move per
+    slot, which leaves near-universal moves short (0058).
 
     Returns fewer than `slots` when the distribution runs out; the caller fills
     the rest.
@@ -241,6 +295,9 @@ def sample_moves(
             rate = max(rate - seen, 0.0) / (1.0 - seen) if seen < 1.0 else 0.0
         if rate > 0:
             weights[move] = rate
+    if by_inclusion:
+        capped = {move: min(rate, 1.0) for move, rate in weights.items()}
+        return _inclusion_sample(rng, capped, slots)
     picked: list[str] = []
     while len(picked) < slots:
         move = _weighted_choice(rng, weights)
