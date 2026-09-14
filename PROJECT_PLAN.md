@@ -1313,6 +1313,31 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### The pool now carries what sets actually carry (0057, 2026-09-14)
+
+The team pool is the measuring stick for every scout and every A/B, and it was
+built from what replays **reveal**. An item enters a replay only when it
+announces itself — a seed, a berry — so silent items went missing: Sneasler held
+Grassy Seed 67% of the time against real White Herb 46% / Focus Sash 43%. Every
+set also carried an even 11 Stat Points and a neutral nature.
+
+Items, natures and spreads are now drawn from sources that see sets whole:
+Smogon's Reg M-B usage file (1,269,250 battles at 1500+) and the open team
+sheets in our own M-C replays. Rule pre-registered and pushed (`858b418`).
+
+| | old method | with usage |
+| --- | --- | --- |
+| engine survival | 98.2% | 98.1% |
+| weighted item distance to the truth | 0.569 | **0.083** |
+| pool team 0, scouted | 52.9% | **33.8%** (32.9% on a repeat) |
+
+**Adopted.** The scout shift was predicted at 2–10 points and came in at 19.1 —
+an old-built team meeting properly-built opponents for the first time. Read the
+other way: **every scout before 0057 faced opponents built worse than real
+ones and is likely flattering.** Paired A/Bs stand as comparisons, since both
+agents shared the pool. Moves are still mode-filled, and the agent still
+assumes even spreads on opponents; both are recorded, neither is changed here.
+
 ### No speed credit helps; the smallest is merely harmless (0056, 2026-09-13)
 
 0055's follow-up, done the way its write-up required: a partial credit for the
@@ -1719,7 +1744,7 @@ plays what, carries wide intervals, and describes a ladder four days old rated
 | | |
 | --- | --- |
 | M-C corpus | 3,750 replays, rated 1000-1437, median 1059 |
-| M-C team pool | 5,858 teams, re-harvested from 2,990 train replays |
+| M-C team pool | 5,858 teams, re-harvested from 2,990 train replays (5,851 with usage-drawn items and spreads since 0057) |
 | damage model | 95.5% inside the predicted range on the pinned build (0046) |
 | agreement | 44.6% on M-C, +21-25 points of lift over chance at every branching factor (0044, 0045) |
 | tests | 1,467 |

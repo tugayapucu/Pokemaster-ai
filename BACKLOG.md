@@ -59,7 +59,7 @@ tests that *looked* like they covered the case.
 | | |
 | --- | --- |
 | M-C corpus | **3,750 replays**, rated 1000-1437, median 1059 |
-| M-C team pool | **5,858 teams**, re-harvested today from 2,990 train replays |
+| M-C team pool | **5,851 teams** from 2,990 train replays; items, natures and spreads drawn from usage data since 0057 (2026-09-14) |
 | M-B corpus | 1,769 replays, rated 1500-1827 (kept for comparison) |
 | damage model | **95.5%** inside the predicted range on the pinned build (0046) |
 | tools that work | `play` `position` `review` `scout` `collect` `regulations` |
@@ -154,6 +154,20 @@ Everything on the critical path runs. What is left is not capability, it is
 
    Found while working on these, not yet ordered:
 
+   - ~~**The pool's items were the items that announce themselves**~~ — **done,
+     0057, and it ships.** Harvest took items from what replays reveal and gave
+     every set an even 11 Stat Points and a neutral nature. Items, natures and
+     spreads are now drawn from Smogon's Reg M-B usage file and open team sheets
+     (76% / 20% of pool Pokemon; 4% fall back). Weighted item distance to the
+     truth **0.569 → 0.083**, engine survival 98.2% → 98.1%. Pool team 0 scouted
+     **52.9% → 33.8%** — one old-built team against properly-built opponents, so
+     **every scout before 0057 is likely flattering**. Paired A/Bs stand as
+     comparisons; their levels were on the old pool.
+   - **A scout is not bit-reproducible across processes.** *Found in 0057.* The
+     same team, pool and seed scouted 81/240 and then 79/240 in a second
+     process, while the old pool gave 127/240 both times. Small, cause unknown;
+     it matters because paired re-scouting is how structural questions about a
+     team are answered.
    - **The harvested pool fills sets to four moves from the species' most
      common moves** (`harvest.build_set`). Imputing the mode for every missing
      slot inflates the mode. Sized against sets where all four moves were
@@ -173,6 +187,10 @@ Everything on the critical path runs. What is left is not capability, it is
    1341 → 1437 in one day while the median barely moved, so the top is forming
    first. Check the distribution on the day rather than assuming it reached
    1500. The Cloudflare retry fix means a long run survives a blip now.
+   **Re-harvest with usage data** (`experiments/0057-pool-from-usage/run.py
+   --write`): the open team sheets are re-read from the new corpus, and
+   Smogon's September M-C file will not exist until October, so M-B's August
+   file stays the Smogon source.
 4. **Practise with `position`** until the command language is muscle memory. It
    is also the project's most productive bug-finder — five defects so far came
    from using it rather than testing it.
