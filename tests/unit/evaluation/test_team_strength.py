@@ -67,3 +67,63 @@ def test_a_team_with_no_opponents_reports_nothing_rather_than_dividing_by_zero()
     empty = TeamReport(team="mine", battles=0, wins=0, draws=0, opponents=0)
     assert empty.win_rate == 0.0
     assert empty.worst() == ()
+    assert empty.by_species(min_opponents=1) == ()
+    assert empty.by_roster(min_opponents=1) == ()
+
+
+def _rostered(*rows: tuple[tuple[str, ...], int]) -> TeamReport:
+    """A report from (opposing roster, wins out of two) rows."""
+    matchups = tuple(
+        Matchup(opponent=f"t{i}", roster=roster, wins=wins, battles=2)
+        for i, (roster, wins) in enumerate(rows)
+    )
+    return TeamReport(
+        team="mine",
+        battles=2 * len(rows),
+        wins=sum(wins for _, wins in rows),
+        draws=0,
+        opponents=len(rows),
+        matchups=matchups,
+    )
+
+
+def test_a_species_group_pools_every_opponent_that_brought_it():
+    """One row is two battles, which a battle seed alone can flip. A species
+    group reads across every opponent carrying it."""
+    report = _rostered((("Drake", "Bloom"), 0), (("Drake", "Fang"), 1), (("Bloom", "Fang"), 2))
+    groups = {g.label: g for g in report.by_species(min_opponents=1)}
+    drake = groups[("Drake",)]
+    assert (drake.opponents, drake.wins, drake.battles) == (2, 1, 4)
+    assert groups[("Fang",)].rate == 0.75
+
+
+def test_species_groups_come_out_hardest_first():
+    report = _rostered((("Drake", "Bloom"), 0), (("Drake", "Fang"), 1), (("Bloom", "Fang"), 2))
+    assert [g.label[0] for g in report.by_species(min_opponents=1)] == ["Drake", "Bloom", "Fang"]
+
+
+def test_a_species_seen_on_too_few_opponents_is_left_out():
+    report = _rostered((("Drake", "Bloom"), 0), (("Drake", "Fang"), 1))
+    assert [g.label[0] for g in report.by_species(min_opponents=2)] == ["Drake"]
+
+
+def test_the_same_six_in_a_different_order_are_one_roster():
+    """Near-copies of one player's team: drawn twice, it is one four-battle
+    matchup, not two two-battle ones."""
+    report = _rostered((("Drake", "Bloom"), 0), (("Bloom", "Drake"), 1), (("Fang", "Wisp"), 2))
+    groups = report.by_roster()
+    assert len(groups) == 1
+    assert (groups[0].opponents, groups[0].wins, groups[0].battles) == (2, 1, 4)
+
+
+def test_a_roster_drawn_once_is_not_a_group_by_default():
+    report = _rostered((("Drake", "Bloom"), 0), (("Fang", "Wisp"), 2))
+    assert report.by_roster() == ()
+    assert len(report.by_roster(min_opponents=1)) == 2
+
+
+def test_a_group_interval_narrows_with_more_opponents():
+    few = _rostered(*[(("Drake",), 1)] * 2).by_species(min_opponents=1)[0]
+    many = _rostered(*[(("Drake",), 1)] * 50).by_species(min_opponents=1)[0]
+    assert few.rate == many.rate == 0.5
+    assert (many.interval[1] - many.interval[0]) < (few.interval[1] - few.interval[0])

@@ -52,6 +52,45 @@ class Matchup:
 
 
 @dataclass(frozen=True)
+class MatchupGroup:
+    """Every matchup sharing something: one roster, or one opposing species.
+
+    The unit a losing matchup should be read at. One matchup is two battles,
+    and the same roster drawn three times went 0/2 and 2/2 on the battle seed
+    alone; a group pools enough opponents that its interval can say something.
+    """
+
+    label: tuple[str, ...]
+    opponents: int
+    wins: int
+    battles: int
+
+    @property
+    def rate(self) -> float:
+        return self.wins / self.battles if self.battles else 0.0
+
+    @property
+    def interval(self) -> tuple[float, float]:
+        return wilson_interval(self.wins, self.battles)
+
+
+def _grouped(matchups, keys_of, min_opponents: int) -> tuple[MatchupGroup, ...]:
+    totals: dict[tuple[str, ...], list[int]] = {}
+    for matchup in matchups:
+        for key in keys_of(matchup):
+            entry = totals.setdefault(key, [0, 0, 0])
+            entry[0] += 1
+            entry[1] += matchup.wins
+            entry[2] += matchup.battles
+    groups = [
+        MatchupGroup(label=key, opponents=n, wins=wins, battles=battles)
+        for key, (n, wins, battles) in totals.items()
+        if n >= min_opponents
+    ]
+    return tuple(sorted(groups, key=lambda g: (g.rate, -g.battles, g.label)))
+
+
+@dataclass(frozen=True)
 class TeamReport:
     """How the team did, and against whom."""
 
@@ -81,6 +120,28 @@ class TeamReport:
     def best(self, count: int = 5) -> tuple[Matchup, ...]:
         return tuple(
             sorted(self.matchups, key=lambda m: (-m.rate, m.opponent))[:count]
+        )
+
+    def by_roster(self, min_opponents: int = 2) -> tuple[MatchupGroup, ...]:
+        """Rosters drawn at least `min_opponents` times, hardest first.
+
+        The pool holds many near-copies -- one player's team reconstructed from
+        several replays -- so a roster drawn four times is one eight-battle
+        matchup, not four two-battle ones. Order-insensitive: the same six in a
+        different order are the same roster.
+        """
+        return _grouped(self.matchups, lambda m: [tuple(sorted(m.roster))], min_opponents)
+
+    def by_species(self, min_opponents: int = 15) -> tuple[MatchupGroup, ...]:
+        """One group per opposing species, over every opponent that brought it,
+        hardest first.
+
+        Screening every species at once will turn up a few low ones by chance;
+        a group is a suspect to re-test on fresh seeds, not a finding.
+        """
+        return _grouped(
+            self.matchups, lambda m: [(species,) for species in sorted(set(m.roster))],
+            min_opponents,
         )
 
     def even(self) -> int:

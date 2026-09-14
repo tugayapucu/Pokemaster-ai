@@ -105,6 +105,24 @@ def scout(
         for matchup in report.best():
             print(f"    {matchup.wins}/2  {_roster(dex, matchup.roster)}")
 
+        # One row is two battles, and a battle seed alone flips it. Groups pool
+        # enough opponents for an interval to mean something.
+        floor = max(5, report.opponents // 10)
+        species = report.by_species(min_opponents=floor)
+        if species:
+            print(f"\n  Hardest opposing Pokemon (brought by {floor}+ opponents)")
+            for group in species[:8]:
+                low, high = group.interval
+                print(f"    {group.rate:6.1%}  [{low:.0%}, {high:.0%}]  "
+                      f"{group.opponents:3} opponents  {species_name(dex, group.label[0])}")
+            print("    Screening every species finds a few low ones by chance: re-scout\n"
+                  "    a suspect on fresh seeds before changing the team for it.")
+        rosters = report.by_roster()
+        if rosters:
+            print("\n  Rosters drawn more than once")
+            for group in rosters[:5]:
+                print(f"    {group.wins}/{group.battles}  {_roster(dex, group.label)}")
+
         print(
             "\n  Both sides were played by the same agent, so an even matchup ties\n"
             "  and every deviation is the teams. The pool is what the ladder\n"
