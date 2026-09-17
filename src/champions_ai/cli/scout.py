@@ -49,8 +49,13 @@ def scout(
     opponents: int = 40,
     seed: int = 0,
     regulation: Regulation = REGULATION_M_C,
+    mega_on_ties: bool = False,
 ) -> int:
-    """Play one team against a sample of the field. Returns an exit code."""
+    """Play one team against a sample of the field. Returns an exit code.
+
+    `mega_on_ties` is set on the agent playing *both* sides, so the opponents
+    take their Mega ties the same way and the comparison stays even (0060).
+    """
     if pool_path is None:
         pool_path = pool_path_for(regulation)
     if not team_path.exists():
@@ -74,12 +79,14 @@ def scout(
             return 2
 
         env = BattleEnv(regulation, bridge=bridge)
-        agent = HeuristicAgent(dex, name="both sides")
+        agent = HeuristicAgent(dex, name="both sides", mega_on_ties=mega_on_ties)
 
         print(f"\n  {regulation.name}")
         print(f"  Your team: {_roster(dex, tuple(e.species for e in team.team.pokemon))}")
         print(f"  Against {opponents} of {len(pool.teams)} harvested teams, "
               "each played from both seats.\n")
+        if mega_on_ties:
+            print("  Both sides take a Mega when it ties with not doing so.\n")
 
         def progress(done, total, wins, battles):
             if done % 10 == 0 or done == total:

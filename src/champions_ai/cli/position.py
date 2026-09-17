@@ -129,8 +129,13 @@ def position(
     *,
     team_path: Path,
     regulation: Regulation = REGULATION_M_B,
+    mega_on_ties: bool = False,
 ) -> int:
-    """Advise on a game being played elsewhere. Returns a process exit code."""
+    """Advise on a game being played elsewhere. Returns a process exit code.
+
+    `mega_on_ties` ranks Mega Evolving first when the scorer cannot tell it from
+    not doing so -- a Protect turn, say -- instead of hiding it (0060).
+    """
     if not team_path.exists():
         print(f"No team at {team_path}. Pass --team with a Showdown export file.")
         return 2
@@ -145,9 +150,13 @@ def position(
             return 2
 
         move_data = move_data_from_dex(dex)
-        recommender = Recommender(dex, agent=HeuristicAgent(dex, name="adviser"))
+        recommender = Recommender(
+            dex, agent=HeuristicAgent(dex, name="adviser", mega_on_ties=mega_on_ties)
+        )
 
         print(f"\n  {regulation.name}")
+        if mega_on_ties:
+            print("  Mega Evolving is ranked first when it ties with not doing so.")
         print(f"  Your team: {team_path}")
         try:
             their_team = _ask_their_team(dex, regulation)

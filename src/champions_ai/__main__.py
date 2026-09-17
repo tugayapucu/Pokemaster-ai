@@ -106,6 +106,13 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"which regulation to use (default: {DEFAULT_REGULATION}). Each has its "
              "own dex, so this changes which Pokemon and items exist.",
     )
+    advise.add_argument(
+        "--mega-on-ties", action="store_true",
+        help="when Mega Evolving and not doing so score the same -- a Protect "
+             "turn, say -- take the Mega. Players Mega on a Pokemon's first turn "
+             "out 88.9%% of the time; across the pool this was neutral (0060), so "
+             "it is off unless asked for.",
+    )
     survey_field = commands.add_parser(
         "meta",
         help="what is the field bringing? usage, win rates and pairings",
@@ -162,6 +169,13 @@ def build_parser() -> argparse.ArgumentParser:
     field.add_argument(
         "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
         help=f"which regulation to use (default: {DEFAULT_REGULATION}).",
+    )
+    field.add_argument(
+        "--mega-on-ties", action="store_true",
+        help="when Mega Evolving and not doing so score the same -- a Protect "
+             "turn, say -- take the Mega. Players Mega on a Pokemon's first turn "
+             "out 88.9%% of the time; across the pool this was neutral (0060), so "
+             "it is off unless asked for.",
     )
     walk = commands.add_parser(
         "review",
@@ -242,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         return position(
             team_path=args.team,
             regulation=REGULATIONS[args.regulation],
+            mega_on_ties=args.mega_on_ties,
         )
     if args.command == "meta":
         return meta(
@@ -259,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
             opponents=args.opponents,
             seed=args.seed,
             regulation=REGULATIONS[args.regulation],
+            mega_on_ties=args.mega_on_ties,
         )
     if args.command == "regulations":
         return check_regulations(competitive_only=not args.all)
