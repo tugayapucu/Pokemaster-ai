@@ -124,11 +124,9 @@ class Recommender:
         scored = [
             (action, self._score(observation, action)) for action in legal_actions
         ]
-        # Ties are broken toward the simpler action. Where the scorer cannot
-        # tell two options apart, recommending the one with fewer commitments
-        # is the safer advice.
-        scored.sort(key=lambda pair: (-pair[1][0], _complexity(pair[0])))
-        scored = _drop_indistinguishable(scored)
+        scored = _drop_indistinguishable(
+            _ranked(scored, prefer_mega=getattr(self.agent, "mega_on_ties", False))
+        )
 
         confidences = _softmax([score for _, (score, _) in scored], self.temperature)
 
@@ -176,6 +174,25 @@ class Recommender:
             total += scored.score
             reasons.extend(scored.reasons)
         return total, tuple(reasons)
+
+
+def _ranked(scored: list, *, prefer_mega: bool = False) -> list:
+    """Highest score first; equal scores broken by how much an action commits to.
+
+    Toward the simpler action by default: where the scorer cannot tell two
+    options apart, fewer commitments is the safer advice. Mega Evolution is the
+    exception when `prefer_mega` is set (0060): a free, permanent upgrade the
+    one-turn scorer cannot price, which players take on a Pokemon's first turn
+    out 88.9% of the time. `_drop_indistinguishable` keeps the first of a run
+    of equal scores, so the order here is also which one survives.
+    """
+    return sorted(
+        scored,
+        key=lambda pair: (
+            -pair[1][0],
+            -_complexity(pair[0]) if prefer_mega else _complexity(pair[0]),
+        ),
+    )
 
 
 def _complexity(action: JointAction) -> int:

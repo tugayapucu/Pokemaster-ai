@@ -163,8 +163,10 @@ def test_the_agent_cannot_value_a_permanent_upgrade_for_later_turns(agent):
     declined. Measured at 21 of 31 offers taken.
 
     Fixing it properly needs a scorer that can price a lasting resource, which
-    a one-turn heuristic cannot. This test exists so the next person knows the
-    tie is deliberate rather than a bug.
+    a one-turn heuristic cannot. The *score* tie is deliberate; which way the
+    tie is broken is `mega_on_ties` (0060), measured rather than left to the
+    order actions are enumerated in -- players Mega on the first turn out 88.9%
+    of the time.
     """
     observation = _observation()
     plain = agent.score_slot_action(

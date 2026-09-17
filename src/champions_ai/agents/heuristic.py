@@ -354,6 +354,13 @@ class ScoredAction:
     knockout_bonus: float = 0.0
 
 
+def _mega_count(joint: JointAction | None) -> int:
+    """How many slots of a joint action Mega Evolve (0 or 1 in practice)."""
+    if joint is None:
+        return 0
+    return sum(1 for action in joint.slot_actions if getattr(action, "special", None) == MEGA)
+
+
 def _combined_targets(scored: Sequence[ScoredAction]) -> float:
     """Correct the knockout bonus for slots aimed at the same Pokemon.
 
@@ -573,6 +580,14 @@ class HeuristicAgent(Agent):
         # a race longer than one hit. 1.0 is 0055's rule, which over-valued
         # speed; 0056 sweeps smaller values.
         speed_race_credit: float = 1.0,
+        # A joint action that Mega Evolves and scores exactly the same as the
+        # best that does not -- a Protect turn, a move the forme does not
+        # strengthen -- is taken instead of it. The one-turn scorer cannot
+        # price a permanent upgrade, so these ties went to the non-Mega by
+        # enumeration order alone. Players Mega on a Pokemon's first turn out
+        # 88.9% of the time (Reg M-C corpus). A judgement, so off until
+        # measured; see 0060.
+        mega_on_ties: bool = False,
         # Per-agent so a sweep can put a priced agent against an unpriced one.
         # As a module global it was read by *both* sides of a head-to-head, so
         # every setting compared an agent with itself and tied every matchup --
@@ -621,6 +636,7 @@ class HeuristicAgent(Agent):
         self.matchup_turn_costs = matchup_turn_costs
         self.speed_beyond_knockouts = speed_beyond_knockouts
         self.speed_race_credit = speed_race_credit
+        self.mega_on_ties = mega_on_ties
         self.redirect_weight = (
             REDIRECT_WEIGHT if redirect_weight is None else redirect_weight
         )
@@ -658,7 +674,11 @@ class HeuristicAgent(Agent):
                 for slot, action in enumerate(joint.slot_actions)
             ]
             total = sum(s.score for s in scored) + _combined_targets(scored)
-            if total > best_score:
+            if total > best_score or (
+                self.mega_on_ties
+                and total == best_score
+                and _mega_count(joint) > _mega_count(best)
+            ):
                 best, best_score = joint, total
 
         assert best is not None, "legal_actions must not be empty"
