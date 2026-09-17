@@ -127,3 +127,74 @@ def test_a_group_interval_narrows_with_more_opponents():
     many = _rostered(*[(("Drake",), 1)] * 50).by_species(min_opponents=1)[0]
     assert few.rate == many.rate == 0.5
     assert (many.interval[1] - many.interval[0]) < (few.interval[1] - few.interval[0])
+
+
+class TestRefusedBattles:
+    """A battle the engine refuses is skipped and recorded, not fatal.
+
+    A refusal used to end the whole scout run, and a long run is exactly where a
+    one-in-thousands legality bug turns up. It is still a bug, so it is kept.
+    """
+
+    def _pool(self, count: int):
+        from types import SimpleNamespace
+
+        teams = [
+            SimpleNamespace(
+                name=f"opp{i}",
+                team=SimpleNamespace(pokemon=(SimpleNamespace(species=f"Mon{i}"),)),
+            )
+            for i in range(count)
+        ]
+        return SimpleNamespace(teams=teams)
+
+    def _scout(self, monkeypatch, refuse: set[int], opponents: int = 2):
+        """Scout with a fake battle runner: calls numbered from 0 in `refuse`
+        are refused, and every other battle is won by whoever sits in seat 0."""
+        from types import SimpleNamespace
+
+        import champions_ai.evaluation.team_strength as module
+        from champions_ai.simulator import BridgeError
+
+        calls = []
+
+        def fake_play_battle(env, agents, teams, seed):
+            number = len(calls)
+            calls.append(seed)
+            if number in refuse:
+                raise BridgeError("engine rejected a choice: [Invalid choice] test")
+            return SimpleNamespace(winner=0)
+
+        monkeypatch.setattr(module, "play_battle", fake_play_battle)
+        team = SimpleNamespace(name="mine")
+        report = module.scout_team(None, None, team, self._pool(opponents),
+                                   opponents=opponents, seed=0)
+        return report, calls
+
+    def test_the_run_carries_on_past_a_refused_battle(self, monkeypatch):
+        report, calls = self._scout(monkeypatch, refuse={1})
+        assert len(calls) == 4
+        assert report.battles == 3
+        assert len(report.refused) == 1
+
+    def test_a_refusal_records_what_reproduces_it(self, monkeypatch):
+        report, calls = self._scout(monkeypatch, refuse={1})
+        refused = report.refused[0]
+        assert refused.seat == 1
+        assert refused.seed == calls[1]
+        assert "Invalid choice" in refused.message
+
+    def test_a_matchup_counts_only_the_battles_that_finished(self, monkeypatch):
+        report, _ = self._scout(monkeypatch, refuse={1})
+        assert [m.battles for m in report.matchups] == [1, 2]
+
+    def test_an_opponent_with_no_finished_battle_adds_no_matchup(self, monkeypatch):
+        """A 0/0 row would sort as the worst matchup of all."""
+        report, _ = self._scout(monkeypatch, refuse={0, 1})
+        assert len(report.matchups) == 1
+        assert report.battles == 2
+
+    def test_nothing_refused_records_nothing(self, monkeypatch):
+        report, _ = self._scout(monkeypatch, refuse=set())
+        assert report.refused == ()
+        assert report.battles == 4

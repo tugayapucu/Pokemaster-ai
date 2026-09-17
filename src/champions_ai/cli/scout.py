@@ -102,6 +102,13 @@ def scout(
               f"({report.win_rate:.1%})   95% Wilson [{low:.1%}, {high:.1%}]")
         print(f"  {report.opponents} distinct opponents, {report.even()} split one-all, "
               f"{report.draws} drawn")
+        if report.refused:
+            # Skipped so the run survives, but each one is a legality bug: the
+            # engine refused something we offered. The seed reproduces it.
+            first = report.refused[0]
+            print(f"  {len(report.refused)} battle(s) refused by the engine and skipped. "
+                  f"First: seat {first.seat}, seed {first.seed}\n"
+                  f"    {first.message}")
 
         # The losing matchups are the point. A win rate says whether to keep
         # looking; these say what to change.

@@ -35,6 +35,7 @@ from champions_ai.agents.base import Agent
 from champions_ai.data import BattleTeam, TeamPool
 from champions_ai.env import BattleEnv
 from champions_ai.evaluation.runner import play_battle, wilson_interval
+from champions_ai.simulator import BridgeError
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,21 @@ class Matchup:
     @property
     def rate(self) -> float:
         return self.wins / self.battles if self.battles else 0.0
+
+
+@dataclass(frozen=True)
+class RefusedBattle:
+    """A battle the engine stopped by refusing an action we offered as legal.
+
+    Skipped rather than fatal: one of these used to end a whole scout run, and a
+    long run is exactly where a one-in-thousands case turns up. Kept rather than
+    hidden, because each one is a legality bug -- the seed reproduces it.
+    """
+
+    opponent: str
+    seat: int
+    seed: str
+    message: str
 
 
 @dataclass(frozen=True)
@@ -100,6 +116,9 @@ class TeamReport:
     draws: int
     opponents: int
     matchups: tuple[Matchup, ...] = field(default=(), repr=False)
+    # Battles the engine refused an action in, skipped and not counted in
+    # `battles`, `wins` or any matchup.
+    refused: tuple[RefusedBattle, ...] = field(default=(), repr=False)
 
     @property
     def win_rate(self) -> float:
@@ -175,32 +194,41 @@ def scout_team(
     chosen = indices[:opponents]
 
     matchups: list[Matchup] = []
+    refused: list[RefusedBattle] = []
     wins = draws = battles = 0
 
     for number, index in enumerate(chosen):
         other = pool.teams[index]
         name = other.name or f"team-{index}"
-        won = 0
+        won = played = 0
         for seat in (0, 1):
             # Same seed for both seats, so the pair differs in nothing but
             # which side of the field each team started on.
             battle_seed = f"sodium,{(seed * 1000 + number):032x}"
             teams = (team, other) if seat == 0 else (other, team)
-            result = play_battle(env, (agent, agent), teams, seed=battle_seed)
+            try:
+                result = play_battle(env, (agent, agent), teams, seed=battle_seed)
+            except BridgeError as error:
+                refused.append(RefusedBattle(name, seat, battle_seed, str(error)))
+                continue
             battles += 1
+            played += 1
             if result.winner is None:
                 draws += 1
             elif result.winner == seat:
                 won += 1
                 wins += 1
-        matchups.append(
-            Matchup(
-                opponent=name,
-                roster=tuple(e.species for e in other.team.pokemon),
-                wins=won,
-                battles=2,
+        # An opponent with no finished battle has no result, and a row of 0/0
+        # would sort as the worst matchup of all.
+        if played:
+            matchups.append(
+                Matchup(
+                    opponent=name,
+                    roster=tuple(e.species for e in other.team.pokemon),
+                    wins=won,
+                    battles=played,
+                )
             )
-        )
         if on_progress is not None:
             on_progress(number + 1, len(chosen), wins, battles)
 
@@ -211,4 +239,5 @@ def scout_team(
         draws=draws,
         opponents=len(chosen),
         matchups=tuple(matchups),
+        refused=tuple(refused),
     )
