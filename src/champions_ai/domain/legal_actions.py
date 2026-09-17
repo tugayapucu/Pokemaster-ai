@@ -131,6 +131,12 @@ def legal_switch_actions(
         # An empty or fainted slot is being refilled: nothing to exclude, and
         # trapping does not hold a Pokemon that is already gone.
         return _switch_actions(observation)
+    if own.team[team_index].reviving:
+        # Revival Blessing: the pending "switch" picks a fainted team member to
+        # bring back, and the engine refuses a living one. Checked before
+        # trapping, which holds a Pokemon in place but does not stop a revival.
+        # Empty when nothing has fainted, and the forced path then passes.
+        return [SwitchAction(team_index=index) for index in own.revivable_indices()]
     if TRAPPED in own.team[team_index].volatile_conditions:
         return []
     return _switch_actions(observation, exclude=team_index)

@@ -365,6 +365,21 @@ def test_force_switch_slots_are_reported():
     assert tracker.force_switch_slots == (True, False)
 
 
+def test_a_revival_blessing_is_read_from_the_request():
+    """The engine marks the Pokemon whose slot must pick someone to revive.
+
+    Nothing else in the request says the forced switch is a revival, and a
+    living pick is refused outright -- so the flag has to reach the side.
+    """
+    tracker = _tracker()
+    side = _move_request()["side"]
+    side["pokemon"][0]["reviving"] = True
+    _request(tracker, {"forceSwitch": [True, False], "side": side})
+    team = tracker.own_side().team
+    assert team[0].reviving is True
+    assert all(mon.reviving is False for mon in team[1:])
+
+
 def test_own_side_before_any_request_is_an_error_not_a_guess():
     with pytest.raises(RuntimeError):
         _tracker().own_side()

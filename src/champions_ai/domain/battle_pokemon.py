@@ -50,6 +50,11 @@ class BattlePokemon(BaseModel, frozen=True):
     # without this project reimplementing any of them.
     disabled_moves: frozenset[str] = frozenset()
     available_specials: frozenset[SpecialMechanic] = frozenset()
+    # This Pokemon used Revival Blessing, so its slot's pending "switch" is a
+    # revival: the engine accepts only a *fainted* team member, and refuses a
+    # living one with "Can't switch: You have to pass to a fainted Pokemon".
+    # Read from the request's `reviving` flag rather than inferred.
+    reviving: bool = False
 
     # What the *opponent* has learned about this Pokemon. Part of battle truth,
     # not a view concern: revelation is symmetric (if a move was used, it was

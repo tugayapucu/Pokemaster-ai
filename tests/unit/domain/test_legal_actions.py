@@ -432,3 +432,41 @@ class TestSwitchOnlyEnumeration:
             active_slots=(0, 1),
         )
         assert legal_switch_actions(_observation(side), 0)
+
+
+class TestRevivalBlessing:
+    """A slot whose Pokemon used Revival Blessing picks from the fainted.
+
+    The engine asks for that pick as a forced switch, and refuses a living
+    Pokemon with "Can't switch: You have to pass to a fainted Pokemon". The
+    generator offered the usual living bench, so a battle where an opponent's
+    Revival Blessing landed crashed the whole scout run it was part of.
+    """
+
+    def _side(self, *fainted: int, reviving: bool = True, **extra) -> Side:
+        team = [_mon(f"own{i}") for i in range(4)]
+        team[0] = _mon("own0", reviving=reviving, **extra)
+        for index in fainted:
+            team[index] = _mon(f"own{index}", current_hp=0)
+        return _own_side(team=tuple(team), active_slots=(0, 1))
+
+    def test_only_a_fainted_team_member_is_offered(self):
+        actions = legal_switch_actions(_observation(self._side(2)), 0)
+        assert actions == [SwitchAction(team_index=2)]
+
+    def test_a_living_bench_pokemon_is_never_offered(self):
+        actions = legal_switch_actions(_observation(self._side(2)), 0)
+        assert SwitchAction(team_index=3) not in actions
+
+    def test_with_nothing_fainted_there_is_nothing_to_revive(self):
+        """The forced-switch path turns an empty list into a pass."""
+        assert legal_switch_actions(_observation(self._side()), 0) == []
+
+    def test_trapping_does_not_stop_a_revival(self):
+        side = self._side(3, volatile_conditions=frozenset({"trapped"}))
+        assert legal_switch_actions(_observation(side), 0) == [SwitchAction(team_index=3)]
+
+    def test_an_ordinary_forced_switch_is_unchanged(self):
+        """Without the flag, a living Pokemon's slot still offers the living bench."""
+        actions = legal_switch_actions(_observation(self._side(2, reviving=False)), 0)
+        assert actions == [SwitchAction(team_index=3)]

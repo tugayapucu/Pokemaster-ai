@@ -42,6 +42,14 @@ class Side(BaseModel, frozen=True):
             i for i, mon in enumerate(self.team) if not mon.fainted and not self.is_active(i)
         )
 
+    def revivable_indices(self) -> tuple[int, ...]:
+        """Team members Revival Blessing may bring back: every fainted one.
+
+        Not restricted to the bench: the engine lets a revival pick a fainted
+        Pokemon still counted in an active slot, and only refuses a living one.
+        """
+        return tuple(i for i, mon in enumerate(self.team) if mon.fainted)
+
     def with_pokemon_at(self, index: int, pokemon: BattlePokemon) -> "Side":
         updated = list(self.team)
         updated[index] = pokemon

@@ -805,6 +805,9 @@ class BattleTracker:
                     volatile_conditions=volatiles,
                     disabled_moves=disabled,
                     available_specials=specials,
+                    # Revival Blessing turns this slot's forced switch into a
+                    # choice among the fainted, and only the request says so.
+                    reviving=bool(entry.get("reviving")),
                     # The request says nothing about the stall counter, so this
                     # comes from the protocol stream instead.
                     # Stages belong to the field, not to the Pokemon: one
