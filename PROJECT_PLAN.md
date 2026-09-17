@@ -1331,7 +1331,7 @@ Pokemon's first turn out 88.9% of the time (6,231 Megas, Reg M-C corpus).
 most Megas already happen on attacking turns, where the stronger forme wins
 outright. The delayed Megas that remain are turns the scorer rates the base
 forme strictly higher, which a one-turn scorer cannot weigh against a permanent
-upgrade. No CLI flag exposes the setting yet.
+upgrade. `position` and `scout` take `--mega-on-ties` to switch it on.
 
 ### Near-universal moves are back on their sets (0059, 2026-09-14)
 
