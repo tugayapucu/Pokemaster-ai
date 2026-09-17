@@ -49,6 +49,24 @@ class Target(BaseModel, frozen=True):
     index: int
 
 
+class OpenSheet(BaseModel, frozen=True):
+    """One opposing Pokemon's open team sheet.
+
+    Frankfurt is played with sheets: item, ability and all four moves are public
+    before the first turn, for all six, while the ladder this project's corpus
+    comes from shows species alone. Kept per species rather than per Pokemon
+    seen, because the sheet is known before anything has been sent out.
+
+    `item=None` with `itemless` set means the sheet shows no item -- a stronger
+    statement than "we have not seen one", which is what an unknown item is.
+    """
+
+    item: str | None = None
+    itemless: bool = False
+    ability: str | None = None
+    moves: tuple[str, ...] = ()
+
+
 class Position(BaseModel, frozen=True):
     """What is on the screen, as far as the person typing can see it."""
 
@@ -62,6 +80,9 @@ class Position(BaseModel, frozen=True):
     # Only those actually seen on the field. Which four of the six were brought
     # is hidden information until they appear.
     their_seen: tuple[ObservedPokemon, ...] = ()
+    # Open team sheets by species id, for any of the six -- including those not
+    # sent out yet. Applied to a Pokemon the moment it appears.
+    their_sheets: dict[str, OpenSheet] = Field(default_factory=dict)
     their_active: tuple[int | None, ...] = (None, None)
     their_side_conditions: dict[str, int] = Field(default_factory=dict)
     their_mega_used: bool = False
@@ -357,6 +378,33 @@ class Position(BaseModel, frozen=True):
             return None
         return mon.move_pp[mon.selectable_moves.index(move)]
 
+    def with_their_sheet(self, species: str, sheet: OpenSheet) -> "Position":
+        """Record one opposing open team sheet, and apply it if it is already out."""
+        if self.their_team and species not in self.their_team:
+            raise ValueError(f"{species} is not one of the six they showed at Team Preview")
+        position = self.model_copy(update={"their_sheets": {**self.their_sheets, species: sheet}})
+        index = position.seen_index(species)
+        return position if index is None else position._apply_sheet(index, sheet)
+
+    def _apply_sheet(self, index: int, sheet: OpenSheet) -> "Position":
+        """Put a sheet's facts onto a Pokemon that has been seen.
+
+        Never overrides what the battle has shown: an item already watched
+        leaving stays gone, whatever the sheet says it started with.
+        """
+        mon = self.their_seen[index]
+        changes: dict = {}
+        if sheet.itemless:
+            changes["revealed_item"] = None
+            changes["item_consumed"] = True
+        elif sheet.item is not None and not mon.item_consumed:
+            changes["revealed_item"] = sheet.item
+        if sheet.ability is not None:
+            changes["revealed_ability"] = sheet.ability
+        if sheet.moves:
+            changes["revealed_moves"] = mon.revealed_moves | set(sheet.moves)
+        return self._with_theirs(index, **changes) if changes else self
+
     def with_them_out(self, slot: int, species: str) -> "Position":
         """Put an opposing species into a field slot.
 
@@ -388,6 +436,11 @@ class Position(BaseModel, frozen=True):
                     )
                 }
             )
+            # An open team sheet typed before the game applies the moment the
+            # Pokemon it describes actually arrives.
+            sheet = self.their_sheets.get(species)
+            if sheet is not None:
+                position = position._apply_sheet(index, sheet)
         if position.their_seen[index].fainted:
             raise ValueError(f"{species} has fainted and cannot come back out")
         # Whatever was in this slot leaves, and a Pokemon that leaves the field

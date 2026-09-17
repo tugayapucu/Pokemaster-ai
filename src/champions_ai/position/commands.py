@@ -29,7 +29,15 @@ from champions_ai.position.names import (
     resolve_move,
     resolve_species,
 )
-from champions_ai.position.state import STATUSES, THEM, US, Position, SideName, Target
+from champions_ai.position.state import (
+    STATUSES,
+    THEM,
+    US,
+    OpenSheet,
+    Position,
+    SideName,
+    Target,
+)
 
 Control = Literal["", "show", "help", "undo", "quit"]
 
@@ -93,6 +101,13 @@ HELP = """
     char pp protect 3        set what is left directly
 
     my char 55         say which side when both have one
+
+  Open team sheets -- all six are public before game one at a tournament,
+  so they can be typed in before it starts and apply as each one appears:
+
+    sheet kingambit, black glasses, defiant, sucker punch, iron head, protect
+                       species, item, ability, then its moves
+    sheet gambit, none, defiant, sucker punch      holds nothing
 
   The field:
 
@@ -368,6 +383,40 @@ def _side_from(token: str) -> SideName:
     raise ValueError(f"whose? say us or them, not {token!r}")
 
 
+def _sheet(position: Position, dex: Dex, text: str) -> Outcome:
+    """An opposing open team sheet: `sheet <species>, <item>, <ability>, <moves...>`.
+
+    Comma separated because the names are not: "life orb" and "rough skin" are
+    two words each, and a tournament sheet is typed once, before the clock
+    starts. The species resolves against the six shown at Team Preview, so a
+    fragment is enough and a Pokemon that is not in the game is refused.
+
+    The ability is stored as an id without being checked against the dex, the
+    same as `char ability` -- the dex dump carries no ability table to check
+    against.
+    """
+    fields = [part.strip() for part in text.split(",")]
+    if len(fields) < 2 or not fields[0]:
+        raise ValueError(
+            "which sheet? `sheet kingambit, black glasses, defiant, sucker punch`"
+        )
+    species = resolve_species(dex, fields[0], within=position.their_team or None)
+    item_text = fields[1]
+    ability_text = fields[2] if len(fields) > 2 else ""
+    itemless = item_text in CLEARED
+    sheet = OpenSheet(
+        item=None if itemless or not item_text else resolve_item(dex, item_text),
+        itemless=itemless,
+        ability=to_id(ability_text) or None,
+        moves=tuple(resolve_move(dex, part) for part in fields[3:] if part),
+    )
+    held = "nothing" if itemless else (dex.get_item(sheet.item).name if sheet.item else "?")
+    return Outcome(
+        position=position.with_their_sheet(species, sheet),
+        message=f"{species}: {held}, {sheet.ability or '?'}, {len(sheet.moves)} moves",
+    )
+
+
 def apply(position: Position, dex: Dex, line: str) -> Outcome:
     """One command. Raises ValueError with something readable for a bad one."""
     tokens = line.strip().lower().split()
@@ -395,6 +444,9 @@ def apply(position: Position, dex: Dex, line: str) -> Outcome:
         if not rest or not rest[0].isdigit():
             raise ValueError("which turn? `turn 7`")
         return Outcome(position=position.with_turn(int(rest[0])), message=f"turn {rest[0]}")
+
+    if head == "sheet":
+        return _sheet(position, dex, " ".join(rest))
 
     if head == "weather":
         if not rest:

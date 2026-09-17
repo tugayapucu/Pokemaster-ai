@@ -67,6 +67,30 @@ tests that *looked* like they covered the case.
 Everything on the critical path runs. What is left is not capability, it is
 **the metagame**, and the corpus is two days of a ladder that opened on the 9th.
 
+#### The event is a different information regime from the ladder
+
+**Established 2026-09-17, from the player and the pinned engine.** Frankfurt is
+**best of three with forced open team sheets**. The ladder this project collects
+from, harvests from and scouts against is **best of one, species only at Team
+Preview**. The engine carries both formats -- `VGC 2026 Reg M-C (Bo3)` has
+`Force Open Team Sheets` and `Best of = 3` -- but best-of-three lives outside
+the battle simulator, so nothing here can run a series.
+
+What that means for every number in this file:
+
+| | transfers to the event? |
+| --- | --- |
+| what the field brings (usage, pairings, the pool) | yes -- it is the same ladder metagame |
+| a scout win rate | **game one only**, and against opponents who cannot see our sets |
+| anything resting on surprise -- a hidden item, an unexpected move | **no**: under sheets the opponent reads it before the game |
+| adaptation across games two and three | not modelled at all; it is the player's job |
+
+Done about it: `position` takes an opponent's open team sheet before the game
+(`sheet <species>, <item>, <ability>, <moves...>`), so the advice uses the
+sets the event hands out instead of priors. Not done, and not before the
+freeze: a Bo3 series evaluator, and opponent *spreads* (sheets do not show
+Stat Points, so the even-11 assumption stands).
+
 #### The plan, in order
 
 1. ~~Something to search a team *with*~~ — **done: `champions-ai meta`.**
