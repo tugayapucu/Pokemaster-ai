@@ -154,6 +154,17 @@ Everything on the critical path runs. What is left is not capability, it is
 
    Found while working on these, not yet ordered:
 
+   - ~~**Mega Evolution lost every tie**~~ — **measured, 0060: neutral, so
+     off.** The scorer prices a Mega only through this turn's move, so on a
+     Protect turn `X` and `X + Mega` tie, and enumeration order gave every tie
+     to the non-Mega; the recommender did the same on purpose. Players Mega on
+     the first turn out 88.9% of the time. `mega_on_ties` takes the Mega on an
+     exact tie: 3.0% of decisions move, a clean must-be-0 row, first-turn-out
+     Megas 63.3% → 78.8%, and **404 / 396 over 800 battles, [47.0%, 54.0%]**,
+     26 of 400 matchups decided. Stays off by default. Two things left open:
+     no CLI flag yet for `position` / `scout` / `play`; and the remaining
+     delayed Megas are turns the one-turn scorer rates the base forme strictly
+     higher, which only a scorer that prices a permanent upgrade could weigh.
    - ~~**The pool's items were the items that announce themselves**~~ — **done,
      0057, and it ships.** Harvest took items from what replays reveal and gave
      every set an even 11 Stat Points and a neutral nature. Items, natures and

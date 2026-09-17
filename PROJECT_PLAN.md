@@ -1313,6 +1313,26 @@ play (29.6% against 34.2%), the category is priced correctly including the
 delayed half, and the low per-move agreement reflects genuine ambiguity rather
 than a defect.
 
+### Breaking Mega ties toward the Mega: neutral, so off (0060, 2026-09-17)
+
+The heuristic prices a Mega only through this turn's move, so on a Protect turn
+`X` and `X + Mega` score the same, and enumeration order gave every such tie to
+the non-Mega. The recommender did the same deliberately. Players Mega on a
+Pokemon's first turn out 88.9% of the time (6,231 Megas, Reg M-C corpus).
+`mega_on_ties` takes the Mega on an exact tie; rule pushed first (`9b6fb13`).
+
+| | |
+| --- | --- |
+| decisions differ | 3.0%, all of them Mega ties (must-be-0 row: 0) |
+| first-turn-out Megas | 63.3% → 78.8% |
+| A/B, 800 battles | **404 / 396, [47.0%, 54.0%]**, 26 of 400 matchups decided |
+
+**Off, by the rule for judgements.** Across the pool it hardly changes a game:
+most Megas already happen on attacking turns, where the stronger forme wins
+outright. The delayed Megas that remain are turns the scorer rates the base
+forme strictly higher, which a one-turn scorer cannot weigh against a permanent
+upgrade. No CLI flag exposes the setting yet.
+
 ### Near-universal moves are back on their sets (0059, 2026-09-14)
 
 0058's one recorded defect: moves on nearly every real set sat about 10 points
