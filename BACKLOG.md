@@ -163,9 +163,12 @@ Everything on the critical path runs. What is left is not capability, it is
      offered. Now read into `BattlePokemon.reviving`, and a reviving slot is
      offered `Side.revivable_indices()`. Proven with pool teams forced to land
      the move, 40 matchups from both seats: with the fix 80 of 80 battles, 15
-     of 15 revivals, 0 refusals; without it, 9 refusals, all this message. Left
-     open: `scout_team` still does not catch an engine refusal, so any future
-     one loses a whole run rather than one battle.
+     of 15 revivals, 0 refusals; without it, 9 refusals, all this message.
+     **And a future one no longer ends a scout run:** `scout_team` records a
+     refused battle (`TeamReport.refused`, with the seed that reproduces it) and
+     carries on, counting finished battles only. Checked with the fix undone:
+     30 opponents, 54 finished, 6 refused, run completed. `evaluate` still
+     fails loudly, since a refusal there would make an A/B unsound.
    - ~~**Mega Evolution lost every tie**~~ — **measured, 0060: neutral, so
      off.** The scorer prices a Mega only through this turn's move, so on a
      Protect turn `X` and `X + Mega` tie, and enumeration order gave every tie
