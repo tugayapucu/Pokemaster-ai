@@ -154,6 +154,16 @@ Everything on the critical path runs. What is left is not capability, it is
 
    Found while working on these, not yet ordered:
 
+   - **The engine can still reject an action we offered as legal.** *Found
+     2026-09-17 while scouting.* One battle in roughly 2,900 crashed with
+     `[Invalid choice] Can't switch: You have to pass to a fainted Pokemon`:
+     a switch was offered for a slot the engine says must pass. Deterministic
+     -- the same team, opponent and seed crash every time -- so it is
+     reproducible, but the reproduction in hand uses a local team and has to be
+     rebuilt from pool teams before it goes into a test. The same class as the
+     four engine-rejection bugs 0026 fixed in `legal_actions`. A crash here
+     loses a whole scout run, not one battle, since `scout_team` does not catch
+     it.
    - ~~**Mega Evolution lost every tie**~~ — **measured, 0060: neutral, so
      off.** The scorer prices a Mega only through this turn's move, so on a
      Protect turn `X` and `X + Mega` tie, and enumeration order gave every tie
