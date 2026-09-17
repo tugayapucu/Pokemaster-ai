@@ -18,6 +18,7 @@ from champions_ai.cli.play import play
 from champions_ai.cli.position import position
 from champions_ai.cli.regulations import check as check_regulations
 from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
+from champions_ai.cli.scout import DEFAULT_OPPONENTS as SCOUT_OPPONENTS
 from champions_ai.cli.scout import scout
 from champions_ai.domain import REGULATION_M_B, REGULATION_M_C
 
@@ -157,10 +158,18 @@ def build_parser() -> argparse.ArgumentParser:
              "pool, data/pool-<mod>.txt.",
     )
     field.add_argument(
-        "--opponents", type=int, default=40,
+        "--opponents", type=int, default=SCOUT_OPPONENTS,
         help="how many distinct opponents to draw (default: %(default)s). Breadth "
              "matters more than depth here: almost all the variance is which "
-             "opponent was drawn, so each is played twice and no more.",
+             "opponent was drawn, so each is played twice and no more. Below the "
+             "default the headline moves several points run to run, and the "
+             "command says so.",
+    )
+    field.add_argument(
+        "--bring", default="",
+        help="the four you would bring, in lead order: --bring \"torkoal, rillaboom, "
+             "kingambit, pelipper\". Fragments are enough. Without it the agent "
+             "picks, and the scout measures the picker as much as the team.",
     )
     field.add_argument(
         "--seed", type=int, default=0,
@@ -275,6 +284,7 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             regulation=REGULATIONS[args.regulation],
             mega_on_ties=args.mega_on_ties,
+            bring=args.bring,
         )
     if args.command == "regulations":
         return check_regulations(competitive_only=not args.all)
