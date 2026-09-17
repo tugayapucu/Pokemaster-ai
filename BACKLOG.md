@@ -133,10 +133,12 @@ Stat Points, so the even-11 assumption stands).
    way moved it 122/240 → 133/240, readable precisely because it was paired.
 
    Two things `scout` should learn, neither blocking:
-   - **Group rows by roster.** The pool is 5,858 team texts but only **3,408
-     rosters**: zero exact duplicates, but many near-copies — the same player's
-     team reconstructed from different replays. A roster drawn four times is
-     one 8-battle matchup, not four 2-battle ones.
+   - ~~**Group rows by roster.**~~ — **done** (`2e150b6`). The pool is 5,852
+     team texts but only ~3,400 rosters: zero exact duplicates, but many
+     near-copies — the same player's team reconstructed from different replays.
+     `TeamReport.by_roster` and `by_species` group them, and `scout` prints
+     both. Still open underneath: the *sample* is drawn over pool entries, so
+     the headline's interval treats correlated battles as independent.
    - **The agent has no Choice-lock awareness when choosing.** The engine keeps
      it legal, but it picks a Choice holder's first move without weighing the
      commitment, so `scout` underrates teams that carry a Choice item.
@@ -155,8 +157,11 @@ Stat Points, so the even-11 assumption stands).
    check confirmed the forced pick was applied to our side only. **The
    opponents are picked and piloted by the same agent**, which shares every
    blind spot below, so the paired gap is the trustworthy part and the level is
-   not a claim about humans. Scouting a candidate now forces the player's own
-   picks (done locally; not yet a `scout` flag).
+   not a claim about humans. **`scout --bring` now takes the four you would
+   bring, in lead order** (`2b6695d`), so a scout measures the team rather than
+   the picker; only our side is pinned, and the run prints how many previews it
+   forced against how many it left to the agent. `--opponents` defaults to 120
+   in the same commit, and says so below that.
 
    Agent defects found by reading the code while chasing that gap. Each is its
    own commit and its own measured change, in this order — set 2026-09-12, when
