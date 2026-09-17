@@ -154,16 +154,18 @@ Everything on the critical path runs. What is left is not capability, it is
 
    Found while working on these, not yet ordered:
 
-   - **The engine can still reject an action we offered as legal.** *Found
-     2026-09-17 while scouting.* One battle in roughly 2,900 crashed with
-     `[Invalid choice] Can't switch: You have to pass to a fainted Pokemon`:
-     a switch was offered for a slot the engine says must pass. Deterministic
-     -- the same team, opponent and seed crash every time -- so it is
-     reproducible, but the reproduction in hand uses a local team and has to be
-     rebuilt from pool teams before it goes into a test. The same class as the
-     four engine-rejection bugs 0026 fixed in `legal_actions`. A crash here
-     loses a whole scout run, not one battle, since `scout_team` does not catch
-     it.
+   - ~~**The engine can still reject an action we offered as legal**~~ —
+     **fixed 2026-09-17.** One battle in roughly 2,900 crashed with
+     `Can't switch: You have to pass to a fainted Pokemon`. The cause was
+     **Revival Blessing**: after it is used, that slot's next forced switch is
+     a revival and accepts only a *fainted* team member. The request flags it
+     (`reviving: true`) and nothing read the flag, so the living bench was
+     offered. Now read into `BattlePokemon.reviving`, and a reviving slot is
+     offered `Side.revivable_indices()`. Proven with pool teams forced to land
+     the move, 40 matchups from both seats: with the fix 80 of 80 battles, 15
+     of 15 revivals, 0 refusals; without it, 9 refusals, all this message. Left
+     open: `scout_team` still does not catch an engine refusal, so any future
+     one loses a whole run rather than one battle.
    - ~~**Mega Evolution lost every tie**~~ — **measured, 0060: neutral, so
      off.** The scorer prices a Mega only through this turn's move, so on a
      Protect turn `X` and `X + Mega` tie, and enumeration order gave every tie
