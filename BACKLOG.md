@@ -58,8 +58,8 @@ tests that *looked* like they covered the case.
 
 | | |
 | --- | --- |
-| M-C corpus | **3,750 replays**, rated 1000-1437, median 1059 |
-| M-C team pool | **5,852 teams** from 2,990 train replays; items, natures and spreads drawn from usage data since 0057, empty move slots since 0058, picked by inclusion since 0059 (2026-09-14) |
+| M-C corpus | **4,950 replays** (1,200 added 2026-09-21), rated 1000-1581, median 1076 |
+| M-C team pool | **7,683 teams** from 3,945 train replays (rebuilt 2026-09-21); items, natures and spreads from usage data since 0057, move slots since 0058, picked by inclusion since 0059. Move distance to real usage **0.050** |
 | M-B corpus | 1,769 replays, rated 1500-1827 (kept for comparison) |
 | damage model | **95.5%** inside the predicted range on the pinned build (0046) |
 | tools that work | `play` `position` `review` `scout` `collect` `regulations` |
@@ -249,15 +249,18 @@ Stat Points, so the even-11 assumption stands).
      so how long Trick Room, Gravity or a terrain has left is unknowable to the
      agent — a counter-shaped field that never counts. Bug 2 has to treat an
      active Trick Room as full-length until this is fixed.
-3. **~20 September: collect again, re-harvest, re-scout.** The ladder max moved
-   1341 → 1437 in one day while the median barely moved, so the top is forming
-   first. Check the distribution on the day rather than assuming it reached
-   1500. The Cloudflare retry fix means a long run survives a blip now.
-   **Re-harvest with usage data and the inclusion move fill**
-   (`experiments/0059-universal-moves/run.py --write`, which builds with
-   `move_fill="inclusion"`): the open team sheets are re-read from the new corpus, and
-   Smogon's September M-C file will not exist until October, so M-B's August
-   file stays the Smogon source.
+3. ~~**~20 September: collect again, re-harvest, re-scout**~~ — **done
+   2026-09-21.** 1,200 replays added (234 bot games rejected) for 4,950 in
+   total; the pool rebuilt through `experiments/0059-universal-moves/run.py
+   --write`, which re-read the open team sheets from the new corpus and kept
+   M-B's August Smogon file as the usage source. 7,683 teams, 97.6% validated,
+   move distance 0.050. Candidates re-scouted with `--bring`; results stay
+   local.
+
+   **The rating bar stays at 1000+, measured rather than assumed.** Of 4,344
+   rated M-C games, 694 have both players at 1200+, 298 at 1300+, 77 at 1400+
+   and **11 at 1500+**. The ladder has not produced a strong population, so the
+   1500 bar this project's older numbers used would leave eleven games.
 4. **Practise with `position`** until the command language is muscle memory. It
    is also the project's most productive bug-finder — five defects so far came
    from using it rather than testing it.
@@ -338,9 +341,11 @@ Next, in order:
   a tenth of a point apart. **The unfiltered M-C corpus is therefore not the
   liability it looked like** — which says how little agreement varies, not that
   the corpus is good.
-- **Re-collect M-C at `--min-rating 1500` once the ladder settles.** The bar
-  everything else in this project was measured against. Same command; the
-  replays persist.
+- ~~**Re-collect M-C at `--min-rating 1500` once the ladder settles**~~ —
+  **measured 2026-09-21, and it has not.** 11 of 4,344 rated games have both
+  players at 1500+, against 694 at 1200+. Collection stays at 1000+ and every
+  M-C number describes a ladder whose median is 1076. Worth re-checking after
+  Frankfurt rather than before it.
 - **Re-harvest the pool from that better corpus.** `data/pool-eval-m-c.txt` is
   built from 1000-rated games, so it is a record of what beginners bring.
 - ~~Close the damage gap on M-C's new species~~ — **there is no gap.** 0046,
