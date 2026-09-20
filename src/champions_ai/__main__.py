@@ -20,6 +20,7 @@ from champions_ai.cli.regulations import check as check_regulations
 from champions_ai.cli.review import DEFAULT_CORPUS, review, survey
 from champions_ai.cli.scout import DEFAULT_OPPONENTS as SCOUT_OPPONENTS
 from champions_ai.cli.scout import scout
+from champions_ai.cli.ui import ui
 from champions_ai.domain import REGULATION_M_B, REGULATION_M_C
 
 # Keyed by the short name a person would type. Built from the instances rather
@@ -113,6 +114,30 @@ def build_parser() -> argparse.ArgumentParser:
              "turn, say -- take the Mega. Players Mega on a Pokemon's first turn "
              "out 88.9%% of the time; across the pool this was neutral (0060), so "
              "it is off unless asked for.",
+    )
+    board = commands.add_parser(
+        "ui",
+        help="the same advice as position, in a browser: buttons instead of typing",
+    )
+    board.add_argument(
+        "--team", type=Path, required=True,
+        help="your team, as a Showdown export file. Required: this advises on your game.",
+    )
+    board.add_argument(
+        "--regulation", choices=sorted(REGULATIONS), default=DEFAULT_REGULATION,
+        help=f"which regulation to use (default: {DEFAULT_REGULATION}).",
+    )
+    board.add_argument(
+        "--mega-on-ties", action="store_true",
+        help="rank Mega Evolving first where it ties with not doing so (0060).",
+    )
+    board.add_argument(
+        "--port", type=int, default=8765,
+        help="which port to serve on (default: %(default)s). Loopback only.",
+    )
+    board.add_argument(
+        "--no-browser", action="store_true",
+        help="do not open a browser; print the address instead.",
     )
     survey_field = commands.add_parser(
         "meta",
@@ -266,6 +291,14 @@ def main(argv: list[str] | None = None) -> int:
             team_path=args.team,
             regulation=REGULATIONS[args.regulation],
             mega_on_ties=args.mega_on_ties,
+        )
+    if args.command == "ui":
+        return ui(
+            team_path=args.team,
+            regulation=REGULATIONS[args.regulation],
+            mega_on_ties=args.mega_on_ties,
+            port=args.port,
+            open_browser=not args.no_browser,
         )
     if args.command == "meta":
         return meta(
