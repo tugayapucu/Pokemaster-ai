@@ -52,3 +52,8 @@ data/mega-priors-*.json
 # Third-party data, used for local research the way the replays are and never
 # republished; `experiments/0057-pool-from-usage/fetch.py` downloads it again.
 data/usage/
+
+# Tournament open team sheets (RK9 public team lists). Third-party data like the
+# replay corpus: read locally to scout against a real event's field, never
+# committed or republished.
+data/tournaments/
