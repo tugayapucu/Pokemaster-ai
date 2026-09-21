@@ -13,6 +13,7 @@ outright: `mew` is Mew, even though Mewtwo also starts with it.
 """
 
 from collections.abc import Iterable
+from difflib import get_close_matches
 
 from champions_ai.dex import Dex
 from champions_ai.dex.reference import to_id
@@ -53,9 +54,16 @@ def _match(text: str, ids: Iterable[str]) -> tuple[str, ...]:
 
 
 def _resolve(text: str, ids: Iterable[str], kind: str) -> str:
-    candidates = _match(text, ids)
+    pool = tuple(ids)
+    candidates = _match(text, pool)
     if not candidates:
-        raise UnknownName(f"no {kind} matches {text!r}.")
+        # A typo gets a suggestion, never an answer: resolving `garchmop` to
+        # the nearest name would one day land on the wrong Pokemon without
+        # anyone noticing. Naming the closest few costs nothing and turns a
+        # dead end into a retype.
+        close = get_close_matches(to_id(text), pool, n=3, cutoff=0.6)
+        hint = f" Did you mean {', '.join(close)}?" if close else ""
+        raise UnknownName(f"no {kind} matches {text!r}.{hint}")
     if len(candidates) > 1:
         raise AmbiguousName(text, candidates, kind)
     return candidates[0]

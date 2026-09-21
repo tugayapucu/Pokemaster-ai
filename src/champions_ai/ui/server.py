@@ -23,6 +23,7 @@ from champions_ai.position.names import resolve_species
 from champions_ai.ui.state import advice, board
 
 PAGE = Path(__file__).parent / "index.html"
+SEARCH = Path(__file__).parent / "search.js"
 
 
 class Session:
@@ -86,6 +87,26 @@ class Session:
 
     # -- reading -------------------------------------------------------------
 
+    def names(self) -> dict:
+        """Every species, move and item the dex knows, for the page's search.
+
+        Sent once. The page suggests from these while the player types and sends
+        back the exact id they picked, so a typo costs a glance rather than a
+        refusal -- or worse, a wrong match.
+        """
+
+        def listed(table) -> list[dict]:
+            return sorted(
+                ({"id": key, "name": getattr(value, "name", key)} for key, value in table.items()),
+                key=lambda entry: entry["name"],
+            )
+
+        return {
+            "species": listed(self.dex.species),
+            "moves": listed(self.dex.moves),
+            "items": listed(self.dex.items),
+        }
+
     def snapshot(self) -> dict:
         if self.position is None:
             return {
@@ -129,6 +150,17 @@ def _handler(session: Session, build_own_side):
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+                return
+            if self.path == "/search.js":
+                body = SEARCH.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/javascript; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.path == "/api/names":
+                self._send(session.names())
                 return
             if self.path == "/api/state":
                 with session.lock:
