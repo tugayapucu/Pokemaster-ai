@@ -131,3 +131,21 @@ def test_the_shortlist_reports_the_measured_cost_not_the_confidence(position, de
         "top choice", "about 4 points"
     ]
     assert result["recommendations"][0]["reasons"] == ["hits both", "sun", "extra"]
+
+
+def test_an_adviser_that_breaks_is_reported_not_silent(position, dex):
+    """A scoring bug on an untested position used to fail the whole request, and
+    the page kept the last board -- which reads as "no recommendation"."""
+    from types import SimpleNamespace
+
+    from champions_ai.domain import MoveData
+
+    move_data = {"heatwave": MoveData(move_id="heatwave", target="normal"),
+                 "protect": MoveData(move_id="protect", target="self")}
+
+    def broken(*_):
+        raise KeyError("some move nobody scored")
+
+    result = advice(position, dex, move_data, SimpleNamespace(recommend=broken))
+    assert "adviser failed" in result["problem"]
+    assert "KeyError" in result["problem"]

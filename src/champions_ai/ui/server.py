@@ -13,6 +13,7 @@ the keyboard, not a service.
 
 import json
 import threading
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -143,6 +144,23 @@ def _handler(session: Session, build_own_side):
             self.wfile.write(body)
 
         def do_GET(self) -> None:  # noqa: N802 - the base class names it
+            try:
+                self._get()
+            except Exception as error:  # noqa: BLE001 - answered, and printed
+                traceback.print_exc()
+                self._send({"error": f"{type(error).__name__}: {error}"}, status=500)
+
+        def do_POST(self) -> None:  # noqa: N802 - the base class names it
+            # A request that dies without an answer leaves the page showing the
+            # last good board, which looks like nothing happened. Every failure
+            # is answered, and the traceback goes to the terminal.
+            try:
+                self._post()
+            except Exception as error:  # noqa: BLE001 - answered, and printed
+                traceback.print_exc()
+                self._send({"error": f"{type(error).__name__}: {error}"}, status=500)
+
+        def _get(self) -> None:
             if self.path in ("/", "/index.html"):
                 body = PAGE.read_bytes()
                 self.send_response(200)
@@ -168,7 +186,7 @@ def _handler(session: Session, build_own_side):
                 return
             self._send({"error": "no such page"}, status=404)
 
-        def do_POST(self) -> None:  # noqa: N802 - the base class names it
+        def _post(self) -> None:
             length = int(self.headers.get("Content-Length") or 0)
             try:
                 payload = json.loads(self.rfile.read(length) or b"{}")

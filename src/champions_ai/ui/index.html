@@ -14,7 +14,13 @@
   header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
            padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--edge); }
   main { display: grid; grid-template-columns: 1fr 360px; gap: 12px; padding: 12px; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  /* The advice is the point of the page. Wide: pinned beside the board, so it
+     never scrolls away. Narrow -- a window beside the game -- first, not last. */
+  .advice { position: sticky; top: 8px; align-self: start; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    .advice { order: -1; position: static; }
+  }
   .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 8px; padding: 10px; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim);
        margin: 0 0 8px; }
@@ -25,7 +31,11 @@
   .card.theirs { border-left: 3px solid var(--theirs); }
   .card.ours { border-left: 3px solid var(--ours); }
   .name { font-weight: 600; display: flex; justify-content: space-between; gap: 6px; }
-  .hpbar { height: 6px; background: #2a2f3a; border-radius: 3px; margin: 6px 0; overflow: hidden; }
+  .hpbar { height: 14px; background: #2a2f3a; border-radius: 4px; margin: 6px 0;
+           overflow: hidden; cursor: pointer; }
+  .hpbar:hover { outline: 1px solid var(--key); }
+  .hpbox { width: 56px; }
+  #best { font-weight: 600; }
   .hpbar i { display: block; height: 100%; background: #4ade80; }
   .row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   button { background: #232833; color: var(--ink); border: 1px solid var(--edge);
@@ -65,6 +75,7 @@
   <strong>Champions AI</strong>
   <span id="turn" class="chip"></span>
   <span id="field" class="chip"></span>
+  <span id="best"></span>
   <span style="flex:1"></span>
   <span id="msg"></span>
   <span id="refused"></span>
@@ -77,18 +88,33 @@ const $ = (sel, root = document) => root.querySelector(sel);
 let state = null;
 let names = { species: [], moves: [], items: [] };
 
+// A failed request used to leave the page showing the last good state, which
+// reads exactly like "it recommends nothing". Now it says so, in red.
+function failed(message) {
+  $("#refused").textContent = message + " -- see the terminal for details.";
+}
 async function post(path, body) {
-  const response = await fetch(path, {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(body || {}),
-  });
-  state = await response.json();
-  render();
+  try {
+    const response = await fetch(path, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body || {}),
+    });
+    const payload = await response.json();
+    if (!response.ok) { failed(payload.error || `server error ${response.status}`); return; }
+    state = payload;
+    render();
+  } catch (error) {
+    failed(`could not reach the board server (${error.message})`);
+  }
 }
 async function load() {
-  names = await (await fetch("/api/names")).json();
-  state = await (await fetch("/api/state")).json();
-  render();
+  try {
+    names = await (await fetch("/api/names")).json();
+    state = await (await fetch("/api/state")).json();
+    render();
+  } catch (error) {
+    failed(`could not reach the board server (${error.message})`);
+  }
 }
 const send = (line) => post("/api/command", {line});
 
@@ -257,6 +283,18 @@ function hpButtons(side, mon) {
   row.className = "row";
   [100, 75, 50, 25].forEach((pct) => row.append(button(pct, () => send(`${side} ${mon.id} ${pct}`))));
   row.append(button("KO", () => send(`${side} ${mon.id} ko`), "warn"));
+  // Any value: type it and press Enter. The bar above is also clickable.
+  const box = document.createElement("input");
+  box.className = "hpbox";
+  box.placeholder = "HP %";
+  box.inputMode = "numeric";
+  box.onkeydown = (event) => {
+    if (event.key !== "Enter") return;
+    const pct = parseInt(box.value, 10);
+    if (Number.isNaN(pct) || pct < 0 || pct > 100) { failed("HP is a number from 0 to 100"); return; }
+    send(pct === 0 ? `${side} ${mon.id} ko` : `${side} ${mon.id} ${pct}`);
+  };
+  row.append(box);
   return row;
 }
 
@@ -334,6 +372,14 @@ function card(side, mon, actives, others) {
       mon.ability ? "ability: " + mon.ability : "",
       stages.join(" "),
     ].filter(Boolean).join(" · ")}</div>`;
+  // Click along the bar to set HP there: two-thirds of the way is 67%.
+  const bar = el.querySelector(".hpbar");
+  bar.title = "click to set HP here";
+  bar.onclick = (event) => {
+    const box = bar.getBoundingClientRect();
+    const pct = Math.max(1, Math.min(100, Math.round(100 * (event.clientX - box.left) / box.width)));
+    send(`${side} ${mon.id} ${pct}`);
+  };
   el.append(hpButtons(side, mon), statusRow(side, mon), stageRow(side, mon));
 
   if (side === "their") {
@@ -388,11 +434,14 @@ function render() {
   if (!state.ready) {
     $("#turn").textContent = "";
     $("#field").textContent = "";
+    $("#best").textContent = "";
     if (!$("#sixsearch")) setup();
     return;
   }
 
   const b = state.board;
+  const top = state.advice.recommendations && state.advice.recommendations[0];
+  $("#best").textContent = top ? `Top: ${top.description}` : (state.advice.problem || "");
   $("#turn").textContent = `turn ${b.turn}`;
   $("#field").textContent = [b.weather, b.terrain, ...Object.keys(b.field_conditions)]
     .filter(Boolean).join(" · ");

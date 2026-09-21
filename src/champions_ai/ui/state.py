@@ -11,6 +11,8 @@ Nothing here decides anything. It reads a `Position`, and the advice the
 recommender produced, into plain dictionaries.
 """
 
+import traceback
+
 from champions_ai.domain import Observation
 from champions_ai.position import Position
 
@@ -161,7 +163,18 @@ def advice(position: Position, dex, move_data, recommender) -> dict:
     if not legal:
         return {"problem": "No legal action from here, which usually means a switch is owed."}
 
-    ranked = recommender.recommend(observation, legal)
+    try:
+        ranked = recommender.recommend(observation, legal)
+    except Exception as error:  # noqa: BLE001 - reported to the player, not swallowed
+        # A scoring bug on a position nobody tested must not take the page down
+        # with it: the request would fail, the page would keep the last board,
+        # and that reads exactly like "no recommendation". Say what broke, and
+        # put the traceback in the terminal for the bug report.
+        traceback.print_exc()
+        return {
+            "problem": f"The adviser failed on this position ({type(error).__name__}: {error}). "
+                       "The board still works; the terminal has the details."
+        }
     return {
         "considered": ranked.considered,
         "clear": ranked.is_clear,
